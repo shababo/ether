@@ -37,7 +37,7 @@ class BenchmarkPublisher(EtherMixin):
         super().__init__(
             name=f"Publisher-{message_size}bytes",
             pub_address=f"tcp://localhost:{port}",  # Connect to broker's sub port
-            log_level=logging.WARNING
+            log_level=logging.INFO
         )
         # Pre-create message template to avoid allocation during benchmark
         self.message_size = message_size
@@ -82,7 +82,7 @@ class BenchmarkSubscriber(EtherMixin):
         super().__init__(
             name=f"Subscriber-{subscriber_id}",
             sub_address=f"tcp://localhost:{port}",  # Connect to broker's pub port
-            log_level=logging.WARNING
+            log_level=logging.INFO
         )
         self.results_file = os.path.join(results_dir, f"subscriber_{subscriber_id}.json")
         self.latencies = []
@@ -194,7 +194,7 @@ class BenchmarkBroker(EtherMixin):
             name="Broker",
             sub_address=f"tcp://*:{sub_port}",      # BIND for receiving
             pub_address=f"tcp://*:{pub_port}",      # BIND for publishing
-            log_level=logging.WARNING
+            log_level=logging.INFO
         )
     
     @ether_sub(topic="__mp_main__.BenchmarkSubscriber.receive_message")
@@ -226,7 +226,7 @@ class BenchmarkProxy(EtherMixin):
     def __init__(self, pub_port: int, sub_port: int):
         super().__init__(
             name="Proxy",
-            log_level=logging.WARNING
+            log_level=logging.INFO
         )
         self.pub_port = pub_port
         self.sub_port = sub_port
@@ -274,7 +274,7 @@ class BenchmarkProxy(EtherMixin):
             poller.register(self.frontend, zmq.POLLIN)
             poller.register(self.backend, zmq.POLLIN)
             
-            self._logger.warning(f"Starting proxy with {self.frontend} and {self.backend}")  # Log socket details
+            self._logger.debug(f"Starting proxy with {self.frontend} and {self.backend}")  # Log socket details
             
             while self._running and not stop_event.is_set():
                 try:
@@ -459,12 +459,20 @@ def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: i
             publisher.setup_sockets()
             publishers.append(publisher)
         
-        # Warmup period
-        warmup_messages = 1000
+        # Warmup period with scaled sleep time
+        warmup_messages = 100
+        messages_per_second = 1000  # Target rate during warmup
+        sleep_per_message = 1.0 / messages_per_second  # Time to sleep between messages
+        
+        # Send warmup messages at controlled rate
         for publisher in publishers:
             for _ in range(warmup_messages):
                 publisher.publish_message(time.time())
-        time.sleep(0.5)  # Let system stabilize
+                time.sleep(sleep_per_message)  # Control send rate
+        
+        # Additional stabilization time proportional to warmup messages
+        stabilization_time = 0.1 * (warmup_messages / 1000)  # 0.1s per 1000 messages
+        time.sleep(stabilization_time)
         
         # Reset message counters after warmup
         for publisher in publishers:
@@ -547,46 +555,32 @@ def main():
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     root.addHandler(handler)
-    root.setLevel(logging.WARNING)
+    root.setLevel(logging.INFO)
     
     # Benchmark parameters
-    message_sizes = [1000]              # Size of message payload in bytes
-    num_messages = 100000                # Total messages to send
-    subscriber_counts = [1, 2]    # Number of subscribers to test
-    publisher_counts = [2]        # Number of publishers to test
-    
-    # Run broker benchmark
-    # print("\nRunning Broker Pattern Benchmark...")
-    # print("Pubs/Subs | Msg Size | Messages/sec | Latency (ms) | Loss % | Received/Sent | Memory (MB)")
-    # print("-" * 90)
-    
-    # for pub_count in publisher_counts:
-    #     for sub_count in subscriber_counts:
-    #         for size in message_sizes:
-    #             print(f"Testing {pub_count}p/{sub_count}s with {size} bytes... ", end='', flush=True)
-    #             result = run_broker_benchmark(size, num_messages, sub_count, pub_count)
-    #             print("\r", end='')
-    #             print(f"{pub_count}p/{sub_count:2d}s | {size:8d} | {result.messages_per_second:11.2f} | "
-    #                   f"{result.latency_ms:11.2f} | {result.message_loss_percent:6.2f} | "
-    #                   f"{result.messages_received:6d}/{result.messages_sent:<6d} | {result.memory_mb:10.1f}")
+    message_sizes = [1000]                  # Size of message payload in bytes
+    message_counts = [1000, 5000, 100000]    # Different numbers of messages to test
+    subscriber_counts = [2]              # Number of subscribers to test
+    publisher_counts = [2]                  # Number of publishers to test
     
     # Run proxy benchmark
     print("\nRunning XPUB/XSUB Proxy Pattern Benchmark...")
-    print("Pubs/Subs | Msg Size | Messages/sec | Latency (ms) | Loss % | Sent/Expected | Received/Expected | Memory (MB)")
-    print("-" * 110)
+    print("Pubs/Subs | Msg Size | Msg Count | Messages/sec | Latency (ms) | Loss % | Sent/Expected | Received/Expected | Memory (MB)")
+    print("-" * 120)
     
     for pub_count in publisher_counts:
         for sub_count in subscriber_counts:
             for size in message_sizes:
-                print(f"Testing {pub_count}p/{sub_count}s with {size} bytes... ", end='', flush=True)
-                result = run_proxy_benchmark(size, num_messages, sub_count, pub_count)
-                print("\r", end='')
-                print(f"{pub_count}p/{sub_count:2d}s | {size:8d} | {result.messages_per_second:11.2f} | "
-                      f"{result.latency_ms:11.2f} | {result.message_loss_percent:6.2f} | "
-                      f"{result.messages_sent:6d}/{result.expected_sent:<6d} | "
-                      f"{result.messages_received:6d}/{result.expected_received:<6d} | "
-                      f"{result.memory_mb:10.1f}")
-                time.sleep(1.0)
+                for num_messages in message_counts:
+                    print(f"Testing {pub_count}p/{sub_count}s with {size} bytes, {num_messages} msgs... ", end='', flush=True)
+                    result = run_proxy_benchmark(size, num_messages, sub_count, pub_count)
+                    print("\r", end='')
+                    print(f"{pub_count}p/{sub_count:2d}s | {size:8d} | {num_messages:9d} | {result.messages_per_second:11.2f} | "
+                          f"{result.latency_ms:11.2f} | {result.message_loss_percent:6.2f} | "
+                          f"{result.messages_sent:6d}/{result.expected_sent:<6d} | "
+                          f"{result.messages_received:6d}/{result.expected_received:<6d} | "
+                          f"{result.memory_mb:10.1f}")
+                    time.sleep(1.0)
 
 if __name__ == "__main__":
     main() 

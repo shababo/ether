@@ -73,7 +73,7 @@ class EtherMixin:
                 if metadata.method_type == 'sub' and self._sub_socket:
                     topic = metadata.topic
                     self._sub_socket.subscribe(topic.encode())
-                    self._logger.info(f"Subscribed to topic: {topic}")
+                    self._logger.debug(f"Subscribed to topic: {topic}")
                     self._zmq_methods[topic] = metadata
         
         time.sleep(0.1)
