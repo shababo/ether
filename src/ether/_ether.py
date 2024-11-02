@@ -11,9 +11,9 @@ import time
 
 def get_logger(process_name):
     logger = logging.getLogger(process_name)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     
@@ -57,7 +57,10 @@ class EtherMixin:
         # Initialize PUB socket if needed
         if self._pub_address:
             self._pub_socket = self._zmq_context.socket(zmq.PUB)
-            self._pub_socket.connect(self._pub_address)
+            if self._pub_address.startswith("tcp://*:"):
+                self._pub_socket.bind(self._pub_address)
+            else:
+                self._pub_socket.connect(self._pub_address)
         
         # Find all ZMQ-decorated methods
         self._zmq_methods = {}
@@ -66,9 +69,10 @@ class EtherMixin:
             if hasattr(attr, '_zmq_metadata'):
                 metadata: EtherMethodMetadata = attr._zmq_metadata
                 if metadata.method_type == 'sub' and self._sub_socket:
-                    self._sub_socket.subscribe(metadata.topic.encode())
-                    self._logger.info(f"Subscribed to topic: {metadata.topic}")
-                self._zmq_methods[metadata.topic] = metadata
+                    topic = metadata.topic
+                    self._sub_socket.subscribe(topic.encode())
+                    self._logger.info(f"Subscribed to topic: {topic}")
+                    self._zmq_methods[topic] = metadata
         
         # Add a small delay to ensure connections are established
         time.sleep(0.1)
@@ -110,22 +114,36 @@ class EtherMixin:
     def receive_single_message(self, timeout=1000):
         """Handle a single message with timeout"""
         if self._sub_socket and self._sub_socket.poll(timeout):
+            self._logger.debug(f"Poll returned true for {self.name}")
             topic = self._sub_socket.recv_string()
+            self._logger.debug(f"Received topic: {topic}")
             data = self._sub_socket.recv_json()
             
-            self._logger.info(f"Received message - Topic: {topic}, Data: {data}")
+            self._logger.debug(f"Received raw message - Topic: {topic}, Data: {data}")
             
             if topic in self._zmq_methods:
                 metadata = self._zmq_methods[topic]
+                self._logger.debug(f"Found metadata for topic {topic}: {metadata.__dict__}")
+                
                 if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
                     # Handle root model case
                     args = {'root': metadata.args_model(data).root}
+                    self._logger.debug(f"Processed root model data: {args}")
                 else:
                     # Handle regular model case
-                    args = metadata.args_model(**data).model_dump()
+                    try:
+                        model_instance = metadata.args_model(**data)
+                        self._logger.debug(f"Created model instance: {model_instance}")
+                        args = model_instance.model_dump()
+                        self._logger.debug(f"Processed regular model data: {args}")
+                    except Exception as e:
+                        self._logger.error(f"Error processing data: {e}")
+                        raise
+                
                 metadata.func(self, **args)
             else:
                 self._logger.warning(f"Received message for unknown topic: {topic}")
+                self._logger.debug(f"Known topics: {list(self._zmq_methods.keys())}")
 
 def create_model_from_signature(func) -> Type[BaseModel]:
     """Creates a Pydantic model from a function's signature"""
@@ -166,17 +184,25 @@ def ether_pub(topic: Optional[str] = None):
             # Execute the function and get result
             result = func(self, *args, **kwargs)
             
+            # Debug log the result
+            self._logger.debug(f"Publishing function returned: {result}")
+            
             # Validate result against return type
             if isinstance(return_type, type) and issubclass(return_type, BaseModel):
                 # If return type is already a Pydantic model, use it directly
                 validated_result = return_type(**result).model_dump_json()
+                self._logger.debug(f"Validated Pydantic model result: {validated_result}")
             else:
                 # Create a root model from the return type hint
                 ResultModel = RootModel[return_type]
                 validated_result = ResultModel(result).model_dump_json()
+                self._logger.debug(f"Validated root model result: {validated_result}")
             
             # Generate topic if not provided
             actual_topic = topic or f"{func.__module__}.{func.__qualname__}"
+            
+            # Debug log before sending
+            self._logger.debug(f"Publishing to topic '{actual_topic}': {validated_result}")
             
             # Publish the validated result
             self._pub_socket.send_multipart([
@@ -186,10 +212,11 @@ def ether_pub(topic: Optional[str] = None):
             
             return result
         
-        # Store metadata
+        # Store metadata and log it
+        actual_topic = topic or f"{func.__module__}.{func.__qualname__}"
         wrapper._zmq_metadata = EtherMethodMetadata(
             func, 
-            topic or f"{func.__module__}.{func.__qualname__}", 
+            actual_topic,
             None,
             'pub'
         )
