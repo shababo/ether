@@ -6,14 +6,36 @@ from ether import EtherMixin, ether_pub, ether_sub, get_logger
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 
+# Define standard ports
+BROKER_PUB_PORT = 5555  # Broker publishes on this port
+BROKER_SUB_PORT = 5556  # Broker subscribes on this port
+
+class MessageBroker(EtherMixin):
+    """Central broker that forwards messages between services"""
+    def __init__(self):
+        super().__init__(
+            name="Broker",
+            sub_address=f"tcp://localhost:{BROKER_SUB_PORT}",  # Receive from services
+            pub_address=f"tcp://*:{BROKER_PUB_PORT}"          # Publish to services
+        )
+    
+    @ether_sub()  # Subscribe to all messages
+    def forward(self, **message):
+        """Forward any message received"""
+        self._logger.debug(f"Broker forwarding message: {message}")
+        # Forward the message to all listeners
+        if self._pub_socket:
+            self._pub_socket.send_multipart([
+                message['topic'].encode(),
+                message['payload'].encode()
+            ])
 
 class MyService(EtherMixin):
     def __init__(self, process_id: int):
-        # Now we connect for both pub and sub
         super().__init__(
             name=f"Service-{process_id}",
-            sub_address="tcp://localhost:5555",  # Subscribe to main messages
-            pub_address="tcp://*:5556"   # BIND instead of connect for publishing
+            sub_address=f"tcp://localhost:{BROKER_PUB_PORT}",  # Receive from broker
+            pub_address=f"tcp://localhost:{BROKER_SUB_PORT}"   # Send to broker
         )
         self.process_id = process_id
     
