@@ -1,63 +1,91 @@
-from multiprocessing import Process
+from multiprocessing import Process, Event
 import zmq
 import logging
 import time
-from ether._ether import ZMQReceiverMixin, zmq_method
+from ether import ZMQReceiverMixin, zmq_method, get_logger
 
-# Example usage:
+
 class MyService(ZMQReceiverMixin):
     def __init__(self):
         super().__init__(zmq_address="tcp://localhost:5555")
     
     @zmq_method()
     def process_data(self, name: str, count: int = 0):
-        logging.info(f"Processing {name} with count {count}")
+        self._logger.info(f"Processing {name} with count {count}")
     
     @zmq_method(topic="custom.topic")
     def custom_process(self, data: dict):
-        logging.info(f"Custom processing: {data}")
+        self._logger.info(f"Custom processing: {data}")
 
-# Example usage in different processes:
-
-# Process 1 - Service
-def run_service():
+def service_process(stop_event, process_id):
+    logger = get_logger(f"Service-{process_id}")
     service = MyService()
-    service.receive_messages()  # Blocks and processes messages
+    logger.info(f"Service {process_id} started")
+    service.run(stop_event)
 
-# Process 2 - Publisher
 def send_message():
-
-    time.sleep(5)
+    logger = get_logger("Publisher")
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
     socket.bind("tcp://*:5555")
     
-    # Send message to process_data
-    socket.send_multipart([
-        b"__main__.MyService.process_data",
-        b'{"name": "test", "count": 42}'
-    ])
+    logger.info("Publisher started")
+    # Minimum delay needed for subscribers to connect
+    time.sleep(0.5)  
     
-    # Send message to custom_process
-    socket.send_multipart([
-        b"custom.topic",
-        b'{"data": {"key": "value"}}'
-    ])
-
+    topic = "__mp_main__.MyService.process_data"
+    logger.info(f"Publishing to topic: {topic}")
+    
+    for i in range(3):
+        logger.info(f"Sending message {i}")
+        socket.send_multipart([
+            topic.encode(),
+            f'{{"name": "test_{i}", "count": {42 + i}}}'.encode()
+        ])
+        time.sleep(0.1)  # Small delay between messages just to avoid flooding
+    
+    logger.info("Publisher finishing")
+    socket.close()
+    context.term()
 
 if __name__ == "__main__":
-    # Start multiple instances
+    # Set up logging for the main process
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(message)s'
+    )
+    main_logger = logging.getLogger("Main")
+    
+    stop_event = Event()
+    
+    # Start publisher first
+    main_logger.info("Starting publisher")
+    publisher = Process(target=send_message)
+    publisher.start()
+    
+    # Start multiple service instances
     processes = []
     for i in range(3):
-        p = Process(target=run_service)
+        main_logger.info(f"Starting service {i}")
+        p = Process(target=service_process, args=(stop_event, i))
         p.start()
         processes.append(p)
-
-    p = Process(target=send_message)
-    p.start()
-    processes.append(p)
-
-    for p in processes:
-        p.join()
-
     
+    # Wait for publisher to finish
+    publisher.join()
+    main_logger.info("Publisher finished")
+    
+    # Reduced cleanup delay
+    time.sleep(1.0)
+    
+    main_logger.info("Signaling services to stop")
+    stop_event.set()
+    
+    # Wait for services to clean up
+    for i, p in enumerate(processes):
+        p.join(timeout=5)
+        if p.is_alive():
+            main_logger.warning(f"Service {i} did not stop gracefully, terminating")
+            p.terminate()
+        else:
+            main_logger.info(f"Service {i} stopped gracefully")
