@@ -56,7 +56,11 @@ class BenchmarkPublisher(EtherMixin):
         """Publish a single message with current timestamp and unique ID"""
         self.message["timestamp"] = timestamp
         self.message["message_id"] = self.message_count
-        self.message["sequence"] = self.message_count  # Update sequence
+        self.message["sequence"] = self.message_count
+        
+        # if self.message_count % 10000 == 0:
+        #     self._logger.warning(f"Publisher {self.publisher_id} sent {self.message_count} messages")
+        
         self.message_count += 1
         return self.message
 
@@ -270,23 +274,27 @@ class BenchmarkProxy(EtherMixin):
             poller.register(self.frontend, zmq.POLLIN)
             poller.register(self.backend, zmq.POLLIN)
             
-            self._logger.info("Starting proxy...")
+            self._logger.warning(f"Starting proxy with {self.frontend} and {self.backend}")  # Log socket details
+            
             while self._running and not stop_event.is_set():
                 try:
                     events = dict(poller.poll(timeout=100))  # 100ms timeout
                     
                     if self.frontend in events:
                         message = self.frontend.recv_multipart()
+                        self._logger.debug(f"Proxy forwarding from frontend: {len(message)} parts")
                         self.backend.send_multipart(message)
                     
                     if self.backend in events:
                         message = self.backend.recv_multipart()
+                        self._logger.debug(f"Proxy forwarding from backend: {len(message)} parts")
                         self.frontend.send_multipart(message)
                         
                 except zmq.ZMQError as e:
                     if e.errno == zmq.EAGAIN:  # Timeout, just continue
                         continue
                     else:
+                        self._logger.error(f"ZMQ Error in proxy: {e}")
                         raise
                         
         except Exception as e:
@@ -427,7 +435,6 @@ def run_broker_benchmark(message_size: int, num_messages: int, num_subscribers: 
         )
 
 def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: int, num_publishers: int) -> BenchmarkResult:
-    """Run a benchmark using the XPUB/XSUB proxy pattern"""
     stop_event = Event()
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -438,14 +445,14 @@ def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: i
         proxy_process = Process(target=run_proxy, args=(stop_event, proxy_pub_port, proxy_sub_port))
         proxy_process.start()
         
-        # Start subscribers (connect to XPUB socket)
+        # Start subscribers
         sub_processes = []
         for i in range(num_subscribers):
             process = Process(target=run_subscriber, args=(stop_event, proxy_pub_port, temp_dir, i))
             process.start()
             sub_processes.append(process)
         
-        # Create publishers (connect to XSUB socket)
+        # Create publishers
         publishers = []
         for _ in range(num_publishers):
             publisher = BenchmarkPublisher(message_size, proxy_sub_port)
@@ -459,6 +466,10 @@ def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: i
                 publisher.publish_message(time.time())
         time.sleep(0.5)  # Let system stabilize
         
+        # Reset message counters after warmup
+        for publisher in publishers:
+            publisher.message_count = 0
+        
         # Monitor resources
         process = psutil.Process(os.getpid())
         
@@ -466,15 +477,15 @@ def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: i
         start_time = time.time()
         
         # Send messages with rate limiting
-        messages_per_publisher = num_messages // num_publishers
+        messages_per_publisher = num_messages
         total_messages_sent = 0
-        message_interval = 0.0001 * (num_subscribers / 2)  # Scale delay with subscribers
+        message_interval = 0.0001 * (num_subscribers / 2)
         
         for publisher in publishers:
             for _ in range(messages_per_publisher):
                 publisher.publish_message(time.time())
                 total_messages_sent += 1
-                time.sleep(message_interval)  # Rate limiting
+                time.sleep(message_interval)
         
         end_time = time.time()
         duration = end_time - start_time
@@ -485,27 +496,32 @@ def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: i
         for p in sub_processes + [proxy_process]:
             p.join(timeout=5)
         
-        # Collect results from all subscribers
+        # Collect results
         all_latencies = []
-        subscriber_results = []  # Store complete results from each subscriber
+        subscriber_results = []
         
         for i in range(num_subscribers):
             result_file = os.path.join(temp_dir, f"subscriber_{i}.json")
             with open(result_file, 'r') as f:
                 results = json.load(f)
+                # Filter out warmup messages based on sequence numbers
+                results["received_messages"] = [
+                    msg for msg in results["received_messages"]
+                    if isinstance(msg[1], int) and msg[1] < messages_per_publisher
+                ]
                 all_latencies.extend(results["latencies"])
                 subscriber_results.append(results)
         
         for publisher in publishers:
             publisher.cleanup()
         
-        # Calculate metrics properly for pub/sub pattern
-        total_expected = total_messages_sent * num_subscribers  # Each sub should get all messages
+        # Calculate metrics (excluding warmup)
+        total_messages_sent = num_messages * num_publishers
+        expected_per_sub = total_messages_sent
+        total_expected = expected_per_sub * num_subscribers
+        
         total_received = sum(len(results["received_messages"]) for results in subscriber_results)
         message_loss_percent = 100 * (1 - total_received / total_expected)
-        
-        # Calculate average messages received per subscriber
-        avg_messages_received = total_received / num_subscribers
         
         return BenchmarkResult(
             messages_per_second=total_messages_sent / duration if duration > 0 else 0,
@@ -514,25 +530,30 @@ def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: i
             memory_mb=process.memory_info().rss / 1024 / 1024,
             message_loss_percent=message_loss_percent,
             messages_sent=total_messages_sent,
-            expected_sent=num_messages * num_publishers,
-            messages_received=int(total_received),
-            expected_received=num_messages * num_subscribers
+            expected_sent=total_messages_sent,
+            messages_received=total_received,
+            expected_received=total_expected
         )
 
 def main():
     """Run benchmarks with various configurations and display results"""
-    # Configure logging
-    logging.basicConfig(
-        level=logging.WARNING,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        force=True
-    )
+    # Remove all handlers from root logger
+    root = logging.getLogger()
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
+    
+    # Configure single handler for root logger
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    root.addHandler(handler)
+    root.setLevel(logging.WARNING)
     
     # Benchmark parameters
     message_sizes = [1000]              # Size of message payload in bytes
-    num_messages = 10000                # Total messages to send
-    subscriber_counts = [1, 2, 4]    # Number of subscribers to test
-    publisher_counts = [1, 2]        # Number of publishers to test
+    num_messages = 100000                # Total messages to send
+    subscriber_counts = [1, 2]    # Number of subscribers to test
+    publisher_counts = [2]        # Number of publishers to test
     
     # Run broker benchmark
     # print("\nRunning Broker Pattern Benchmark...")
