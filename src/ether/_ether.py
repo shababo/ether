@@ -87,3 +87,42 @@ def zmq_method(topic: Optional[str] = None):
         
         return wrapper
     return decorator
+
+
+# Example usage:
+class MyService(ZMQReceiverMixin):
+    def __init__(self):
+        super().__init__(zmq_address="tcp://localhost:5555")
+    
+    @zmq_method()
+    def process_data(self, name: str, count: int = 0):
+        print(f"Processing {name} with count {count}")
+    
+    @zmq_method(topic="custom.topic")
+    def custom_process(self, data: dict):
+        print(f"Custom processing: {data}")
+
+# Example usage in different processes:
+
+# Process 1 - Service
+def run_service():
+    service = MyService()
+    service.receive_messages()  # Blocks and processes messages
+
+# Process 2 - Publisher
+def send_message():
+    context = zmq.Context()
+    socket = context.socket(zmq.PUB)
+    socket.bind("tcp://*:5555")
+    
+    # Send message to process_data
+    socket.send_multipart([
+        b"__main__.MyService.process_data",
+        b'{"name": "test", "count": 42}'
+    ])
+    
+    # Send message to custom_process
+    socket.send_multipart([
+        b"custom.topic",
+        b'{"data": {"key": "value"}}'
+    ])
