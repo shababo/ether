@@ -28,22 +28,30 @@ class ZMQReceiverMixin:
                 self._zmq_socket.subscribe(metadata.topic.encode())
                 self._zmq_methods[metadata.topic] = metadata
 
-    def receive_messages(self):
-        """Main message receiving loop"""
-        while True:
+    def receive_single_message(self, timeout=1000):
+        """Handle a single message with timeout"""
+        if self._zmq_socket.poll(timeout):
+            topic = self._zmq_socket.recv_string()
+            data = self._zmq_socket.recv_json()
+            
+            if topic in self._zmq_methods:
+                metadata = self._zmq_methods[topic]
+                args = metadata.args_model(**data)
+                metadata.func(self, **args.dict())
+
+    def run(self, stop_event: Event):
+        """Main run loop with graceful shutdown support"""
+        def handle_signal(signum, frame):
+            stop_event.set()
+        
+        signal.signal(signal.SIGTERM, handle_signal)
+        
+        while not stop_event.is_set():
             try:
-                topic = self._zmq_socket.recv_string()
-                data = self._zmq_socket.recv_json()
-                
-                if topic in self._zmq_methods:
-                    metadata = self._zmq_methods[topic]
-                    # Parse and validate arguments
-                    args = metadata.args_model(**data)
-                    # Call the method
-                    metadata.func(self, **args.dict())
-                    
+                self.receive_single_message()
             except Exception as e:
-                print(f"Error processing message: {e}")
+                print(f"Error: {e}")
+                break
 
     def __del__(self):
         """Cleanup ZMQ resources"""
