@@ -112,7 +112,7 @@ def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: i
             publishers.append(publisher)
         
         # Warmup period with scaled sleep time
-        warmup_messages = 0
+        warmup_messages = 100
         messages_per_second = 1000  # Target rate during warmup
         sleep_per_message = 1.0 / messages_per_second  # Time to sleep between messages
         
