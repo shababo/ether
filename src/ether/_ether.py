@@ -11,8 +11,8 @@ import time
 import json
 
 # Standard ports for Ether communication
-ETHER_SUB_PORT = 5555  # For publishing messages
-ETHER_PUB_PORT = 5556  # For subscribing to messages
+ETHER_SUB_PORT = 5555  # subscribe to this port
+ETHER_PUB_PORT = 5556  # publish to this port
 
 def get_logger(process_name, log_level=logging.INFO):
     """Get or create a logger with a single handler"""
@@ -66,6 +66,8 @@ class EtherMixin:
         self.subscription_time = None
 
         self.setup_sockets()
+
+        
     
     def setup_sockets(self):
         self._zmq_context = zmq.Context()
@@ -329,12 +331,15 @@ class EtherPubSubProxy(EtherMixin):
     as messages, allowing for proper subscription forwarding.
     """
     def __init__(self):
+        
+        self.frontend = None
+        self.backend = None
+
         super().__init__(
             name="Proxy",
             log_level=logging.INFO
         )
-        self.frontend = None
-        self.backend = None
+        
         self._running = False
 
     
@@ -379,7 +384,7 @@ class EtherPubSubProxy(EtherMixin):
         try:
             
             self._running = True
-            
+            # self.setup_sockets()
             
             while self._running and not stop_event.is_set():
                 try:

@@ -9,7 +9,6 @@ import psutil
 import os
 from ether import (
     EtherMixin, EtherPubSubProxy, ether_pub, ether_sub, get_logger,
-    ETHER_PUB_PORT, ETHER_SUB_PORT  # Import the constants
 )
 import logging
 import tempfile
@@ -39,7 +38,6 @@ class BenchmarkPublisher(EtherMixin):
     def __init__(self, message_size: int):
         super().__init__(
             name=f"Publisher-{message_size}bytes",
-            pub_address=f"tcp://localhost:{ETHER_SUB_PORT}",  # Use constant
             log_level=logging.INFO
         )
         # Pre-create message template to avoid allocation during benchmark
@@ -69,7 +67,6 @@ class BenchmarkSubscriber(EtherMixin):
     def __init__(self, results_dir: str, subscriber_id: int):
         super().__init__(
             name=f"Subscriber-{subscriber_id}",
-            sub_address=f"tcp://localhost:{ETHER_PUB_PORT}",  # Use constant
             log_level=logging.INFO,
             results_file=os.path.join(results_dir, f"subscriber_{subscriber_id}.json")
         )
