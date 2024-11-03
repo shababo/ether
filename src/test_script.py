@@ -96,30 +96,6 @@ def run_proxy(stop_event):
     proxy.run(stop_event)
 
 
-def send_messages():
-    logger = get_logger("Publisher")
-    context = zmq.Context()
-    socket = context.socket(zmq.PUB)
-    socket.connect(f"tcp://localhost:{ETHER_PUB_PORT}")  # Connect to proxy's XSUB
-    
-    logger.info("Publisher started")
-    time.sleep(0.15)  # Wait for connections
-    
-    topic = "MyService.process_data"  
-    logger.info(f"Publishing to topic: {topic}")
-    
-    for i in range(1):
-        logger.info(f"Sending message {i}")
-        socket.send_multipart([
-            topic.encode(),
-            f'{{"name": "test_{i}", "count": {42 + i}}}'.encode()
-        ])
-        time.sleep(0.1)
-    
-    logger.info("Publisher finishing")
-    socket.close()
-    context.term()
-
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.DEBUG,
