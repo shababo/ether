@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from typing import Dict
 import psutil
 import os
-from ether import EtherMixin, EtherPubSubProxy, ether_pub, ether_sub, get_logger
+from ether import (
+    EtherMixin, EtherPubSubProxy, ether_pub, ether_sub, get_logger,
+    ETHER_PUB_PORT, ETHER_SUB_PORT  # Import the constants
+)
 import logging
 import tempfile
 import signal
@@ -33,10 +36,10 @@ class BenchmarkPublisher(EtherMixin):
     Each publisher creates messages of a specific size and sends them with
     timestamps and unique IDs for tracking.
     """
-    def __init__(self, message_size: int, port: int):
+    def __init__(self, message_size: int):
         super().__init__(
             name=f"Publisher-{message_size}bytes",
-            pub_address=f"tcp://localhost:{port}",  # Connect to broker's sub port
+            pub_address=f"tcp://localhost:{ETHER_SUB_PORT}",  # Use constant
             log_level=logging.INFO
         )
         # Pre-create message template to avoid allocation during benchmark
@@ -63,10 +66,10 @@ class BenchmarkPublisher(EtherMixin):
 
 class BenchmarkSubscriber(EtherMixin):
     """Subscriber that receives messages and tracks statistics."""
-    def __init__(self, port: int, results_dir: str, subscriber_id: int):
+    def __init__(self, results_dir: str, subscriber_id: int):
         super().__init__(
             name=f"Subscriber-{subscriber_id}",
-            sub_address=f"tcp://localhost:{port}",
+            sub_address=f"tcp://localhost:{ETHER_PUB_PORT}",  # Use constant
             log_level=logging.INFO,
             results_file=os.path.join(results_dir, f"subscriber_{subscriber_id}.json")
         )
@@ -77,70 +80,18 @@ class BenchmarkSubscriber(EtherMixin):
                        publisher_id: str, sequence: int):
         self.track_message(publisher_id, sequence, timestamp)
 
-class BenchmarkBroker(EtherMixin):
-    """Broker that forwards messages from publishers to subscribers.
-    
-    The broker binds to two ports:
-    - One for receiving messages from publishers (SUB socket)
-    - One for sending messages to subscribers (PUB socket)
-    """
-    def __init__(self, pub_port: int, sub_port: int):
-        super().__init__(
-            name="Broker",
-            sub_address=f"tcp://*:{sub_port}",      # BIND for receiving
-            pub_address=f"tcp://*:{pub_port}",      # BIND for publishing
-            log_level=logging.INFO
-        )
-    
-    @ether_sub(topic="BenchmarkSubscriber.receive_message")
-    def receive(self, data: str, timestamp: float, message_id: int, 
-                publisher_id: str, sequence: int):
-        """Receive message from publisher and forward it"""
-        self._logger.debug(f"Broker received message #{sequence} from {publisher_id}")
-        self.forward(data, timestamp, message_id, publisher_id, sequence)
-    
-    @ether_pub(topic="BenchmarkSubscriber.receive_message")
-    def forward(self, data: str, timestamp: float, message_id: int,
-                publisher_id: str, sequence: int) -> Dict:
-        """Forward received message to all subscribers"""
-        self._logger.debug(f"Forwarding message #{sequence} from {publisher_id}")
-        return {
-            "data": data,
-            "timestamp": timestamp,
-            "message_id": message_id,
-            "publisher_id": publisher_id,  # Include publisher ID
-            "sequence": sequence           # Include sequence number
-        }
 
 # Helper functions to run components in separate processes
-def run_subscriber(stop_event: Event, port: int, results_dir: str, subscriber_id: int):
+def run_subscriber(stop_event: Event, results_dir: str, subscriber_id: int):
     """Create and run a subscriber in its own process"""
-    subscriber = BenchmarkSubscriber(port, results_dir, subscriber_id)
+    subscriber = BenchmarkSubscriber(results_dir, subscriber_id)
     subscriber.run(stop_event)
 
-def run_broker(stop_event: Event, pub_port: int, sub_port: int):
-    """Create and run a broker in its own process"""
-    broker = BenchmarkBroker(pub_port, sub_port)
-    broker.run(stop_event)
-
-def run_proxy(stop_event: Event, pub_port: int, sub_port: int):
+def run_proxy(stop_event: Event):
     """Create and run a proxy in its own process"""
-    proxy = EtherPubSubProxy(pub_port, sub_port)
+    proxy = EtherPubSubProxy()
     proxy.run(stop_event)
 
-def run_broker_benchmark(message_size: int, num_messages: int, num_subscribers: int, num_publishers: int) -> BenchmarkResult:
-    """Run a complete benchmark with specified configuration.
-    
-    This function:
-    1. Starts a broker process
-    2. Starts subscriber processes
-    3. Creates publishers
-    4. Sends messages and measures performance
-    5. Collects and aggregates results
-    """
-    stop_event = Event()
-    
-    with tempfile.TemporaryDirectory() as temp_dir:
         # Setup ports
         broker_pub_port = 5555
         broker_sub_port = 5556
@@ -152,14 +103,14 @@ def run_broker_benchmark(message_size: int, num_messages: int, num_subscribers: 
         # Start subscriber processes
         sub_processes = []
         for i in range(num_subscribers):
-            process = Process(target=run_subscriber, args=(stop_event, broker_pub_port, temp_dir, i))
+            process = Process(target=run_subscriber, args=(stop_event, temp_dir, i))
             process.start()
             sub_processes.append(process)
         
         # Create publishers in main process
         publishers = []
         for _ in range(num_publishers):
-            publisher = BenchmarkPublisher(message_size, broker_sub_port)
+            publisher = BenchmarkPublisher(message_size)
             publisher.setup_sockets()
             publishers.append(publisher)
         
@@ -224,24 +175,21 @@ def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: i
     stop_event = Event()
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        proxy_pub_port = 5555
-        proxy_sub_port = 5556
-        
-        # Start proxy process
-        proxy_process = Process(target=run_proxy, args=(stop_event, proxy_pub_port, proxy_sub_port))
+        # Start proxy process (no port parameters needed)
+        proxy_process = Process(target=run_proxy, args=(stop_event,))
         proxy_process.start()
         
         # Start subscribers
         sub_processes = []
         for i in range(num_subscribers):
-            process = Process(target=run_subscriber, args=(stop_event, proxy_pub_port, temp_dir, i))
+            process = Process(target=run_subscriber, args=(stop_event, temp_dir, i))
             process.start()
             sub_processes.append(process)
         
         # Create publishers
         publishers = []
         for _ in range(num_publishers):
-            publisher = BenchmarkPublisher(message_size, proxy_sub_port)
+            publisher = BenchmarkPublisher(message_size)
             publisher.setup_sockets()
             publishers.append(publisher)
         
@@ -348,25 +296,6 @@ def main():
     message_counts = [1000, 5000, 100000]
     subscriber_counts = [2, 8]
     publisher_counts = [2, 8]
-    
-    # # Run broker benchmark
-    # print("\nRunning Broker Pattern Benchmark...")
-    # print("Pubs/Subs | Msg Size | Msg Count | Messages/sec | Latency (ms) | Loss % | Sent/Expected | Received/Expected | Memory (MB)")
-    # print("-" * 120)
-    
-    # for pub_count in publisher_counts:
-    #     for sub_count in subscriber_counts:
-    #         for size in message_sizes:
-    #             for num_messages in message_counts:
-    #                 print(f"Testing {pub_count}p/{sub_count}s with {size} bytes, {num_messages} msgs... ", end='', flush=True)
-    #                 result = run_broker_benchmark(size, num_messages, sub_count, pub_count)
-    #                 print("\r", end='')
-    #                 print(f"{pub_count}p/{sub_count:2d}s | {size:8d} | {num_messages:9d} | {result.messages_per_second:11.2f} | "
-    #                       f"{result.latency_ms:11.2f} | {result.message_loss_percent:6.2f} | "
-    #                       f"{result.messages_sent:6d}/{result.expected_sent:<6d} | "
-    #                       f"{result.messages_received:6d}/{result.expected_received:<6d} | "
-    #                       f"{result.memory_mb:10.1f}")
-    #                 time.sleep(1.0)
     
     # Run proxy benchmark
     print("\nRunning XPUB/XSUB Proxy Pattern Benchmark...")

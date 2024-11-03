@@ -10,6 +10,10 @@ import logging
 import time
 import json
 
+# Standard ports for Ether communication
+ETHER_PUB_PORT = 5555  # For publishing messages
+ETHER_SUB_PORT = 5556  # For subscribing to messages
+
 def get_logger(process_name, log_level=logging.INFO):
     """Get or create a logger with a single handler"""
     logger = logging.getLogger(process_name)
@@ -311,30 +315,27 @@ class EtherPubSubProxy(EtherMixin):
     XPUB/XSUB sockets are special versions of PUB/SUB that expose subscriptions
     as messages, allowing for proper subscription forwarding.
     """
-    def __init__(self, pub_port: int, sub_port: int):
+    def __init__(self):
         super().__init__(
             name="Proxy",
             log_level=logging.INFO
         )
-        self.pub_port = pub_port
-        self.sub_port = sub_port
         self.frontend = None
         self.backend = None
-        self._running = False  # Add flag to control proxy loop
+        self._running = False
     
     def setup_sockets(self):
         """Setup XPUB/XSUB sockets with optimized settings"""
         self._zmq_context = zmq.Context()
         
-        # XSUB socket for receiving from publishers
+        # Use standard ports
         self.frontend = self._zmq_context.socket(zmq.XSUB)
-        self.frontend.bind(f"tcp://*:{self.sub_port}")
+        self.frontend.bind(f"tcp://*:{ETHER_SUB_PORT}")
         self.frontend.setsockopt(zmq.RCVHWM, 1000000)
         self.frontend.setsockopt(zmq.RCVBUF, 65536)
         
-        # XPUB socket for sending to subscribers
         self.backend = self._zmq_context.socket(zmq.XPUB)
-        self.backend.bind(f"tcp://*:{self.pub_port}")
+        self.backend.bind(f"tcp://*:{ETHER_PUB_PORT}")
         self.backend.setsockopt(zmq.SNDHWM, 1000000)
         self.backend.setsockopt(zmq.SNDBUF, 65536)
         self.backend.setsockopt(zmq.XPUB_VERBOSE, 1)
