@@ -8,6 +8,7 @@ from pydantic import BaseModel, create_model, RootModel
 import signal
 import logging
 import time
+import json
 
 def get_logger(process_name, log_level=logging.INFO):
     """Get or create a logger with a single handler"""
@@ -37,17 +38,29 @@ class EtherMethodMetadata:
 
 class EtherMixin:
     def __init__(self, name: str = None, sub_address: Optional[str] = None, 
-                 pub_address: Optional[str] = None, log_level: int = logging.INFO):
+                 pub_address: Optional[str] = None, log_level: int = logging.INFO,
+                 results_file: Optional[str] = None):
         self.id = uuid.uuid4()
         self.name = name or self.id
         self._logger = get_logger(f"{self.__class__.__name__}:{self.name}", log_level)
         self._sub_address = sub_address
         self._pub_address = pub_address
+        self.results_file = results_file
+        
+        # Socket handling
         self._zmq_context = None
         self._sub_socket = None
         self._pub_socket = None
         self._zmq_methods = {}
-
+        
+        # Message tracking
+        self.received_messages = set()
+        self.latencies = []
+        self.publishers = {}
+        self.first_message_time = None
+        self.last_message_time = None
+        self.subscription_time = None
+    
     def setup_sockets(self):
         self._zmq_context = zmq.Context()
         
@@ -57,6 +70,10 @@ class EtherMixin:
                 self._sub_socket.bind(self._sub_address)
             else:
                 self._sub_socket.connect(self._sub_address)
+            # Add performance settings
+            self._sub_socket.setsockopt(zmq.RCVHWM, 1000000)
+            self._sub_socket.setsockopt(zmq.RCVBUF, 65536)
+            self.subscription_time = time.time()
         
         if self._pub_address:
             self._pub_socket = self._zmq_context.socket(zmq.PUB)
@@ -64,7 +81,11 @@ class EtherMixin:
                 self._pub_socket.bind(self._pub_address)
             else:
                 self._pub_socket.connect(self._pub_address)
+            # Add performance settings
+            self._pub_socket.setsockopt(zmq.SNDHWM, 1000000)
+            self._pub_socket.setsockopt(zmq.SNDBUF, 65536)
         
+        # Setup subscriptions
         self._zmq_methods = {}
         for attr_name in dir(self):
             attr = getattr(self, attr_name)
@@ -77,8 +98,67 @@ class EtherMixin:
                     self._zmq_methods[topic] = metadata
         
         time.sleep(0.1)
-
+    
+    def track_message(self, publisher_id: str, sequence: int, timestamp: float):
+        """Track message statistics"""
+        now = time.time()
+        
+        # Initialize publisher tracking if needed
+        if publisher_id not in self.publishers:
+            self.publishers[publisher_id] = {
+                "sequences": set(),
+                "gaps": [],
+                "last_sequence": None,
+                "first_time": now
+            }
+        
+        pub_stats = self.publishers[publisher_id]
+        
+        # Track sequence numbers for this publisher
+        if pub_stats["last_sequence"] is not None:
+            expected = pub_stats["last_sequence"] + 1
+            if sequence > expected:
+                gap = sequence - expected
+                pub_stats["gaps"].append((expected, sequence, gap))
+                self._logger.debug(f"Gap from publisher {publisher_id}: "
+                                 f"expected {expected}, got {sequence}")
+        
+        pub_stats["last_sequence"] = sequence
+        pub_stats["sequences"].add(sequence)
+        
+        # Track timing
+        latency = (now - timestamp) * 1000
+        self.latencies.append(latency)
+        self.received_messages.add((publisher_id, sequence))
+        
+        if self.first_message_time is None:
+            self.first_message_time = now
+        self.last_message_time = now
+    
+    def save_results(self):
+        """Save results to file if results_file is set"""
+        if not self.results_file:
+            return
+            
+        results = {
+            "latencies": self.latencies,
+            "received_messages": list(self.received_messages),
+            "publishers": {
+                pid: {
+                    "sequences": list(stats["sequences"]),
+                    "gaps": stats["gaps"],
+                    "last_sequence": stats["last_sequence"],
+                    "first_time": stats["first_time"]
+                }
+                for pid, stats in self.publishers.items()
+            }
+        }
+        
+        with open(self.results_file, 'w') as f:
+            json.dump(results, f)
+    
     def run(self, stop_event: Event):
+        """Run with result saving support"""
         def handle_signal(signum, frame):
             stop_event.set()
         
@@ -93,6 +173,8 @@ class EtherMixin:
                 self._logger.error(f"Error in run loop: {e}")
                 break
         
+        # Save results before cleanup if results_file is set
+        self.save_results()
         self.cleanup()
 
     def cleanup(self):

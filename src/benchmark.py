@@ -64,123 +64,21 @@ class BenchmarkPublisher(EtherMixin):
         self.message_count += 1
         return self.message
 
-    def setup_sockets(self):
-        """Setup ZMQ sockets with performance tuning options"""
-        super().setup_sockets()
-        if self._pub_socket:
-            # Increase buffer sizes to handle high message rates
-            self._pub_socket.setsockopt(zmq.SNDHWM, 1000000)  # ZMQ-level buffer
-            self._pub_socket.setsockopt(zmq.SNDBUF, 65536)    # OS-level buffer
-
 class BenchmarkSubscriber(EtherMixin):
-    """Subscriber that receives messages and tracks statistics.
-    
-    Each subscriber maintains its own list of received message IDs and latencies,
-    which are written to a file when the subscriber stops.
-    """
+    """Subscriber that receives messages and tracks statistics."""
     def __init__(self, port: int, results_dir: str, subscriber_id: int):
         super().__init__(
             name=f"Subscriber-{subscriber_id}",
-            sub_address=f"tcp://localhost:{port}",  # Connect to broker's pub port
-            log_level=logging.INFO
+            sub_address=f"tcp://localhost:{port}",
+            log_level=logging.INFO,
+            results_file=os.path.join(results_dir, f"subscriber_{subscriber_id}.json")
         )
-        self.results_file = os.path.join(results_dir, f"subscriber_{subscriber_id}.json")
-        self.latencies = []
-        self.received_messages = set()
         self.subscriber_id = subscriber_id
-        self.publishers = {}  # Dict of publisher_id -> stats
-        
-        # Add tracking variables
-        self.first_message_time = None
-        self.last_message_time = None
-        self.subscription_time = None
-    
-    def setup_sockets(self):
-        super().setup_sockets()
-        if self._sub_socket:
-            self._sub_socket.setsockopt(zmq.RCVHWM, 1000000)
-            self._sub_socket.setsockopt(zmq.RCVBUF, 65536)
-            self.subscription_time = time.time()
-            self._logger.debug(f"Subscriber {self.subscriber_id} subscribed at {self.subscription_time}")
     
     @ether_sub(topic="__mp_main__.BenchmarkSubscriber.receive_message")
     def receive_message(self, data: str, timestamp: float, message_id: int, 
                        publisher_id: str, sequence: int):
-        now = time.time()
-        
-        # Initialize publisher tracking if needed
-        if publisher_id not in self.publishers:
-            self.publishers[publisher_id] = {
-                "sequences": set(),
-                "gaps": [],
-                "last_sequence": None,
-                "first_time": now
-            }
-        
-        pub_stats = self.publishers[publisher_id]
-        
-        # Track sequence numbers for this publisher
-        if pub_stats["last_sequence"] is not None:
-            expected = pub_stats["last_sequence"] + 1
-            if sequence > expected:
-                gap = sequence - expected
-                pub_stats["gaps"].append((expected, sequence, gap))
-                self._logger.debug(f"Gap from publisher {publisher_id}: "
-                                 f"expected {expected}, got {sequence}")
-        
-        pub_stats["last_sequence"] = sequence
-        pub_stats["sequences"].add(sequence)
-        
-        # Track overall statistics
-        latency = (now - timestamp) * 1000
-        self.latencies.append(latency)
-        self.received_messages.add((publisher_id, sequence))
-    
-    def run(self, stop_event: Event):
-        def handle_signal(signum, frame):
-            stop_event.set()
-        
-        signal.signal(signal.SIGTERM, handle_signal)
-        self.setup_sockets()
-        
-        while not stop_event.is_set():
-            try:
-                if self._sub_socket:
-                    self.receive_single_message()
-            except Exception as e:
-                self._logger.error(f"Error in run loop: {e}")
-                break
-        
-        # Convert sets to lists for JSON serialization
-        serializable_publishers = {}
-        for pub_id, stats in self.publishers.items():
-            serializable_publishers[pub_id] = {
-                "sequences": list(stats["sequences"]),  # Convert set to list
-                "gaps": stats["gaps"],
-                "last_sequence": stats["last_sequence"],
-                "first_time": stats["first_time"]
-            }
-        
-        # Save enhanced results
-        results = {
-            "latencies": self.latencies,
-            "publishers": serializable_publishers,  # Use serializable version
-            "subscription_time": self.subscription_time,
-            "first_message_time": self.first_message_time,
-            "last_message_time": self.last_message_time,
-            "total_messages": len(self.received_messages),
-            "subscriber_id": self.subscriber_id,
-            "received_messages": list(self.received_messages)  # Convert set to list
-        }
-        
-        self._logger.debug(f"Subscriber {self.subscriber_id} final stats: "
-                          f"received {len(self.received_messages)} messages from "
-                          f"{len(self.publishers)} publishers")
-        
-        with open(self.results_file, 'w') as f:
-            json.dump(results, f)
-        
-        self.cleanup()
+        self.track_message(publisher_id, sequence, timestamp)
 
 class BenchmarkBroker(EtherMixin):
     """Broker that forwards messages from publishers to subscribers.
@@ -387,40 +285,22 @@ def run_broker_benchmark(message_size: int, num_messages: int, num_subscribers: 
         
         # Collect and aggregate results from all subscribers
         all_latencies = []
-        publisher_stats = {}  # Track stats per publisher
+        subscriber_results = []  # Store complete results
         
         for i in range(num_subscribers):
             result_file = os.path.join(temp_dir, f"subscriber_{i}.json")
             with open(result_file, 'r') as f:
                 results = json.load(f)
                 all_latencies.extend(results["latencies"])
-                
-                # Analyze per-publisher stats
-                for pub_id, stats in results["publishers"].items():
-                    if pub_id not in publisher_stats:
-                        publisher_stats[pub_id] = {
-                            "total_messages": 0,
-                            "total_gaps": 0,
-                            "sequences": set()
-                        }
-                    pub_stats = publisher_stats[pub_id]
-                    pub_stats["sequences"].update(stats["sequences"])
-                    pub_stats["total_gaps"] += len(stats["gaps"])
+                subscriber_results.append(results)
         
-        # Log publisher statistics
-        for pub_id, stats in publisher_stats.items():
-            messages = len(stats["sequences"])
-            gaps = stats["total_gaps"]
-            self._logger.debug(f"Publisher {pub_id}: {messages} messages, {gaps} gaps")
+        # Calculate metrics
+        total_messages_sent = num_messages * num_publishers
+        expected_per_sub = total_messages_sent
+        total_expected = expected_per_sub * num_subscribers
         
-        # Cleanup publishers
-        for publisher in publishers:
-            publisher.cleanup()
-        
-        # Calculate final metrics
-        total_messages_received = len(all_received)
-        avg_messages_received = total_messages_received / num_subscribers
-        message_loss_percent = 100 * (1 - avg_messages_received / total_messages_sent)
+        total_received = sum(len(results["received_messages"]) for results in subscriber_results)
+        message_loss_percent = 100 * (1 - total_received / total_expected)
         
         return BenchmarkResult(
             messages_per_second=total_messages_sent / duration if duration > 0 else 0,
@@ -430,7 +310,7 @@ def run_broker_benchmark(message_size: int, num_messages: int, num_subscribers: 
             message_loss_percent=message_loss_percent,
             messages_sent=total_messages_sent,
             expected_sent=num_messages * num_publishers,
-            messages_received=int(avg_messages_received),
+            messages_received=int(total_received / num_subscribers),
             expected_received=num_messages * num_subscribers
         )
 
@@ -558,10 +438,29 @@ def main():
     root.setLevel(logging.INFO)
     
     # Benchmark parameters
-    message_sizes = [1000, 100000]                  # Size of message payload in bytes
-    message_counts = [1000, 5000, 100000]    # Different numbers of messages to test
-    subscriber_counts = [2, 8]              # Number of subscribers to test
-    publisher_counts = [2, 8]                  # Number of publishers to test
+    message_sizes = [1000, 100000]
+    message_counts = [1000, 5000, 100000]
+    subscriber_counts = [2, 8]
+    publisher_counts = [2, 8]
+    
+    # # Run broker benchmark
+    # print("\nRunning Broker Pattern Benchmark...")
+    # print("Pubs/Subs | Msg Size | Msg Count | Messages/sec | Latency (ms) | Loss % | Sent/Expected | Received/Expected | Memory (MB)")
+    # print("-" * 120)
+    
+    # for pub_count in publisher_counts:
+    #     for sub_count in subscriber_counts:
+    #         for size in message_sizes:
+    #             for num_messages in message_counts:
+    #                 print(f"Testing {pub_count}p/{sub_count}s with {size} bytes, {num_messages} msgs... ", end='', flush=True)
+    #                 result = run_broker_benchmark(size, num_messages, sub_count, pub_count)
+    #                 print("\r", end='')
+    #                 print(f"{pub_count}p/{sub_count:2d}s | {size:8d} | {num_messages:9d} | {result.messages_per_second:11.2f} | "
+    #                       f"{result.latency_ms:11.2f} | {result.message_loss_percent:6.2f} | "
+    #                       f"{result.messages_sent:6d}/{result.expected_sent:<6d} | "
+    #                       f"{result.messages_received:6d}/{result.expected_received:<6d} | "
+    #                       f"{result.memory_mb:10.1f}")
+    #                 time.sleep(1.0)
     
     # Run proxy benchmark
     print("\nRunning XPUB/XSUB Proxy Pattern Benchmark...")
