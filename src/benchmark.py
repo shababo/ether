@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Dict
 import psutil
 import os
-from ether import EtherMixin, ether_pub, ether_sub, get_logger
+from ether import EtherMixin, EtherPubSubProxy, ether_pub, ether_sub, get_logger
 import logging
 import tempfile
 import signal
@@ -51,15 +51,12 @@ class BenchmarkPublisher(EtherMixin):
             "sequence": 0,                # Add sequence number
         }
     
-    @ether_pub(topic="__mp_main__.BenchmarkSubscriber.receive_message")
+    @ether_pub(topic="BenchmarkSubscriber.receive_message")
     def publish_message(self, timestamp: float) -> Dict:
         """Publish a single message with current timestamp and unique ID"""
         self.message["timestamp"] = timestamp
         self.message["message_id"] = self.message_count
         self.message["sequence"] = self.message_count
-        
-        # if self.message_count % 10000 == 0:
-        #     self._logger.warning(f"Publisher {self.publisher_id} sent {self.message_count} messages")
         
         self.message_count += 1
         return self.message
@@ -75,7 +72,7 @@ class BenchmarkSubscriber(EtherMixin):
         )
         self.subscriber_id = subscriber_id
     
-    @ether_sub(topic="__mp_main__.BenchmarkSubscriber.receive_message")
+    @ether_sub(topic="BenchmarkSubscriber.receive_message")
     def receive_message(self, data: str, timestamp: float, message_id: int, 
                        publisher_id: str, sequence: int):
         self.track_message(publisher_id, sequence, timestamp)
@@ -95,14 +92,14 @@ class BenchmarkBroker(EtherMixin):
             log_level=logging.INFO
         )
     
-    @ether_sub(topic="__mp_main__.BenchmarkSubscriber.receive_message")
+    @ether_sub(topic="BenchmarkSubscriber.receive_message")
     def receive(self, data: str, timestamp: float, message_id: int, 
                 publisher_id: str, sequence: int):
         """Receive message from publisher and forward it"""
         self._logger.debug(f"Broker received message #{sequence} from {publisher_id}")
         self.forward(data, timestamp, message_id, publisher_id, sequence)
     
-    @ether_pub(topic="__mp_main__.BenchmarkSubscriber.receive_message")
+    @ether_pub(topic="BenchmarkSubscriber.receive_message")
     def forward(self, data: str, timestamp: float, message_id: int,
                 publisher_id: str, sequence: int) -> Dict:
         """Forward received message to all subscribers"""
@@ -114,97 +111,6 @@ class BenchmarkBroker(EtherMixin):
             "publisher_id": publisher_id,  # Include publisher ID
             "sequence": sequence           # Include sequence number
         }
-
-class BenchmarkProxy(EtherMixin):
-    """Proxy that uses XPUB/XSUB sockets for efficient message distribution.
-    
-    XPUB/XSUB sockets are special versions of PUB/SUB that expose subscriptions
-    as messages, allowing for proper subscription forwarding.
-    """
-    def __init__(self, pub_port: int, sub_port: int):
-        super().__init__(
-            name="Proxy",
-            log_level=logging.INFO
-        )
-        self.pub_port = pub_port
-        self.sub_port = sub_port
-        self.frontend = None
-        self.backend = None
-        self._running = False  # Add flag to control proxy loop
-    
-    def setup_sockets(self):
-        """Setup XPUB/XSUB sockets with optimized settings"""
-        self._zmq_context = zmq.Context()
-        
-        # XSUB socket for receiving from publishers
-        self.frontend = self._zmq_context.socket(zmq.XSUB)
-        self.frontend.bind(f"tcp://*:{self.sub_port}")
-        self.frontend.setsockopt(zmq.RCVHWM, 1000000)
-        self.frontend.setsockopt(zmq.RCVBUF, 65536)
-        
-        # XPUB socket for sending to subscribers
-        self.backend = self._zmq_context.socket(zmq.XPUB)
-        self.backend.bind(f"tcp://*:{self.pub_port}")
-        self.backend.setsockopt(zmq.SNDHWM, 1000000)
-        self.backend.setsockopt(zmq.SNDBUF, 65536)
-        self.backend.setsockopt(zmq.XPUB_VERBOSE, 1)
-        
-        # Set TCP keepalive options
-        for socket in [self.frontend, self.backend]:
-            socket.setsockopt(zmq.LINGER, 0)
-            socket.setsockopt(zmq.IMMEDIATE, 1)
-            socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
-            socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 300)
-    
-    def run(self, stop_event: Event):
-        """Run the proxy with graceful shutdown support"""
-        def handle_signal(signum, frame):
-            stop_event.set()
-        
-        signal.signal(signal.SIGTERM, handle_signal)
-        
-        try:
-            self.setup_sockets()
-            self._running = True
-            
-            # Create poller to monitor both sockets
-            poller = zmq.Poller()
-            poller.register(self.frontend, zmq.POLLIN)
-            poller.register(self.backend, zmq.POLLIN)
-            
-            self._logger.debug(f"Starting proxy with {self.frontend} and {self.backend}")  # Log socket details
-            
-            while self._running and not stop_event.is_set():
-                try:
-                    events = dict(poller.poll(timeout=100))  # 100ms timeout
-                    
-                    if self.frontend in events:
-                        message = self.frontend.recv_multipart()
-                        self._logger.debug(f"Proxy forwarding from frontend: {len(message)} parts")
-                        self.backend.send_multipart(message)
-                    
-                    if self.backend in events:
-                        message = self.backend.recv_multipart()
-                        self._logger.debug(f"Proxy forwarding from backend: {len(message)} parts")
-                        self.frontend.send_multipart(message)
-                        
-                except zmq.ZMQError as e:
-                    if e.errno == zmq.EAGAIN:  # Timeout, just continue
-                        continue
-                    else:
-                        self._logger.error(f"ZMQ Error in proxy: {e}")
-                        raise
-                        
-        except Exception as e:
-            self._logger.error(f"Error in proxy: {e}")
-        finally:
-            self._running = False
-            if self.frontend:
-                self.frontend.close()
-            if self.backend:
-                self.backend.close()
-            if self._zmq_context:
-                self._zmq_context.term()
 
 # Helper functions to run components in separate processes
 def run_subscriber(stop_event: Event, port: int, results_dir: str, subscriber_id: int):
@@ -219,7 +125,7 @@ def run_broker(stop_event: Event, pub_port: int, sub_port: int):
 
 def run_proxy(stop_event: Event, pub_port: int, sub_port: int):
     """Create and run a proxy in its own process"""
-    proxy = BenchmarkProxy(pub_port, sub_port)
+    proxy = EtherPubSubProxy(pub_port, sub_port)
     proxy.run(stop_event)
 
 def run_broker_benchmark(message_size: int, num_messages: int, num_subscribers: int, num_publishers: int) -> BenchmarkResult:

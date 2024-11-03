@@ -232,14 +232,14 @@ def create_model_from_signature(func) -> Type[BaseModel]:
     return create_model(model_name, **fields)
 
 def ether_pub(topic: Optional[str] = None):
-    """
-    Decorator for methods that should publish ZMQ messages.
-    """
+    """Decorator for methods that should publish ZMQ messages."""
     def decorator(func):
         # Get return type hint if it exists
         return_type = inspect.signature(func).return_annotation
         if return_type == inspect.Signature.empty:
             raise TypeError(f"Function {func.__name__} must have a return type hint")
+        
+        actual_topic = None
         
         @wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -256,8 +256,11 @@ def ether_pub(topic: Optional[str] = None):
                 ResultModel = RootModel[return_type]
                 validated_result = ResultModel(result).model_dump_json()
             
-            # Generate topic if not provided
-            actual_topic = topic or f"{func.__module__}.{func.__qualname__}"
+            # Generate topic if not provided, removing __mp_main__ or __main__
+            actual_topic = topic
+            if not actual_topic:
+                module_name = func.__module__.replace('__mp_main__.', '').replace('__main__.', '')
+                actual_topic = f"{module_name}.{func.__qualname__}"
             
             self._logger.debug(f"Publishing to topic: {actual_topic}")
             
@@ -269,8 +272,7 @@ def ether_pub(topic: Optional[str] = None):
             
             return result
         
-        # Store metadata and log it
-        actual_topic = topic or f"{func.__module__}.{func.__qualname__}"
+        # Store metadata with cleaned topic
         wrapper._zmq_metadata = EtherMethodMetadata(
             func, 
             actual_topic,
@@ -282,9 +284,7 @@ def ether_pub(topic: Optional[str] = None):
     return decorator
 
 def ether_sub(topic: Optional[str] = None):
-    """
-    Decorator for methods that should receive ZMQ messages.
-    """
+    """Decorator for methods that should receive ZMQ messages."""
     def decorator(func):
         # Create Pydantic model for arguments
         args_model = create_model_from_signature(func)
@@ -293,15 +293,112 @@ def ether_sub(topic: Optional[str] = None):
         def wrapper(self, *args, **kwargs):
             return func(self, *args, **kwargs)
         
-        # Store metadata
+        # Clean up topic name if not explicitly provided
+        actual_topic = topic
+        if not actual_topic:
+            module_name = func.__module__.replace('__mp_main__.', '').replace('__main__.', '')
+            actual_topic = f"{module_name}.{func.__qualname__}"
+        
+        # Store metadata with cleaned topic
         wrapper._zmq_metadata = EtherMethodMetadata(
             func, 
-            topic or f"{func.__module__}.{func.__qualname__}", 
+            actual_topic,
             args_model,
             'sub'
         )
         
         return wrapper
     return decorator
+
+class EtherPubSubProxy(EtherMixin):
+    """Proxy that uses XPUB/XSUB sockets for efficient message distribution.
+    
+    XPUB/XSUB sockets are special versions of PUB/SUB that expose subscriptions
+    as messages, allowing for proper subscription forwarding.
+    """
+    def __init__(self, pub_port: int, sub_port: int):
+        super().__init__(
+            name="Proxy",
+            log_level=logging.INFO
+        )
+        self.pub_port = pub_port
+        self.sub_port = sub_port
+        self.frontend = None
+        self.backend = None
+        self._running = False  # Add flag to control proxy loop
+    
+    def setup_sockets(self):
+        """Setup XPUB/XSUB sockets with optimized settings"""
+        self._zmq_context = zmq.Context()
+        
+        # XSUB socket for receiving from publishers
+        self.frontend = self._zmq_context.socket(zmq.XSUB)
+        self.frontend.bind(f"tcp://*:{self.sub_port}")
+        self.frontend.setsockopt(zmq.RCVHWM, 1000000)
+        self.frontend.setsockopt(zmq.RCVBUF, 65536)
+        
+        # XPUB socket for sending to subscribers
+        self.backend = self._zmq_context.socket(zmq.XPUB)
+        self.backend.bind(f"tcp://*:{self.pub_port}")
+        self.backend.setsockopt(zmq.SNDHWM, 1000000)
+        self.backend.setsockopt(zmq.SNDBUF, 65536)
+        self.backend.setsockopt(zmq.XPUB_VERBOSE, 1)
+        
+        # Set TCP keepalive options
+        for socket in [self.frontend, self.backend]:
+            socket.setsockopt(zmq.LINGER, 0)
+            socket.setsockopt(zmq.IMMEDIATE, 1)
+            socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+            socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 300)
+    
+    def run(self, stop_event: Event):
+        """Run the proxy with graceful shutdown support"""
+        def handle_signal(signum, frame):
+            stop_event.set()
+        
+        signal.signal(signal.SIGTERM, handle_signal)
+        
+        try:
+            self.setup_sockets()
+            self._running = True
+            
+            # Create poller to monitor both sockets
+            poller = zmq.Poller()
+            poller.register(self.frontend, zmq.POLLIN)
+            poller.register(self.backend, zmq.POLLIN)
+            
+            self._logger.debug(f"Starting proxy with {self.frontend} and {self.backend}")  # Log socket details
+            
+            while self._running and not stop_event.is_set():
+                try:
+                    events = dict(poller.poll(timeout=100))  # 100ms timeout
+                    
+                    if self.frontend in events:
+                        message = self.frontend.recv_multipart()
+                        self._logger.debug(f"Proxy forwarding from frontend: {len(message)} parts")
+                        self.backend.send_multipart(message)
+                    
+                    if self.backend in events:
+                        message = self.backend.recv_multipart()
+                        self._logger.debug(f"Proxy forwarding from backend: {len(message)} parts")
+                        self.frontend.send_multipart(message)
+                        
+                except zmq.ZMQError as e:
+                    if e.errno == zmq.EAGAIN:  # Timeout, just continue
+                        continue
+                    else:
+                        self._logger.error(f"ZMQ Error in proxy: {e}")
+                        raise
+                        
+        except Exception as e:
+            self._logger.error(f"Error in proxy: {e}")
+        finally:
+            self._running = False
+            if self.frontend:
+                self.frontend.close()
+            if self.backend:
+                self.backend.close()
+            if self._zmq_context:
+                self._zmq_context.term()
 
 
