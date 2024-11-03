@@ -8,13 +8,14 @@ from typing import Dict
 import psutil
 import os
 from ether import (
-    EtherMixin, EtherPubSubProxy, ether_pub, ether_sub, get_logger,
+    EtherMixin, _EtherPubSubProxy, ether_pub, ether_sub, _get_logger,
 )
 import logging
 import tempfile
 import signal
 from threading import Thread
 import uuid
+from ether import init
 
 @dataclass
 class BenchmarkResult:
@@ -86,16 +87,16 @@ def run_subscriber(stop_event: Event, results_dir: str, subscriber_id: int):
 
 def run_proxy(stop_event: Event):
     """Create and run a proxy in its own process"""
-    proxy = EtherPubSubProxy()
+    proxy = _EtherPubSubProxy()
     proxy.run(stop_event)
 
 def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: int, num_publishers: int) -> BenchmarkResult:
     stop_event = Event()
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Start proxy process (no port parameters needed)
-        proxy_process = Process(target=run_proxy, args=(stop_event,))
-        proxy_process.start()
+        # # Start proxy process (no port parameters needed)
+        # proxy_process = Process(target=run_proxy, args=(stop_event,))
+        # proxy_process.start()
         
         # Start subscribers
         sub_processes = []
@@ -153,7 +154,7 @@ def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: i
         time.sleep(1.0)
         
         stop_event.set()
-        for p in sub_processes + [proxy_process]:
+        for p in sub_processes:
             p.join(timeout=5)
         
         # Collect results
@@ -235,4 +236,5 @@ def main():
                     time.sleep(1.0)
 
 if __name__ == "__main__":
+    init()  # Initialize Ether system
     main() 

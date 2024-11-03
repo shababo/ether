@@ -1,7 +1,7 @@
 from functools import wraps
-from multiprocessing import Event
+from multiprocessing import Event, Process
 import inspect
-from typing import Dict, Any, Type, Optional
+from typing import Any, Type, Optional
 import uuid
 import zmq
 from pydantic import BaseModel, create_model, RootModel
@@ -9,12 +9,15 @@ import signal
 import logging
 import time
 import json
+import atexit
+import os
+import tempfile
 
 # Standard ports for Ether communication
-ETHER_SUB_PORT = 5555  # subscribe to this port
-ETHER_PUB_PORT = 5556  # publish to this port
+_ETHER_SUB_PORT = 5555  # subscribe to this port
+_ETHER_PUB_PORT = 5556  # publish to this port
 
-def get_logger(process_name, log_level=logging.INFO):
+def _get_logger(process_name, log_level=logging.INFO):
     """Get or create a logger with a single handler"""
     logger = logging.getLogger(process_name)
     logger.setLevel(log_level)
@@ -32,23 +35,106 @@ def get_logger(process_name, log_level=logging.INFO):
     
     return logger
 
-class EtherMethodMetadata:
-    """Holds metadata about ZMQ-decorated methods"""
-    def __init__(self, func, topic: str, args_model: Optional[Type[BaseModel]], method_type: str):
-        self.func = func
-        self.topic = topic
-        self.args_model = args_model
-        self.method_type = method_type
+class _ProxyManager:
+    """Singleton manager for the Ether proxy process"""
+    _instance = None
+    _proxy_process = None
+    _stop_event = None
+    _pid_file = os.path.join(tempfile.gettempdir(), 'ether_proxy.pid')
+    _parent_pid = None  # Add parent pid tracking
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(_ProxyManager, cls).__new__(cls)
+        return cls._instance
+    
+    def start_proxy(self):
+        """Start proxy if not already running"""
+        if self._proxy_process is not None:
+            return
+        
+        # Check if proxy is already running on this machine
+        if os.path.exists(self._pid_file):
+            with open(self._pid_file, 'r') as f:
+                pid = int(f.read())
+                try:
+                    # Check if process exists
+                    os.kill(pid, 0)
+                    return  # Proxy is already running
+                except OSError:
+                    # Process doesn't exist, remove stale pid file
+                    os.remove(self._pid_file)
+        
+        # Start new proxy process
+        self._stop_event = Event()
+        self._proxy_process = Process(target=self._run_proxy, args=(self._stop_event,))
+        self._proxy_process.daemon = True  # Make sure proxy dies with parent
+        self._proxy_process.start()
+        self._parent_pid = os.getpid()  # Store the creating process's PID
+        
+        # Save PID
+        with open(self._pid_file, 'w') as f:
+            f.write(str(self._proxy_process.pid))
+    
+    def _run_proxy(self, stop_event):
+        """Run the proxy process"""
+        proxy = _EtherPubSubProxy()
+        proxy.run(stop_event)
+    
+    def stop_proxy(self):
+        """Stop proxy if we started it and we're in the creating process"""
+        if self._proxy_process is not None and self._parent_pid == os.getpid():
+            if self._stop_event is not None:
+                self._stop_event.set()
+            self._proxy_process.join(timeout=5)
+            if self._proxy_process.is_alive():
+                self._proxy_process.terminate()
+            self._proxy_process = None
+            self._stop_event = None
+            
+            # Remove PID file if it's ours
+            if os.path.exists(self._pid_file):
+                with open(self._pid_file, 'r') as f:
+                    try:
+                        if int(f.read()) == self._proxy_process.pid:
+                            os.remove(self._pid_file)
+                    except (ValueError, AttributeError):
+                        pass  # Ignore errors reading pid file
+        elif os.path.exists(self._pid_file):
+            try:
+                with open(self._pid_file, 'r') as f:
+                    pid = int(f.read())
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except OSError:
+                        pass  # Process might already be gone
+                os.remove(self._pid_file)
+            except (ValueError, OSError):
+                pass  # Ignore errors cleaning up pid file
+
+# Create singleton instance
+_proxy_manager = _ProxyManager()
+
+# Register cleanup on exit
+@atexit.register
+def _cleanup_proxy():
+    _proxy_manager.stop_proxy()
 
 class EtherMixin:
+    @classmethod
+    def ensure_proxy_running(cls):
+        """Ensure proxy is running. Call this once at program start."""
+        _proxy_manager.start_proxy()
+    
     def __init__(self, name: str = None, sub_address: Optional[str] = None, 
                  pub_address: Optional[str] = None, log_level: int = logging.INFO,
                  results_file: Optional[str] = None):
+        # Remove proxy start from here
         self.id = uuid.uuid4()
         self.name = name or self.id
-        self._logger = get_logger(f"{self.__class__.__name__}:{self.name}", log_level)
-        self._sub_address = sub_address or f"tcp://localhost:{ETHER_SUB_PORT}"
-        self._pub_address = pub_address or f"tcp://localhost:{ETHER_PUB_PORT}"
+        self._logger = _get_logger(f"{self.__class__.__name__}:{self.name}", log_level)
+        self._sub_address = sub_address or f"tcp://localhost:{_ETHER_SUB_PORT}"
+        self._pub_address = pub_address or f"tcp://localhost:{_ETHER_PUB_PORT}"
         self.results_file = results_file
         
         # Socket handling
@@ -217,7 +303,7 @@ class EtherMixin:
             else:
                 self._logger.warning(f"Received message for unknown topic: {topic}")
 
-def create_model_from_signature(func) -> Type[BaseModel]:
+def _create_model_from_signature(func) -> Type[BaseModel]:
     """Creates a Pydantic model from a function's signature"""
     sig = inspect.signature(func)
     fields = {}
@@ -238,14 +324,14 @@ def create_model_from_signature(func) -> Type[BaseModel]:
     model_name = f"{func.__name__}Args"
     return create_model(model_name, **fields)
 
-class EtherSubMetadata:
+class _EtherSubMetadata:
     """Holds metadata about ZMQ subscriber methods"""
     def __init__(self, func, topic: str, args_model: Optional[Type[BaseModel]]):
         self.func = func
         self.topic = topic
         self.args_model = args_model
 
-class EtherPubMetadata:
+class _EtherPubMetadata:
     """Holds metadata about ZMQ publisher methods"""
     def __init__(self, func, topic: str):
         self.func = func
@@ -291,7 +377,7 @@ def ether_pub(topic: Optional[str] = None):
             return result
         
         # Store pub metadata
-        wrapper._pub_metadata = EtherPubMetadata(func, actual_topic)
+        wrapper._pub_metadata = _EtherPubMetadata(func, actual_topic)
         return wrapper
     return decorator
 
@@ -299,7 +385,7 @@ def ether_sub(topic: Optional[str] = None):
     """Decorator for methods that should receive ZMQ messages."""
     def decorator(func):
         # Create Pydantic model for arguments
-        args_model = create_model_from_signature(func)
+        args_model = _create_model_from_signature(func)
         
         @wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -311,20 +397,20 @@ def ether_sub(topic: Optional[str] = None):
             actual_topic = f"{func.__qualname__}"
         
         # Store sub metadata
-        wrapper._sub_metadata = EtherSubMetadata(func, actual_topic, args_model)
+        wrapper._sub_metadata = _EtherSubMetadata(func, actual_topic, args_model)
         return wrapper
     return decorator
 
-def ether_pubsub(pub_topic: Optional[str] = None, sub_topic: Optional[str] = None):
-    """Combined decorator for methods that both subscribe and publish."""
-    def decorator(func):
-        # Apply sub first, then pub
-        func = ether_sub(sub_topic)(func)
-        func = ether_pub(pub_topic)(func)
-        return func
-    return decorator
+# def ether_pubsub(pub_topic: Optional[str] = None, sub_topic: Optional[str] = None):
+#     """Combined decorator for methods that both subscribe and publish."""
+#     def decorator(func):
+#         # Apply sub first, then pub
+#         func = ether_sub(sub_topic)(func)
+#         func = ether_pub(pub_topic)(func)
+#         return func
+#     return decorator
 
-class EtherPubSubProxy(EtherMixin):
+class _EtherPubSubProxy(EtherMixin):
     """Proxy that uses XPUB/XSUB sockets for efficient message distribution.
     
     XPUB/XSUB sockets are special versions of PUB/SUB that expose subscriptions
@@ -349,12 +435,12 @@ class EtherPubSubProxy(EtherMixin):
         
         # Use standard ports
         self.frontend = self._zmq_context.socket(zmq.XSUB)
-        self.frontend.bind(f"tcp://*:{ETHER_PUB_PORT}")
+        self.frontend.bind(f"tcp://*:{_ETHER_PUB_PORT}")
         self.frontend.setsockopt(zmq.RCVHWM, 1000000)
         self.frontend.setsockopt(zmq.RCVBUF, 65536)
         
         self.backend = self._zmq_context.socket(zmq.XPUB)
-        self.backend.bind(f"tcp://*:{ETHER_SUB_PORT}")
+        self.backend.bind(f"tcp://*:{_ETHER_SUB_PORT}")
         self.backend.setsockopt(zmq.SNDHWM, 1000000)
         self.backend.setsockopt(zmq.SNDBUF, 65536)
         self.backend.setsockopt(zmq.XPUB_VERBOSE, 1)

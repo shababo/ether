@@ -3,7 +3,7 @@ import zmq
 import logging
 import time
 from ether import (
-    EtherMixin, EtherPubSubProxy, ether_pub, ether_sub
+    EtherMixin, ether_pub, ether_sub, init
 )
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
@@ -89,12 +89,13 @@ def run_generator(stop_event, process_id):
     # time.sleep(2.0)
     generator.generate_data()
 
-def run_proxy(stop_event):
-    proxy = EtherPubSubProxy()
-    proxy.run(stop_event)
+# def run_proxy(stop_event):
+#     proxy = _EtherPubSubProxy()
+#     proxy.run(stop_event)
 
 
 if __name__ == "__main__":
+    init()  # Initialize Ether system
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -103,10 +104,10 @@ if __name__ == "__main__":
     
     stop_event = Event()
     
-    # Start the proxy
-    main_logger.info("Starting proxy")
-    proxy_process = Process(target=run_proxy, args=(stop_event,))
-    proxy_process.start()
+    # # Start the proxy
+    # main_logger.info("Starting proxy")
+    # proxy_process = Process(target=run_proxy, args=(stop_event,))
+    # proxy_process.start()
     
     # Start the result collector
     main_logger.info("Starting result collector")
@@ -138,7 +139,7 @@ if __name__ == "__main__":
     main_logger.info("Signaling processes to stop")
     stop_event.set()
     
-    for p in [proxy_process, collector_process] + processes:
+    for p in [collector_process] + processes:
         p.join(timeout=5)
         if p.is_alive():
             main_logger.warning(f"Process did not stop gracefully, terminating")
