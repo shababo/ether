@@ -72,7 +72,7 @@ class BenchmarkSubscriber(EtherMixin):
         )
         self.subscriber_id = subscriber_id
     
-    @ether_sub(topic="BenchmarkSubscriber.receive_message")
+    @ether_sub()
     def receive_message(self, data: str, timestamp: float, message_id: int, 
                        publisher_id: str, sequence: int):
         self.track_message(publisher_id, sequence, timestamp)

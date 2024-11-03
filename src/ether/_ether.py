@@ -231,7 +231,7 @@ def create_model_from_signature(func) -> Type[BaseModel]:
     model_name = f"{func.__name__}Args"
     return create_model(model_name, **fields)
 
-def ether_pub(topic: Optional[str] = None):
+def ether_pub(topic: str):
     """Decorator for methods that should publish ZMQ messages."""
     def decorator(func):
         # Get return type hint if it exists
@@ -240,7 +240,7 @@ def ether_pub(topic: Optional[str] = None):
             raise TypeError(f"Function {func.__name__} must have a return type hint")
         
         actual_topic = None
-        
+
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             if not self._pub_socket:
@@ -255,18 +255,13 @@ def ether_pub(topic: Optional[str] = None):
             else:
                 ResultModel = RootModel[return_type]
                 validated_result = ResultModel(result).model_dump_json()
-            
-            # Generate topic if not provided, removing __mp_main__ or __main__
-            actual_topic = topic
-            if not actual_topic:
-                module_name = func.__module__.replace('__mp_main__.', '').replace('__main__.', '')
-                actual_topic = f"{module_name}.{func.__qualname__}"
+        
             
             self._logger.debug(f"Publishing to topic: {actual_topic}")
             
             # Publish the validated result
             self._pub_socket.send_multipart([
-                actual_topic.encode(),
+                topic.encode(),
                 validated_result.encode()
             ])
             
@@ -296,8 +291,8 @@ def ether_sub(topic: Optional[str] = None):
         # Clean up topic name if not explicitly provided
         actual_topic = topic
         if not actual_topic:
-            module_name = func.__module__.replace('__mp_main__.', '').replace('__main__.', '')
-            actual_topic = f"{module_name}.{func.__qualname__}"
+            actual_topic = f"{func.__qualname__}"
+            print(f"Using sub topic: {actual_topic}")
         
         # Store metadata with cleaned topic
         wrapper._zmq_metadata = EtherMethodMetadata(
