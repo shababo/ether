@@ -460,7 +460,7 @@ def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: i
             publishers.append(publisher)
         
         # Warmup period with scaled sleep time
-        warmup_messages = 100
+        warmup_messages = 0
         messages_per_second = 1000  # Target rate during warmup
         sleep_per_message = 1.0 / messages_per_second  # Time to sleep between messages
         
@@ -558,10 +558,10 @@ def main():
     root.setLevel(logging.INFO)
     
     # Benchmark parameters
-    message_sizes = [1000]                  # Size of message payload in bytes
+    message_sizes = [1000, 100000]                  # Size of message payload in bytes
     message_counts = [1000, 5000, 100000]    # Different numbers of messages to test
-    subscriber_counts = [2]              # Number of subscribers to test
-    publisher_counts = [2]                  # Number of publishers to test
+    subscriber_counts = [2, 8]              # Number of subscribers to test
+    publisher_counts = [2, 8]                  # Number of publishers to test
     
     # Run proxy benchmark
     print("\nRunning XPUB/XSUB Proxy Pattern Benchmark...")
