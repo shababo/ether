@@ -68,38 +68,37 @@ class EtherMixin:
     def setup_sockets(self):
         self._zmq_context = zmq.Context()
         
+        # Setup subscriber socket
         if self._sub_address:
             self._sub_socket = self._zmq_context.socket(zmq.SUB)
             if self._sub_address.startswith("tcp://*:"):
                 self._sub_socket.bind(self._sub_address)
             else:
                 self._sub_socket.connect(self._sub_address)
-            # Add performance settings
             self._sub_socket.setsockopt(zmq.RCVHWM, 1000000)
             self._sub_socket.setsockopt(zmq.RCVBUF, 65536)
             self.subscription_time = time.time()
+            
+            # Setup subscriptions using sub metadata
+            self._zmq_methods = {}
+            for attr_name in dir(self):
+                attr = getattr(self, attr_name)
+                if hasattr(attr, '_sub_metadata'):
+                    metadata = attr._sub_metadata
+                    topic = metadata.topic
+                    self._sub_socket.subscribe(topic.encode())
+                    self._logger.debug(f"Subscribed to topic: {topic}")
+                    self._zmq_methods[topic] = metadata
         
+        # Setup publisher socket
         if self._pub_address:
             self._pub_socket = self._zmq_context.socket(zmq.PUB)
             if self._pub_address.startswith("tcp://*:"):
                 self._pub_socket.bind(self._pub_address)
             else:
                 self._pub_socket.connect(self._pub_address)
-            # Add performance settings
             self._pub_socket.setsockopt(zmq.SNDHWM, 1000000)
             self._pub_socket.setsockopt(zmq.SNDBUF, 65536)
-        
-        # Setup subscriptions
-        self._zmq_methods = {}
-        for attr_name in dir(self):
-            attr = getattr(self, attr_name)
-            if hasattr(attr, '_zmq_metadata'):
-                metadata: EtherMethodMetadata = attr._zmq_metadata
-                if metadata.method_type == 'sub' and self._sub_socket:
-                    topic = metadata.topic
-                    self._sub_socket.subscribe(topic.encode())
-                    self._logger.debug(f"Subscribed to topic: {topic}")
-                    self._zmq_methods[topic] = metadata
         
         time.sleep(0.1)
     
@@ -235,7 +234,20 @@ def create_model_from_signature(func) -> Type[BaseModel]:
     model_name = f"{func.__name__}Args"
     return create_model(model_name, **fields)
 
-def ether_pub(topic: str):
+class EtherSubMetadata:
+    """Holds metadata about ZMQ subscriber methods"""
+    def __init__(self, func, topic: str, args_model: Optional[Type[BaseModel]]):
+        self.func = func
+        self.topic = topic
+        self.args_model = args_model
+
+class EtherPubMetadata:
+    """Holds metadata about ZMQ publisher methods"""
+    def __init__(self, func, topic: str):
+        self.func = func
+        self.topic = topic
+
+def ether_pub(topic: Optional[str] = None):
     """Decorator for methods that should publish ZMQ messages."""
     def decorator(func):
         # Get return type hint if it exists
@@ -243,8 +255,12 @@ def ether_pub(topic: str):
         if return_type == inspect.Signature.empty:
             raise TypeError(f"Function {func.__name__} must have a return type hint")
         
-        actual_topic = None
-
+        # Clean up topic name if not explicitly provided
+        actual_topic = topic
+        if not actual_topic:
+            module_name = func.__module__.replace('__mp_main__.', '').replace('__main__.', '')
+            actual_topic = f"{module_name}.{func.__qualname__}"
+        
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             if not self._pub_socket:
@@ -259,26 +275,19 @@ def ether_pub(topic: str):
             else:
                 ResultModel = RootModel[return_type]
                 validated_result = ResultModel(result).model_dump_json()
-        
             
             self._logger.debug(f"Publishing to topic: {actual_topic}")
             
             # Publish the validated result
             self._pub_socket.send_multipart([
-                topic.encode(),
+                actual_topic.encode(),
                 validated_result.encode()
             ])
             
             return result
         
-        # Store metadata with cleaned topic
-        wrapper._zmq_metadata = EtherMethodMetadata(
-            func, 
-            actual_topic,
-            None,
-            'pub'
-        )
-        
+        # Store pub metadata
+        wrapper._pub_metadata = EtherPubMetadata(func, actual_topic)
         return wrapper
     return decorator
 
@@ -296,17 +305,19 @@ def ether_sub(topic: Optional[str] = None):
         actual_topic = topic
         if not actual_topic:
             actual_topic = f"{func.__qualname__}"
-            print(f"Using sub topic: {actual_topic}")
         
-        # Store metadata with cleaned topic
-        wrapper._zmq_metadata = EtherMethodMetadata(
-            func, 
-            actual_topic,
-            args_model,
-            'sub'
-        )
-        
+        # Store sub metadata
+        wrapper._sub_metadata = EtherSubMetadata(func, actual_topic, args_model)
         return wrapper
+    return decorator
+
+def ether_pubsub(pub_topic: Optional[str] = None, sub_topic: Optional[str] = None):
+    """Combined decorator for methods that both subscribe and publish."""
+    def decorator(func):
+        # Apply sub first, then pub
+        func = ether_sub(sub_topic)(func)
+        func = ether_pub(pub_topic)(func)
+        return func
     return decorator
 
 class EtherPubSubProxy(EtherMixin):
