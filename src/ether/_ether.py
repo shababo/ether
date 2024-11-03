@@ -64,6 +64,8 @@ class EtherMixin:
         self.first_message_time = None
         self.last_message_time = None
         self.subscription_time = None
+
+        self.setup_sockets()
     
     def setup_sockets(self):
         self._zmq_context = zmq.Context()
@@ -166,7 +168,7 @@ class EtherMixin:
             stop_event.set()
         
         signal.signal(signal.SIGTERM, handle_signal)
-        self.setup_sockets()
+        # self.setup_sockets()
         
         while not stop_event.is_set():
             try:
@@ -334,6 +336,7 @@ class EtherPubSubProxy(EtherMixin):
         self.frontend = None
         self.backend = None
         self._running = False
+
     
     def setup_sockets(self):
         """Setup XPUB/XSUB sockets with optimized settings"""
@@ -357,6 +360,14 @@ class EtherPubSubProxy(EtherMixin):
             socket.setsockopt(zmq.IMMEDIATE, 1)
             socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
             socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 300)
+
+        # Create poller to monitor both sockets
+        self._poller = zmq.Poller()
+        self._poller.register(self.frontend, zmq.POLLIN)
+        self._poller.register(self.backend, zmq.POLLIN)
+        
+        self._logger.debug(f"Starting proxy with {self.frontend} and {self.backend}")  # Log socket details
+            
     
     def run(self, stop_event: Event):
         """Run the proxy with graceful shutdown support"""
@@ -366,19 +377,13 @@ class EtherPubSubProxy(EtherMixin):
         signal.signal(signal.SIGTERM, handle_signal)
         
         try:
-            self.setup_sockets()
+            
             self._running = True
             
-            # Create poller to monitor both sockets
-            poller = zmq.Poller()
-            poller.register(self.frontend, zmq.POLLIN)
-            poller.register(self.backend, zmq.POLLIN)
-            
-            self._logger.debug(f"Starting proxy with {self.frontend} and {self.backend}")  # Log socket details
             
             while self._running and not stop_event.is_set():
                 try:
-                    events = dict(poller.poll(timeout=100))  # 100ms timeout
+                    events = dict(self._poller.poll(timeout=100))  # 100ms timeout
                     
                     if self.frontend in events:
                         message = self.frontend.recv_multipart()

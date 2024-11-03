@@ -7,18 +7,30 @@ from ether import (
     ETHER_PUB_PORT
 )
 from typing import Dict, List, Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel\
 
-class MyService(EtherMixin):
+class DataGenerator(EtherMixin):
     def __init__(self, process_id: int):
         super().__init__(
-            name=f"Service-{process_id}",
+            name=f"DataGenerator-{process_id}",
+            log_level=logging.INFO
+        )
+        self.process_id = process_id
+
+    @ether_pub(topic="DataProcessor.process_data")
+    def generate_data(self, count: int = 42) -> Dict[str, Any]:
+        return {"name": f"datagenerator_{self.process_id}", "count": count}
+
+class DataProcessor(EtherMixin):
+    def __init__(self, process_id: int):
+        super().__init__(
+            name=f"DataProcessor-{process_id}",
             log_level=logging.INFO
         )
         self.process_id = process_id
     
     @ether_sub()
-    @ether_pub(topic="ResultCollector.collect_result")
+    @ether_pub(topic="DataCollector.collect_result")
     def process_data(self, name: str, count: int = 0) -> Dict[str, Any]:
         self._logger.info(f"Processing {name} with count {count}")
         # After processing, publish a result
@@ -38,18 +50,18 @@ class MyService(EtherMixin):
         value: int
         metadata: Optional[Dict[str, str]] = None
 
-    @ether_pub(topic="ResultCollector.collect_complex_result")  
+    @ether_pub(topic="DataCollector.collect_complex_result")  
     def publish_complex_result(self, name: str, value: int) -> ResultData:
         return self.ResultData(name=name, value=value, metadata={"source": "calculation"})
 
-    @ether_pub(topic="ResultCollector.collect_list_result")  
+    @ether_pub(topic="DataCollector.collect_list_result")  
     def publish_list_result(self) -> List[int]:
         return [1, 2, 3, 4, 5]
 
-class ResultCollector(EtherMixin):
+class DataCollector(EtherMixin):
     def __init__(self):
         super().__init__(
-            name="ResultCollector",
+            name="DataCollector",
             log_level=logging.INFO
         )
     
@@ -65,17 +77,23 @@ class ResultCollector(EtherMixin):
     def collect_list_result(self, root: List[int]):
         self._logger.info(f"Collected list result: {root}")
 
-def run_service(stop_event, process_id):
-    service = MyService(process_id)
+def run_processor(stop_event, process_id):
+    service = DataProcessor(process_id)
     service.run(stop_event)
 
 def run_collector(stop_event):
-    collector = ResultCollector()
+    collector = DataCollector()
     collector.run(stop_event)
+
+def run_generator(stop_event, process_id):
+    generator = DataGenerator(process_id)
+    # time.sleep(2.0)
+    generator.generate_data()
 
 def run_proxy(stop_event):
     proxy = EtherPubSubProxy()
     proxy.run(stop_event)
+
 
 def send_messages():
     logger = get_logger("Publisher")
@@ -86,7 +104,7 @@ def send_messages():
     logger.info("Publisher started")
     time.sleep(0.15)  # Wait for connections
     
-    topic = "MyService.process_data"  # Removed __mp_main__
+    topic = "MyService.process_data"  
     logger.info(f"Publishing to topic: {topic}")
     
     for i in range(1):
@@ -123,8 +141,8 @@ if __name__ == "__main__":
     # Start service instances
     processes = []
     for i in range(1):
-        main_logger.info(f"Starting service {i}")
-        p = Process(target=run_service, args=(stop_event, i))
+        main_logger.info(f"Starting processor {i}")
+        p = Process(target=run_processor, args=(stop_event, i))
         p.start()
         processes.append(p)
     
@@ -132,12 +150,11 @@ if __name__ == "__main__":
     time.sleep(0.5)
     
     # Start publisher
-    main_logger.info("Starting publisher")
-    publisher = Process(target=send_messages)
-    publisher.start()
-    
-    publisher.join()
-    main_logger.info("Publisher finished")
+    main_logger.info("Starting generator")
+    generator_process = Process(target=run_generator, args=(stop_event, 0))
+    generator_process.start()
+    generator_process.join()
+    main_logger.info("Generator finished")
     
     # Give time for results to be processed
     time.sleep(0.5)
