@@ -4,7 +4,7 @@ import logging
 import time
 from ether import (
     EtherMixin, EtherPubSubProxy, ether_pub, ether_sub, get_logger,
-    ETHER_PUB_PORT, ETHER_SUB_PORT
+    ETHER_PUB_PORT
 )
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
@@ -13,8 +13,6 @@ class MyService(EtherMixin):
     def __init__(self, process_id: int):
         super().__init__(
             name=f"Service-{process_id}",
-            sub_address=f"tcp://localhost:{ETHER_PUB_PORT}",  # Connect to proxy's XPUB
-            pub_address=f"tcp://localhost:{ETHER_SUB_PORT}",  # Connect to proxy's XSUB
             log_level=logging.INFO
         )
         self.process_id = process_id
@@ -52,8 +50,6 @@ class ResultCollector(EtherMixin):
     def __init__(self):
         super().__init__(
             name="ResultCollector",
-            sub_address=f"tcp://localhost:{ETHER_PUB_PORT}",  # Connect to proxy's XPUB
-            pub_address=None,  # No publishing needed
             log_level=logging.INFO
         )
     
@@ -85,7 +81,7 @@ def send_messages():
     logger = get_logger("Publisher")
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
-    socket.connect(f"tcp://localhost:{ETHER_SUB_PORT}")  # Connect to proxy's XSUB
+    socket.connect(f"tcp://localhost:{ETHER_PUB_PORT}")  # Connect to proxy's XSUB
     
     logger.info("Publisher started")
     time.sleep(0.15)  # Wait for connections

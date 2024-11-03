@@ -11,8 +11,8 @@ import time
 import json
 
 # Standard ports for Ether communication
-ETHER_PUB_PORT = 5555  # For publishing messages
-ETHER_SUB_PORT = 5556  # For subscribing to messages
+ETHER_SUB_PORT = 5555  # For publishing messages
+ETHER_PUB_PORT = 5556  # For subscribing to messages
 
 def get_logger(process_name, log_level=logging.INFO):
     """Get or create a logger with a single handler"""
@@ -47,8 +47,8 @@ class EtherMixin:
         self.id = uuid.uuid4()
         self.name = name or self.id
         self._logger = get_logger(f"{self.__class__.__name__}:{self.name}", log_level)
-        self._sub_address = sub_address
-        self._pub_address = pub_address
+        self._sub_address = sub_address or f"tcp://localhost:{ETHER_SUB_PORT}"
+        self._pub_address = pub_address or f"tcp://localhost:{ETHER_PUB_PORT}"
         self.results_file = results_file
         
         # Socket handling
@@ -341,12 +341,12 @@ class EtherPubSubProxy(EtherMixin):
         
         # Use standard ports
         self.frontend = self._zmq_context.socket(zmq.XSUB)
-        self.frontend.bind(f"tcp://*:{ETHER_SUB_PORT}")
+        self.frontend.bind(f"tcp://*:{ETHER_PUB_PORT}")
         self.frontend.setsockopt(zmq.RCVHWM, 1000000)
         self.frontend.setsockopt(zmq.RCVBUF, 65536)
         
         self.backend = self._zmq_context.socket(zmq.XPUB)
-        self.backend.bind(f"tcp://*:{ETHER_PUB_PORT}")
+        self.backend.bind(f"tcp://*:{ETHER_SUB_PORT}")
         self.backend.setsockopt(zmq.SNDHWM, 1000000)
         self.backend.setsockopt(zmq.SNDBUF, 65536)
         self.backend.setsockopt(zmq.XPUB_VERBOSE, 1)
