@@ -37,7 +37,10 @@ def add_ether_functionality(cls):
         # Socket handling
         self._zmq_context = zmq.Context()
         self._sub_socket = None
+        self._sub_topics = set()
+        self._sub_metadata = {}
         self._pub_socket = None
+        self._pub_metadata = {}
         
         # Message tracking
         self.received_messages = set()
@@ -52,13 +55,24 @@ def add_ether_functionality(cls):
         print("SETUP SOCKETS")
         print(f"Setting up sockets for {self.name}")
 
+        # Print initial state
+        print(f"Initial topics: {self._sub_topics}")
+        print(f"Initial metadata: {self._sub_metadata}")
+
         has_sub_method = False
         has_pub_method = False
         for method in self._ether_methods_info.values():
             if hasattr(method, '_sub_metadata'):
                 has_sub_method = True
+                topic = method._sub_metadata.topic
+                print(f"Adding sub topic: {topic}")
+                self._sub_topics.add(topic)
+                self._sub_metadata[topic] = method._sub_metadata
             if hasattr(method, '_pub_metadata'):
                 has_pub_method = True
+
+        print(f"Final topics: {self._sub_topics}")
+        print(f"Final metadata: {self._sub_metadata}")
 
         if hasattr(self, '_sub_address') and has_sub_method:
             print("SUB ADDRESS")
@@ -88,7 +102,7 @@ def add_ether_functionality(cls):
             self._pub_socket.setsockopt(zmq.SNDHWM, 1000000)
             self._pub_socket.setsockopt(zmq.SNDBUF, 65536)
         
-        time.sleep(1.0)
+        time.sleep(0.1)
     
     # Add message tracking
     def track_message(self, publisher_id: str, sequence: int, timestamp: float):
@@ -144,11 +158,20 @@ def add_ether_functionality(cls):
     def receive_single_message(self, timeout=1000):
         if self._sub_socket and self._sub_socket.poll(timeout):
             topic = self._sub_socket.recv_string()
-            data = self._sub_socket.recv_json()
+            print(f"Received raw topic: {topic}")
+            print(f"Known topics: {self._sub_topics}")
+            print(f"Known metadata: {self._sub_metadata}")
             
-            if topic in self._zmq_methods:
-                metadata = self._zmq_methods[topic]
-                
+            data = self._sub_socket.recv_json()
+            print(f"Received data: {data}")
+            
+            if topic in self._sub_topics:
+                print(f"Found topic match: {topic}")
+                metadata = self._sub_metadata.get(topic)
+                if not metadata:
+                    print(f"No metadata found for topic: {topic}")
+                    return
+                print(f"Found metadata: {metadata}")
                 if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
                     args = {'root': metadata.args_model(data).root}
                 else:
@@ -185,11 +208,11 @@ def add_ether_functionality(cls):
     
     # Add cleanup
     def cleanup(self):
-        if hasattr(self, '_sub_socket'):
+        if hasattr(self, '_sub_socket') and self._sub_socket:
             self._sub_socket.close()
-        if hasattr(self, '_pub_socket'):
+        if hasattr(self, '_pub_socket') and self._pub_socket:
             self._pub_socket.close()
-        if hasattr(self, '_zmq_context'):
+        if hasattr(self, '_zmq_context') and self._zmq_context:
             self._zmq_context.term()
     
     # Add methods to class

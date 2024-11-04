@@ -93,7 +93,7 @@ def main():
     generator.wait()
     
     # Wait for processing
-    time.sleep(1.0)
+    time.sleep(5.0)
     
     # Cleanup
     logger.info("Stopping services")

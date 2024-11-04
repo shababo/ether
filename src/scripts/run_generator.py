@@ -21,6 +21,7 @@ class DataGenerator:
     
     @ether_pub(topic="DataProcessor.process_data")
     def generate_data(self, count: int = 42) -> Dict[str, Any]:
+        print(f"Generating data: {count}")
         return {"name": f"datagenerator_{self.process_id}", "count": count}
 
 if __name__ == "__main__":

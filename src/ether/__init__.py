@@ -1,4 +1,5 @@
 import logging
+import zmq
 from ._ether import (
     ether_pub, ether_sub,
     _get_logger, _EtherPubSubProxy, _proxy_manager,
@@ -12,6 +13,8 @@ def ether_init():
     """Initialize the Ether messaging system."""
     global _initialized
     if not _initialized:
+        # Clean up any existing ZMQ contexts first
+        zmq.Context.instance().term()
         # Start proxy if not already running
         _proxy_manager.start_proxy()
         # Process any pending classes

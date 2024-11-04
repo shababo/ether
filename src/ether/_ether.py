@@ -86,14 +86,8 @@ class _ProxyManager:
             self._proxy_process = None
             self._stop_event = None
             
-            # Remove PID file if it's ours
-            if os.path.exists(self._pid_file):
-                with open(self._pid_file, 'r') as f:
-                    try:
-                        if int(f.read()) == self._proxy_process.pid:
-                            os.remove(self._pid_file)
-                    except (ValueError, AttributeError):
-                        pass  # Ignore errors reading pid file
+            # Force context termination to clear all buffers
+            zmq.Context.instance().term()
         elif os.path.exists(self._pid_file):
             try:
                 with open(self._pid_file, 'r') as f:
@@ -325,12 +319,43 @@ class EtherSubMetadata:
 def ether_pub(topic: Optional[str] = None):
     """Decorator for methods that should publish messages."""
     def decorator(func):
+        # Get return type hint if it exists
+        return_type = inspect.signature(func).return_annotation
+        if return_type == inspect.Parameter.empty:
+            raise TypeError(f"Function {func.__name__} must have a return type hint")
+        
         @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
+        def wrapper(self, *args, **kwargs):
+            if not hasattr(self, '_pub_socket'):
+                raise RuntimeError("Cannot publish: no publisher socket configured")
+            
+            # Execute the function and get result
+            result = func(self, *args, **kwargs)
+            
+            print(f"Publishing result: {result}")
+            # Validate result against return type
+            if isinstance(return_type, type) and issubclass(return_type, BaseModel):
+                validated_result = return_type(**result).model_dump_json()
+            else:
+                ResultModel = RootModel[return_type]
+                validated_result = ResultModel(result).model_dump_json()
+            
+            print(f"Validated result: {validated_result}")
+            # Get topic from metadata
+            actual_topic = topic or f"{func.__qualname__}"
+            print(f"Publishing to topic: {actual_topic}")
+
+            # Publish the validated result
+            self._pub_socket.send_multipart([
+                actual_topic.encode(),
+                validated_result.encode()
+            ])
+            
+            print(f"Published result: {result}")
+            return result
         
         # Create and attach the metadata
-        actual_topic = topic or f"{func.__module__}.{func.__qualname__}"
+        actual_topic = topic or f"{func.__qualname__}"
         wrapper._pub_metadata = EtherPubMetadata(func, actual_topic)
         
         # Mark the containing class for Ether processing
@@ -357,7 +382,7 @@ def ether_sub(topic: Optional[str] = None):
         
         # Create and attach the metadata
         args_model = _create_model_from_signature(func)
-        actual_topic = topic or f"{func.__module__}.{func.__qualname__}"
+        actual_topic = topic or f"{func.__qualname__}"
         wrapper._sub_metadata = EtherSubMetadata(func, actual_topic, args_model)
         
         # Mark the containing class for Ether processing
@@ -441,12 +466,14 @@ class _EtherPubSubProxy:
                     
                     if self.frontend in events:
                         message = self.frontend.recv_multipart()
-                        self._logger.debug(f"Proxy forwarding from frontend: {len(message)} parts")
+                        print(f"Proxy forwarding from frontend: {len(message)} parts")
+                        print(f"Message: {message}")
                         self.backend.send_multipart(message)
                     
                     if self.backend in events:
                         message = self.backend.recv_multipart()
-                        self._logger.debug(f"Proxy forwarding from backend: {len(message)} parts")
+                        print(f"Proxy forwarding from backend: {len(message)} parts")
+                        print(f"Message: {message}")
                         self.frontend.send_multipart(message)
                         
                 except zmq.ZMQError as e:
