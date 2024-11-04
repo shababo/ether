@@ -1,4 +1,4 @@
-from typing import Set, Dict
+from typing import Set, Dict, Type
 import inspect
 import zmq
 import sys
@@ -7,7 +7,7 @@ import uuid
 import time
 import signal
 from threading import Event
-from pydantic import RootModel
+from pydantic import RootModel, BaseModel
 import json
 
 from ._utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
@@ -17,7 +17,7 @@ def add_ether_functionality(cls):
     # Collect Ether methods
     ether_methods = {
         name: method for name, method in cls.__dict__.items()
-        if hasattr(method, '_ether_metadata')
+        if hasattr(method, '_pub_metadata') or hasattr(method, '_sub_metadata')
     }
     
     if not ether_methods:
@@ -27,7 +27,7 @@ def add_ether_functionality(cls):
     cls._ether_methods_info = ether_methods
     
     # Add core attributes
-    def init_ether(self, name=None, log_level=logging.INFO):
+    def init_ether_vars(self, name=None, log_level=logging.INFO):
         self.id = uuid.uuid4()
         self.name = name or self.id
         self._logger = _get_logger(f"{self.__class__.__name__}:{self.name}", log_level)
@@ -49,7 +49,19 @@ def add_ether_functionality(cls):
         self.results_file = None
     
     def setup_sockets(self):
-        if hasattr(self, '_sub_address'):
+        print("SETUP SOCKETS")
+        print(f"Setting up sockets for {self.name}")
+
+        has_sub_method = False
+        has_pub_method = False
+        for method in self._ether_methods_info.values():
+            if hasattr(method, '_sub_metadata'):
+                has_sub_method = True
+            if hasattr(method, '_pub_metadata'):
+                has_pub_method = True
+
+        if hasattr(self, '_sub_address') and has_sub_method:
+            print("SUB ADDRESS")
             self._sub_socket = self._zmq_context.socket(zmq.SUB)
             if self._sub_address.startswith("tcp://*:"):
                 self._sub_socket.bind(self._sub_address)
@@ -62,11 +74,12 @@ def add_ether_functionality(cls):
             # Setup subscriptions
             for method in self._ether_methods_info.values():
                 if hasattr(method, '_sub_metadata'):
-                    topic = method._ether_metadata.topic
+                    topic = method._sub_metadata.topic
                     self._sub_socket.subscribe(topic.encode())
-                    self._logger.debug(f"Subscribed to topic: {topic}")
+                    print(f"Subscribed to topic: {topic}")
         
-        if hasattr(self, '_pub_address'):
+        if hasattr(self, '_pub_address') and has_pub_method:
+            print("PUB ADDRESS")
             self._pub_socket = self._zmq_context.socket(zmq.PUB)
             if self._pub_address.startswith("tcp://*:"):
                 self._pub_socket.bind(self._pub_address)
@@ -75,7 +88,7 @@ def add_ether_functionality(cls):
             self._pub_socket.setsockopt(zmq.SNDHWM, 1000000)
             self._pub_socket.setsockopt(zmq.SNDBUF, 65536)
         
-        time.sleep(0.1)
+        time.sleep(1.0)
     
     # Add message tracking
     def track_message(self, publisher_id: str, sequence: int, timestamp: float):
@@ -143,12 +156,12 @@ def add_ether_functionality(cls):
                         model_instance = metadata.args_model(**data)
                         args = model_instance.model_dump()
                     except Exception as e:
-                        self._logger.error(f"Error processing data: {e}")
+                        print(f"Error processing data: {e}")
                         raise
                 
                 metadata.func(self, **args)
             else:
-                self._logger.warning(f"Received message for unknown topic: {topic}")
+                print(f"Received message for unknown topic: {topic}")
 
     
     # Add run method
@@ -164,7 +177,7 @@ def add_ether_functionality(cls):
                 if self._sub_socket:
                     self.receive_single_message()
             except Exception as e:
-                self._logger.error(f"Error in run loop: {e}")
+                print(f"Error in run loop: {e}")
                 break
         
         self.save_results()
@@ -180,7 +193,7 @@ def add_ether_functionality(cls):
             self._zmq_context.term()
     
     # Add methods to class
-    cls.init_ether = init_ether
+    cls.init_ether = init_ether_vars
     cls.setup_sockets = setup_sockets
     cls.track_message = track_message
     cls.save_results = save_results
@@ -191,6 +204,7 @@ def add_ether_functionality(cls):
     # Modify __init__ to initialize attributes
     original_init = cls.__init__
     def new_init(self, *args, **kwargs):
+        print("NEW INIT")
         self.init_ether(
             name=kwargs.pop('name', None),
             log_level=kwargs.pop('log_level', logging.INFO)

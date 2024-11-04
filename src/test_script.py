@@ -10,7 +10,7 @@ from threading import Thread
 def main():
     # Setup root logger
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         force=True
     )
@@ -27,7 +27,7 @@ def main():
     # Set up environment for subprocesses
     subprocess_env = os.environ.copy()
     subprocess_env['PYTHONUNBUFFERED'] = '1'  # Ensure Python output is unbuffered
-    subprocess_env['LOGLEVEL'] = 'INFO'  # Pass logging level to subprocesses
+    subprocess_env['LOGLEVEL'] = 'DEBUG'  # Pass logging level to subprocesses
     logger.info(f"Subprocess environment: LOGLEVEL={subprocess_env.get('LOGLEVEL')}")
     
     # Get absolute paths to scripts

@@ -309,9 +309,15 @@ def _create_model_from_signature(func) -> Type[BaseModel]:
     model_name = f"{func.__name__}Args"
     return create_model(model_name, **fields)
 
-class EtherMethodMetadata:
-    """Holds metadata about ZMQ subscriber methods"""
-    def __init__(self, func, topic: str, args_model: Optional[Type[BaseModel]] = None):
+class EtherPubMetadata:
+    """Holds metadata about Ether publisher methods"""
+    def __init__(self, func, topic: str):
+        self.func = func
+        self.topic = topic
+
+class EtherSubMetadata:
+    """Holds metadata about Ether subscriber methods"""
+    def __init__(self, func, topic: str, args_model: Type[BaseModel]):
         self.func = func
         self.topic = topic
         self.args_model = args_model
@@ -325,7 +331,7 @@ def ether_pub(topic: Optional[str] = None):
         
         # Create and attach the metadata
         actual_topic = topic or f"{func.__module__}.{func.__qualname__}"
-        wrapper._ether_metadata = EtherMethodMetadata(func, actual_topic)
+        wrapper._pub_metadata = EtherPubMetadata(func, actual_topic)
         
         # Mark the containing class for Ether processing
         frame = inspect.currentframe().f_back
@@ -352,7 +358,7 @@ def ether_sub(topic: Optional[str] = None):
         # Create and attach the metadata
         args_model = _create_model_from_signature(func)
         actual_topic = topic or f"{func.__module__}.{func.__qualname__}"
-        wrapper._ether_metadata = EtherMethodMetadata(func, actual_topic, args_model)
+        wrapper._sub_metadata = EtherSubMetadata(func, actual_topic, args_model)
         
         # Mark the containing class for Ether processing
         frame = inspect.currentframe().f_back
