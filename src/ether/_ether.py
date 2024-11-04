@@ -1,7 +1,8 @@
 from functools import wraps
+import importlib
 from multiprocessing import Event, Process
 import inspect
-from typing import Any, Type, Optional
+from typing import Any, Set, Type, Optional
 import uuid
 import zmq
 from pydantic import BaseModel, create_model, RootModel
@@ -12,28 +13,11 @@ import json
 import atexit
 import os
 import tempfile
+import sys
 
-# Standard ports for Ether communication
-_ETHER_SUB_PORT = 5555  # subscribe to this port
-_ETHER_PUB_PORT = 5556  # publish to this port
+from ._registry import EtherRegistry
+from ._utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
 
-def _get_logger(process_name, log_level=logging.INFO):
-    """Get or create a logger with a single handler"""
-    logger = logging.getLogger(process_name)
-    logger.setLevel(log_level)
-    logger.propagate = True
-    
-    # Remove any existing handlers
-    for handler in logger.handlers[:]:
-        logger.removeHandler(handler)
-    
-    # Add a single handler
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    
-    return logger
 
 class _ProxyManager:
     """Singleton manager for the Ether proxy process"""
@@ -41,7 +25,7 @@ class _ProxyManager:
     _proxy_process = None
     _stop_event = None
     _pid_file = os.path.join(tempfile.gettempdir(), 'ether_proxy.pid')
-    _parent_pid = None  # Add parent pid tracking
+    _parent_pid = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -49,28 +33,38 @@ class _ProxyManager:
         return cls._instance
     
     def start_proxy(self):
-        """Start proxy if not already running"""
+        """Start proxy if not already running. Safe to call multiple times."""
+        # If we already have a proxy process, check if it's still running
         if self._proxy_process is not None:
-            return
+            if self._proxy_process.is_alive():
+                return  # Proxy is already running
+            else:
+                # Clean up dead process
+                self._proxy_process = None
+                self._stop_event = None
         
-        # Check if proxy is already running on this machine
+        # Check if proxy is running on this machine
         if os.path.exists(self._pid_file):
-            with open(self._pid_file, 'r') as f:
-                pid = int(f.read())
-                try:
-                    # Check if process exists
-                    os.kill(pid, 0)
-                    return  # Proxy is already running
-                except OSError:
-                    # Process doesn't exist, remove stale pid file
-                    os.remove(self._pid_file)
+            try:
+                with open(self._pid_file, 'r') as f:
+                    pid = int(f.read())
+                    try:
+                        # Check if process exists and is a proxy
+                        os.kill(pid, 0)
+                        return  # Proxy is already running
+                    except OSError:
+                        # Process doesn't exist, remove stale pid file
+                        os.remove(self._pid_file)
+            except (ValueError, IOError):
+                # Invalid pid file, remove it
+                os.remove(self._pid_file)
         
         # Start new proxy process
         self._stop_event = Event()
         self._proxy_process = Process(target=self._run_proxy, args=(self._stop_event,))
-        self._proxy_process.daemon = True  # Make sure proxy dies with parent
+        self._proxy_process.daemon = True
         self._proxy_process.start()
-        self._parent_pid = os.getpid()  # Store the creating process's PID
+        self._parent_pid = os.getpid()
         
         # Save PID
         with open(self._pid_file, 'w') as f:
@@ -121,24 +115,24 @@ def _cleanup_proxy():
     _proxy_manager.stop_proxy()
 
 class EtherMixin:
-    @classmethod
-    def ensure_proxy_running(cls):
-        """Ensure proxy is running. Call this once at program start."""
-        _proxy_manager.start_proxy()
+    def __init__(self, *args, **kwargs):
+        # Initialize sockets right away
+        self.setup_sockets(
+            name=kwargs.get('name'),
+            log_level=kwargs.get('log_level', logging.INFO)
+        )
     
-    def __init__(self, name: str = None, sub_address: Optional[str] = None, 
-                 pub_address: Optional[str] = None, log_level: int = logging.INFO,
-                 results_file: Optional[str] = None):
-        # Remove proxy start from here
+    def setup_sockets(self, name: str = None, log_level: int = logging.INFO):
+        """Setup ZMQ sockets and initialize Ether functionality"""
+        # Move initialization here
         self.id = uuid.uuid4()
         self.name = name or self.id
         self._logger = _get_logger(f"{self.__class__.__name__}:{self.name}", log_level)
-        self._sub_address = sub_address or f"tcp://localhost:{_ETHER_SUB_PORT}"
-        self._pub_address = pub_address or f"tcp://localhost:{_ETHER_PUB_PORT}"
-        self.results_file = results_file
+        self._sub_address = f"tcp://localhost:{_ETHER_SUB_PORT}"
+        self._pub_address = f"tcp://localhost:{_ETHER_PUB_PORT}"
         
         # Socket handling
-        self._zmq_context = None
+        self._zmq_context = zmq.Context()
         self._sub_socket = None
         self._pub_socket = None
         self._zmq_methods = {}
@@ -150,16 +144,9 @@ class EtherMixin:
         self.first_message_time = None
         self.last_message_time = None
         self.subscription_time = None
-
-        self.setup_sockets()
-
         
-    
-    def setup_sockets(self):
-        self._zmq_context = zmq.Context()
-        
-        # Setup subscriber socket
-        if self._sub_address:
+        # Setup sockets
+        if hasattr(self, '_sub_address'):
             self._sub_socket = self._zmq_context.socket(zmq.SUB)
             if self._sub_address.startswith("tcp://*:"):
                 self._sub_socket.bind(self._sub_address)
@@ -169,8 +156,7 @@ class EtherMixin:
             self._sub_socket.setsockopt(zmq.RCVBUF, 65536)
             self.subscription_time = time.time()
             
-            # Setup subscriptions using sub metadata
-            self._zmq_methods = {}
+            # Setup subscriptions
             for attr_name in dir(self):
                 attr = getattr(self, attr_name)
                 if hasattr(attr, '_sub_metadata'):
@@ -180,8 +166,7 @@ class EtherMixin:
                     self._logger.debug(f"Subscribed to topic: {topic}")
                     self._zmq_methods[topic] = metadata
         
-        # Setup publisher socket
-        if self._pub_address:
+        if hasattr(self, '_pub_address'):
             self._pub_socket = self._zmq_context.socket(zmq.PUB)
             if self._pub_address.startswith("tcp://*:"):
                 self._pub_socket.bind(self._pub_address)
@@ -324,93 +309,67 @@ def _create_model_from_signature(func) -> Type[BaseModel]:
     model_name = f"{func.__name__}Args"
     return create_model(model_name, **fields)
 
-class _EtherSubMetadata:
+class EtherMethodMetadata:
     """Holds metadata about ZMQ subscriber methods"""
-    def __init__(self, func, topic: str, args_model: Optional[Type[BaseModel]]):
+    def __init__(self, func, topic: str, args_model: Optional[Type[BaseModel]] = None):
         self.func = func
         self.topic = topic
         self.args_model = args_model
 
-class _EtherPubMetadata:
-    """Holds metadata about ZMQ publisher methods"""
-    def __init__(self, func, topic: str):
-        self.func = func
-        self.topic = topic
-
 def ether_pub(topic: Optional[str] = None):
-    """Decorator for methods that should publish ZMQ messages."""
+    """Decorator for methods that should publish messages."""
     def decorator(func):
-        # Get return type hint if it exists
-        return_type = inspect.signature(func).return_annotation
-        if return_type == inspect.Signature.empty:
-            raise TypeError(f"Function {func.__name__} must have a return type hint")
-        
-        # Clean up topic name if not explicitly provided
-        actual_topic = topic
-        if not actual_topic:
-            module_name = func.__module__.replace('__mp_main__.', '').replace('__main__.', '')
-            actual_topic = f"{module_name}.{func.__qualname__}"
-        
         @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if not self._pub_socket:
-                raise RuntimeError("Cannot publish: no publisher socket configured")
-            
-            # Execute the function and get result
-            result = func(self, *args, **kwargs)
-            
-            # Validate result against return type
-            if isinstance(return_type, type) and issubclass(return_type, BaseModel):
-                validated_result = return_type(**result).model_dump_json()
-            else:
-                ResultModel = RootModel[return_type]
-                validated_result = ResultModel(result).model_dump_json()
-            
-            self._logger.debug(f"Publishing to topic: {actual_topic}")
-            
-            # Publish the validated result
-            self._pub_socket.send_multipart([
-                actual_topic.encode(),
-                validated_result.encode()
-            ])
-            
-            return result
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
         
-        # Store pub metadata
-        wrapper._pub_metadata = _EtherPubMetadata(func, actual_topic)
+        # Create and attach the metadata
+        actual_topic = topic or f"{func.__module__}.{func.__qualname__}"
+        wrapper._ether_metadata = EtherMethodMetadata(func, actual_topic)
+        
+        # Mark the containing class for Ether processing
+        frame = inspect.currentframe().f_back
+        while frame:
+            locals_dict = frame.f_locals
+            if '__module__' in locals_dict and '__qualname__' in locals_dict:
+                EtherRegistry.mark_for_processing(
+                    locals_dict['__qualname__'],
+                    locals_dict['__module__']
+                )
+                break
+            frame = frame.f_back
+        
         return wrapper
     return decorator
 
 def ether_sub(topic: Optional[str] = None):
-    """Decorator for methods that should receive ZMQ messages."""
+    """Decorator for methods that should receive messages."""
     def decorator(func):
-        # Create Pydantic model for arguments
-        args_model = _create_model_from_signature(func)
-        
         @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            return func(self, *args, **kwargs)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
         
-        # Clean up topic name if not explicitly provided
-        actual_topic = topic
-        if not actual_topic:
-            actual_topic = f"{func.__qualname__}"
+        # Create and attach the metadata
+        args_model = _create_model_from_signature(func)
+        actual_topic = topic or f"{func.__module__}.{func.__qualname__}"
+        wrapper._ether_metadata = EtherMethodMetadata(func, actual_topic, args_model)
         
-        # Store sub metadata
-        wrapper._sub_metadata = _EtherSubMetadata(func, actual_topic, args_model)
+        # Mark the containing class for Ether processing
+        frame = inspect.currentframe().f_back
+        while frame:
+            locals_dict = frame.f_locals
+            if '__module__' in locals_dict and '__qualname__' in locals_dict:
+                EtherRegistry.mark_for_processing(
+                    locals_dict['__qualname__'],
+                    locals_dict['__module__']
+                )
+                break
+            frame = frame.f_back
+        
         return wrapper
     return decorator
 
-# def ether_pubsub(pub_topic: Optional[str] = None, sub_topic: Optional[str] = None):
-#     """Combined decorator for methods that both subscribe and publish."""
-#     def decorator(func):
-#         # Apply sub first, then pub
-#         func = ether_sub(sub_topic)(func)
-#         func = ether_pub(pub_topic)(func)
-#         return func
-#     return decorator
-
-class _EtherPubSubProxy(EtherMixin):
+class _EtherPubSubProxy:
     """Proxy that uses XPUB/XSUB sockets for efficient message distribution.
     
     XPUB/XSUB sockets are special versions of PUB/SUB that expose subscriptions
@@ -420,17 +379,17 @@ class _EtherPubSubProxy(EtherMixin):
         
         self.frontend = None
         self.backend = None
-
-        super().__init__(
-            name="Proxy",
-            log_level=logging.INFO
-        )
-        
         self._running = False
+
+        self.setup_sockets()
 
     
     def setup_sockets(self):
         """Setup XPUB/XSUB sockets with optimized settings"""
+        self.id = uuid.uuid4()
+        self.name = f"EtherPubSubProxy_{self.id}"
+        self._logger = _get_logger(f"{self.__class__.__name__}:{self.name}", logging.INFO)
+
         self._zmq_context = zmq.Context()
         
         # Use standard ports
@@ -468,9 +427,7 @@ class _EtherPubSubProxy(EtherMixin):
         signal.signal(signal.SIGTERM, handle_signal)
         
         try:
-            
             self._running = True
-            # self.setup_sockets()
             
             while self._running and not stop_event.is_set():
                 try:
@@ -496,12 +453,18 @@ class _EtherPubSubProxy(EtherMixin):
         except Exception as e:
             self._logger.error(f"Error in proxy: {e}")
         finally:
-            self._running = False
-            if self.frontend:
-                self.frontend.close()
-            if self.backend:
-                self.backend.close()
-            if self._zmq_context:
-                self._zmq_context.term()
+            self.cleanup()
+
+    def cleanup(self):
+        self._running = False
+        if self.frontend:
+            self.frontend.close()
+        if self.backend:
+            self.backend.close()
+        if self._zmq_context:
+            self._zmq_context.term()
+
+    def __del__(self):
+        self.cleanup()
 
 

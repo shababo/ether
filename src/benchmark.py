@@ -8,14 +8,14 @@ from typing import Dict
 import psutil
 import os
 from ether import (
-    EtherMixin, _EtherPubSubProxy, ether_pub, ether_sub, _get_logger,
+    ether_pub, ether_sub, _get_logger,
 )
 import logging
 import tempfile
 import signal
 from threading import Thread
 import uuid
-from ether import init
+from ether import ether_init
 
 @dataclass
 class BenchmarkResult:
@@ -30,27 +30,22 @@ class BenchmarkResult:
     messages_received: int      # Total messages received across all subscribers
     expected_received: int      # Total messages expected to be received (num_messages * num_subscribers)
 
-class BenchmarkPublisher(EtherMixin):
+class BenchmarkPublisher:
     """Publisher that sends messages to the broker or subscribers.
     
     Each publisher creates messages of a specific size and sends them with
     timestamps and unique IDs for tracking.
     """
     def __init__(self, message_size: int):
-        super().__init__(
-            name=f"Publisher-{message_size}bytes",
-            log_level=logging.INFO
-        )
-        # Pre-create message template to avoid allocation during benchmark
         self.message_size = message_size
         self.message_count = 0
-        self.publisher_id = str(uuid.uuid4())  # Add unique publisher ID
+        self.publisher_id = str(uuid.uuid4())
         self.message = {
-            "data": "x" * message_size,  # Fixed-size payload
-            "timestamp": 0,              # Will be set at send time
-            "message_id": 0,             # Will be incremented for each message
-            "publisher_id": self.publisher_id,  # Include publisher ID in message
-            "sequence": 0,                # Add sequence number
+            "data": "x" * message_size,
+            "timestamp": 0,
+            "message_id": 0,
+            "publisher_id": self.publisher_id,
+            "sequence": 0
         }
     
     @ether_pub(topic="BenchmarkSubscriber.receive_message")
@@ -63,14 +58,9 @@ class BenchmarkPublisher(EtherMixin):
         self.message_count += 1
         return self.message
 
-class BenchmarkSubscriber(EtherMixin):
+class BenchmarkSubscriber:
     """Subscriber that receives messages and tracks statistics."""
     def __init__(self, results_dir: str, subscriber_id: int):
-        super().__init__(
-            name=f"Subscriber-{subscriber_id}",
-            log_level=logging.INFO,
-            results_file=os.path.join(results_dir, f"subscriber_{subscriber_id}.json")
-        )
         self.subscriber_id = subscriber_id
     
     @ether_sub()
@@ -236,5 +226,5 @@ def main():
                     time.sleep(1.0)
 
 if __name__ == "__main__":
-    init()  # Initialize Ether system
+    ether_init()  # Initialize Ether system
     main() 

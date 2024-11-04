@@ -1,149 +1,110 @@
-from multiprocessing import Process, Event
-import zmq
-import logging
+import subprocess
 import time
-from ether import (
-    EtherMixin, ether_pub, ether_sub, init
-)
-from typing import Dict, List, Optional, Any
-from pydantic import BaseModel
+import signal
+import os
+import logging
+import sys
+from ether import ether_init
+from threading import Thread
 
-class DataGenerator(EtherMixin):
-    def __init__(self, process_id: int):
-        super().__init__(
-            name=f"DataGenerator-{process_id}",
-            log_level=logging.INFO
-        )
-        self.process_id = process_id
-
-    @ether_pub(topic="DataProcessor.process_data")
-    def generate_data(self, count: int = 42) -> Dict[str, Any]:
-        return {"name": f"datagenerator_{self.process_id}", "count": count}
-
-class DataProcessor(EtherMixin):
-    def __init__(self, process_id: int):
-        super().__init__(
-            name=f"DataProcessor-{process_id}",
-            log_level=logging.INFO
-        )
-        self.process_id = process_id
-    
-    @ether_sub()
-    @ether_pub(topic="DataCollector.collect_result")
-    def process_data(self, name: str, count: int = 0) -> Dict[str, Any]:
-        self._logger.info(f"Processing {name} with count {count}")
-        # After processing, publish a result
-        processed_count = count * 2
-        self._logger.info(f"Publishing result: {name} = {count * 2}")
-        return {
-            "result_name": name,
-            "value": processed_count
-        }
-    
-    @ether_sub(topic="custom.topic")
-    def custom_process(self, data: dict):
-        self._logger.info(f"Custom processing: {data}")
-
-    class ResultData(BaseModel):
-        name: str
-        value: int
-        metadata: Optional[Dict[str, str]] = None
-
-    @ether_pub(topic="DataCollector.collect_complex_result")  
-    def publish_complex_result(self, name: str, value: int) -> ResultData:
-        return self.ResultData(name=name, value=value, metadata={"source": "calculation"})
-
-    @ether_pub(topic="DataCollector.collect_list_result")  
-    def publish_list_result(self) -> List[int]:
-        return [1, 2, 3, 4, 5]
-
-class DataCollector(EtherMixin):
-    def __init__(self):
-        super().__init__(
-            name="DataCollector",
-            log_level=logging.INFO
-        )
-    
-    @ether_sub()  
-    def collect_result(self, result_name: str, value: int):
-        self._logger.info(f"Collected result: {result_name} = {value}")
-    
-    @ether_sub() 
-    def collect_complex_result(self, name: str, value: int, metadata: Optional[Dict[str, str]] = None):
-        self._logger.info(f"Collected complex result: {name} = {value} (metadata: {metadata})")
-    
-    @ether_sub()  
-    def collect_list_result(self, root: List[int]):
-        self._logger.info(f"Collected list result: {root}")
-
-def run_processor(stop_event, process_id):
-    service = DataProcessor(process_id)
-    service.run(stop_event)
-
-def run_collector(stop_event):
-    collector = DataCollector()
-    collector.run(stop_event)
-
-def run_generator(stop_event, process_id):
-    generator = DataGenerator(process_id)
-    # time.sleep(2.0)
-    generator.generate_data()
-
-# def run_proxy(stop_event):
-#     proxy = _EtherPubSubProxy()
-#     proxy.run(stop_event)
-
-
-if __name__ == "__main__":
-    init()  # Initialize Ether system
+def main():
+    # Setup root logger
     logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        force=True
     )
-    main_logger = logging.getLogger("Main")
+    logger = logging.getLogger("Main")
     
-    stop_event = Event()
+    # Initialize Ether
+    ether_init()
     
-    # # Start the proxy
-    # main_logger.info("Starting proxy")
-    # proxy_process = Process(target=run_proxy, args=(stop_event,))
-    # proxy_process.start()
+    # Add src directory to Python path
+    src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    python_path = os.environ.get('PYTHONPATH', '')
+    os.environ['PYTHONPATH'] = f"{src_dir}:{python_path}" if python_path else src_dir
     
-    # Start the result collector
-    main_logger.info("Starting result collector")
-    collector_process = Process(target=run_collector, args=(stop_event,))
-    collector_process.start()
+    # Set up environment for subprocesses
+    subprocess_env = os.environ.copy()
+    subprocess_env['PYTHONUNBUFFERED'] = '1'  # Ensure Python output is unbuffered
+    subprocess_env['LOGLEVEL'] = 'INFO'  # Pass logging level to subprocesses
+    logger.info(f"Subprocess environment: LOGLEVEL={subprocess_env.get('LOGLEVEL')}")
     
-    # Start service instances
+    # Get absolute paths to scripts
+    scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts')
+    
     processes = []
-    for i in range(1):
-        main_logger.info(f"Starting processor {i}")
-        p = Process(target=run_processor, args=(stop_event, i))
-        p.start()
-        processes.append(p)
     
-    # Give time for everything to connect
-    time.sleep(0.5)
+    # Start collector with output capture
+    logger.info("Starting collector")
+    collector = subprocess.Popen(
+        [sys.executable, os.path.join(scripts_dir, 'run_collector.py')],
+        env=subprocess_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+        bufsize=1  # Line buffered
+    )
+    processes.append(('Collector', collector))
     
-    # Start publisher
-    main_logger.info("Starting generator")
-    generator_process = Process(target=run_generator, args=(stop_event, 0))
-    generator_process.start()
-    generator_process.join()
-    main_logger.info("Generator finished")
+    # Start processor with output capture
+    logger.info("Starting processor")
+    processor = subprocess.Popen(
+        [sys.executable, os.path.join(scripts_dir, 'run_processor.py'), '0'],
+        env=subprocess_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+        bufsize=1  # Line buffered
+    )
+    processes.append(('Processor', processor))
     
-    # Give time for results to be processed
-    time.sleep(0.5)
+    # Create output threads
+    def log_output(process_name, process):
+        try:
+            logger.info(f"Started output thread for {process_name}")
+            for line in process.stdout:
+                logger.info(f"{process_name}: {line.strip()}")
+        except Exception as e:
+            logger.error(f"Error reading {process_name} output: {e}")
+    
+    # Start output threads
+    output_threads = []
+    for name, proc in processes:
+        thread = Thread(target=log_output, args=(name, proc), daemon=True)
+        thread.start()
+        output_threads.append(thread)
+    
+    # Wait for services to start
+    time.sleep(1.0)
+    
+    # Run generator
+    logger.info("Running generator")
+    generator = subprocess.Popen(
+        [sys.executable, os.path.join(scripts_dir, 'run_generator.py'), '0'],
+        env=subprocess_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+        bufsize=1  # Line buffered
+    )
+    gen_thread = Thread(target=log_output, args=('Generator', generator), daemon=True)
+    gen_thread.start()
+    generator.wait()
+    
+    # Wait for processing
+    time.sleep(1.0)
     
     # Cleanup
-    main_logger.info("Signaling processes to stop")
-    stop_event.set()
-    
-    for p in [collector_process] + processes:
-        p.join(timeout=5)
-        if p.is_alive():
-            main_logger.warning(f"Process did not stop gracefully, terminating")
-            p.terminate()
-        else:
-            main_logger.info(f"Process stopped gracefully")
+    logger.info("Stopping services")
+    for name, p in processes:
+        p.send_signal(signal.SIGTERM)
+        try:
+            p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Process {name} did not stop gracefully, killing")
+            p.kill()
+
+if __name__ == "__main__":
+    main()
 
