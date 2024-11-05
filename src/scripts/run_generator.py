@@ -39,3 +39,5 @@ if __name__ == "__main__":
     logger.info("Generating data")
     generator.generate_data()
     logger.info("Data generation complete")
+    # time.sleep(0.001)
+    logger.info("Exiting")

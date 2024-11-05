@@ -35,19 +35,19 @@ def main():
     
     processes = []
     
-        # Start collector with output capture
-    # logger.info("Starting collector")
-    # collector = subprocess.Popen(
-    #     [sys.executable, os.path.join(scripts_dir, 'run_collector.py')],
-    #     env=subprocess_env,
-    #     stdout=subprocess.PIPE,
-    #     stderr=subprocess.STDOUT,
-    #     universal_newlines=True,
-    #     bufsize=1  # Line buffered
-    # )
-    # processes.append(('Collector', collector))
+    # Start collector with output capture
+    logger.info("Starting collector")
+    collector = subprocess.Popen(
+        [sys.executable, os.path.join(scripts_dir, 'run_collector.py')],
+        env=subprocess_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+        bufsize=1  # Line buffered
+    )
+    processes.append(('Collector', collector))
 
-    # time.sleep(5.0)
+    time.sleep(5.0)
     
     # Start processor with output capture
     logger.info("Starting processor")
