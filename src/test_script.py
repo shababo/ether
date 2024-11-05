@@ -19,16 +19,16 @@ def main():
     # Initialize Ether
     ether_init()
     
-    # Add src directory to Python path
-    src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    python_path = os.environ.get('PYTHONPATH', '')
-    os.environ['PYTHONPATH'] = f"{src_dir}:{python_path}" if python_path else src_dir
+    # # Add src directory to Python path
+    # src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # python_path = os.environ.get('PYTHONPATH', '')
+    # os.environ['PYTHONPATH'] = f"{src_dir}:{python_path}" if python_path else src_dir
     
     # Set up environment for subprocesses
-    subprocess_env = os.environ.copy()
-    subprocess_env['PYTHONUNBUFFERED'] = '1'  # Ensure Python output is unbuffered
-    subprocess_env['LOGLEVEL'] = 'DEBUG'  # Pass logging level to subprocesses
-    logger.info(f"Subprocess environment: LOGLEVEL={subprocess_env.get('LOGLEVEL')}")
+    # subprocess_env = os.environ.copy()
+    # subprocess_env['PYTHONUNBUFFERED'] = '1'  # Ensure Python output is unbuffered
+    # subprocess_env['LOGLEVEL'] = 'DEBUG'  # Pass logging level to subprocesses
+    # logger.info(f"Subprocess environment: LOGLEVEL={subprocess_env.get('LOGLEVEL')}")
     
     # Get absolute paths to scripts
     scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts')
@@ -39,21 +39,22 @@ def main():
     logger.info("Starting collector")
     collector = subprocess.Popen(
         [sys.executable, os.path.join(scripts_dir, 'run_collector.py')],
-        env=subprocess_env,
+        # env=subprocess_env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         universal_newlines=True,
         bufsize=1  # Line buffered
     )
     processes.append(('Collector', collector))
+    collector.
 
-    time.sleep(5.0)
+    time.sleep(0.001)
     
     # Start processor with output capture
     logger.info("Starting processor")
     processor = subprocess.Popen(
         [sys.executable, os.path.join(scripts_dir, 'run_processor.py'), '0'],
-        env=subprocess_env,
+        # env=subprocess_env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         universal_newlines=True,
@@ -61,18 +62,8 @@ def main():
     )
     processes.append(('Processor', processor))
 
-    time.sleep(5.0)
+    time.sleep(0.001)
     
-
-
-    # Create output threads
-    def log_output(process_name, process):
-        try:
-            logger.info(f"Started output thread for {process_name}")
-            for line in process.stdout:
-                logger.info(f"{process_name}: {line.strip()}")
-        except Exception as e:
-            logger.error(f"Error reading {process_name} output: {e}")
     
     # Start output threads
     output_threads = []

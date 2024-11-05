@@ -55,17 +55,14 @@ class _EtherPubSubProxy:
         
         self._logger.info(f"Starting proxy with {self.frontend} and {self.backend}")
     
-    def run(self, stop_event: Event):
+    def run(self):
         """Run the proxy with graceful shutdown support"""
-        def handle_signal(signum, frame):
-            stop_event.set()
-        
-        signal.signal(signal.SIGTERM, handle_signal)
+
         
         try:
             self._running = True
             
-            while self._running and not stop_event.is_set():
+            while self._running:
                 try:
                     events = dict(self._poller.poll(timeout=100))  # 100ms timeout
                     
@@ -109,7 +106,6 @@ class _ProxyManager:
     """Singleton manager for the Ether proxy process"""
     _instance = None
     _proxy_process = None
-    _stop_event = None
     _pid_file = os.path.join(tempfile.gettempdir(), 'ether_proxy.pid')
     _parent_pid = None
     _logger = logging.getLogger("ProxyManager")
@@ -138,8 +134,7 @@ class _ProxyManager:
         
         # Start new proxy process
         self._logger.info("Starting new proxy process")
-        self._stop_event = Event()
-        self._proxy_process = Process(target=self._run_proxy, args=(self._stop_event,))
+        self._proxy_process = Process(target=self._run_proxy)
         self._proxy_process.daemon = True
         self._proxy_process.start()
         self._parent_pid = os.getpid()
@@ -148,37 +143,35 @@ class _ProxyManager:
         with open(self._pid_file, 'w') as f:
             f.write(str(self._proxy_process.pid))
     
-    def _run_proxy(self, stop_event):
+    def _run_proxy(self):
         """Run the proxy process"""
         proxy = _EtherPubSubProxy()
-        proxy.run(stop_event)
+        proxy.run()
     
     def stop_proxy(self):
         """Stop proxy if we started it and we're in the creating process"""
         if self._proxy_process is not None and self._parent_pid == os.getpid():
             self._logger.info("Stopping proxy process")
-            if self._stop_event is not None:
-                self._stop_event.set()
+
             self._proxy_process.join(timeout=5)
             if self._proxy_process.is_alive():
                 self._proxy_process.terminate()
             self._proxy_process = None
-            self._stop_event = None
             
             # Force context termination to clear all buffers
             self._logger.info("Terminating ZMQ context")
             zmq.Context.instance().term()
-        elif os.path.exists(self._pid_file):
-            try:
-                with open(self._pid_file, 'r') as f:
-                    pid = int(f.read())
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                    except OSError:
-                        pass  # Process might already be gone
-                os.remove(self._pid_file)
-            except (ValueError, OSError):
-                pass  # Ignore errors cleaning up pid file
+            if os.path.exists(self._pid_file):
+                try:
+                    with open(self._pid_file, 'r') as f:
+                        pid = int(f.read())
+                        try:
+                            os.kill(pid, signal.SIGTERM)
+                        except OSError:
+                            pass  # Process might already be gone
+                    os.remove(self._pid_file)
+                except (ValueError, OSError):
+                    pass  # Ignore errors cleaning up pid file
 
     def __del__(self):
         self.stop_proxy()
