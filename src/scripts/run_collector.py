@@ -24,17 +24,9 @@ class DataCollector:
 
 if __name__ == "__main__":
     logger = setup_logging()
+    
     ether_init()
-    logger.info("Initializing collector")
-    stop_event = Event()
     
+    logger.info("Instantiate and run datacollector")
     collector = DataCollector()
-    
-    # def handle_signal(signum, frame):
-    #     stop_event.set()
-    
-    # signal.signal(signal.SIGTERM, handle_signal)
-    # signal.signal(signal.SIGINT, handle_signal)
-    
-    logger.info("Starting collector event loop")
     collector.run() 
