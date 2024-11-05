@@ -30,7 +30,7 @@ def add_ether_functionality(cls):
     def init_ether_vars(self, name=None, log_level=logging.INFO):
         self.id = uuid.uuid4()
         self.name = name or self.id
-        self._logger = _get_logger(f"{self.__class__.__name__}:{self.name}", log_level)
+        self._logger = logging.getLogger(f"{self.__class__.__name__}:{self.name}")#_get_logger(f"{self.__class__.__name__}:{self.name}", log_level)
         self._sub_address = f"tcp://localhost:{_ETHER_SUB_PORT}"
         self._pub_address = f"tcp://localhost:{_ETHER_PUB_PORT}"
         
@@ -52,12 +52,12 @@ def add_ether_functionality(cls):
         self.results_file = None
     
     def setup_sockets(self):
-        print("SETUP SOCKETS")
-        print(f"Setting up sockets for {self.name}")
+        self._logger.info("SETUP SOCKETS")
+        self._logger.info(f"Setting up sockets for {self.name}")
 
         # Print initial state
-        print(f"Initial topics: {self._sub_topics}")
-        print(f"Initial metadata: {self._sub_metadata}")
+        self._logger.info(f"Initial topics: {self._sub_topics}")
+        self._logger.info(f"Initial metadata: {self._sub_metadata}")
 
         has_sub_method = False
         has_pub_method = False
@@ -65,17 +65,18 @@ def add_ether_functionality(cls):
             if hasattr(method, '_sub_metadata'):
                 has_sub_method = True
                 topic = method._sub_metadata.topic
-                print(f"Adding sub topic: {topic}")
+                self._logger.info(f"Adding sub topic: {topic}")
                 self._sub_topics.add(topic)
                 self._sub_metadata[topic] = method._sub_metadata
             if hasattr(method, '_pub_metadata'):
+                self._logger.info(f'pub to topic {method._pub_metadata.topic}')
                 has_pub_method = True
 
-        print(f"Final topics: {self._sub_topics}")
-        print(f"Final metadata: {self._sub_metadata}")
+        self._logger.info(f"Final topics: {self._sub_topics}")
+        self._logger.info(f"Final metadata: {self._sub_metadata}")
 
         if hasattr(self, '_sub_address') and has_sub_method:
-            print("SUB ADDRESS")
+            self._logger.info("SUB ADDRESS")
             self._sub_socket = self._zmq_context.socket(zmq.SUB)
             if self._sub_address.startswith("tcp://*:"):
                 self._sub_socket.bind(self._sub_address)
@@ -88,12 +89,13 @@ def add_ether_functionality(cls):
             # Setup subscriptions
             for method in self._ether_methods_info.values():
                 if hasattr(method, '_sub_metadata'):
+                    self._logger.info(f"Subscribing with sub_metadata: {method._sub_metadata}")
                     topic = method._sub_metadata.topic
                     self._sub_socket.subscribe(topic.encode())
-                    print(f"Subscribed to topic: {topic}")
+                    self._logger.info(f"Subscribed to topic: {topic}")
         
         if hasattr(self, '_pub_address') and has_pub_method:
-            print("PUB ADDRESS")
+            self._logger.info("PUB ADDRESS")
             self._pub_socket = self._zmq_context.socket(zmq.PUB)
             if self._pub_address.startswith("tcp://*:"):
                 self._pub_socket.bind(self._pub_address)
@@ -101,6 +103,7 @@ def add_ether_functionality(cls):
                 self._pub_socket.connect(self._pub_address)
             self._pub_socket.setsockopt(zmq.SNDHWM, 1000000)
             self._pub_socket.setsockopt(zmq.SNDBUF, 65536)
+            self._logger.info("finished pub address if")
         
         time.sleep(0.1)
     
@@ -156,22 +159,22 @@ def add_ether_functionality(cls):
             json.dump(results, f)
 
     def receive_single_message(self, timeout=1000):
-        if self._sub_socket and self._sub_socket.poll(timeout):
+        if self._sub_socket and self._sub_socket.poll():
             topic = self._sub_socket.recv_string()
-            print(f"Received raw topic: {topic}")
-            print(f"Known topics: {self._sub_topics}")
-            print(f"Known metadata: {self._sub_metadata}")
+            self._logger.info(f"Received raw topic: {topic}")
+            self._logger.info(f"Known topics: {self._sub_topics}")
+            self._logger.info(f"Known metadata: {self._sub_metadata}")
             
             data = self._sub_socket.recv_json()
-            print(f"Received data: {data}")
+            self._logger.info(f"Received data: {data}")
             
             if topic in self._sub_topics:
-                print(f"Found topic match: {topic}")
+                self._logger.info(f"Found topic match: {topic}")
                 metadata = self._sub_metadata.get(topic)
                 if not metadata:
-                    print(f"No metadata found for topic: {topic}")
+                    self._logger.info(f"No metadata found for topic: {topic}")
                     return
-                print(f"Found metadata: {metadata}")
+                self._logger.info(f"Found metadata: {metadata}")
                 if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
                     args = {'root': metadata.args_model(data).root}
                 else:
@@ -179,23 +182,23 @@ def add_ether_functionality(cls):
                         model_instance = metadata.args_model(**data)
                         args = model_instance.model_dump()
                     except Exception as e:
-                        print(f"Error processing data: {e}")
+                        self._logger.info(f"Error processing data: {e}")
                         raise
                 
                 metadata.func(self, **args)
             else:
-                print(f"Received message for unknown topic: {topic}")
+                self._logger.info(f"Received message for unknown topic: {topic}")
 
     
     # Add run method
-    def run(self, stop_event: Event):
-        def handle_signal(signum, frame):
-            stop_event.set()
+    def run(self):
+        # def handle_signal(signum, frame):
+        #     stop_event.set()
         
-        signal.signal(signal.SIGTERM, handle_signal)
-        self.setup_sockets()
+        # signal.signal(signal.SIGTERM, handle_signal)
+        # self.setup_sockets()
         
-        while not stop_event.is_set():
+        while True:
             try:
                 if self._sub_socket:
                     self.receive_single_message()

@@ -3,7 +3,7 @@ import sys
 import time
 import logging
 import os
-from ether import ether_init, ether_pub
+from ether import ether_init, ether_pub, ether_sub
 from typing import Dict, Any
 
 def setup_logging():
@@ -21,7 +21,7 @@ class DataGenerator:
     
     @ether_pub(topic="DataProcessor.process_data")
     def generate_data(self, count: int = 42) -> Dict[str, Any]:
-        print(f"Generating data: {count}")
+        self._logger.info(f"Generating data: {count}")
         return {"name": f"datagenerator_{self.process_id}", "count": count}
 
 if __name__ == "__main__":
@@ -33,6 +33,9 @@ if __name__ == "__main__":
     generator = DataGenerator(process_id)
     logger.info("Waiting for connections")
     time.sleep(0.5)
+    logger.info("Generating data")
+    generator.generate_data()
+    time.sleep(5.0)
     logger.info("Generating data")
     generator.generate_data()
     logger.info("Data generation complete")

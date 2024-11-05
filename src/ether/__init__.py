@@ -1,5 +1,6 @@
 import logging
 import zmq
+import time
 from ._ether import (
     ether_pub, ether_sub,
     _get_logger, _EtherPubSubProxy, _proxy_manager,
@@ -22,6 +23,7 @@ def ether_init():
         # Mark as initialized
         _initialized = True
         logging.debug("Ether system initialized")
+        time.sleep(2.0)
 
 # Export public interface
 __all__ = [

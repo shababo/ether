@@ -26,6 +26,7 @@ class _ProxyManager:
     _stop_event = None
     _pid_file = os.path.join(tempfile.gettempdir(), 'ether_proxy.pid')
     _parent_pid = None
+    _logger = logging.getLogger("ProxyManager")
     
     def __new__(cls):
         if cls._instance is None:
@@ -34,32 +35,23 @@ class _ProxyManager:
     
     def start_proxy(self):
         """Start proxy if not already running. Safe to call multiple times."""
-        # If we already have a proxy process, check if it's still running
         if self._proxy_process is not None:
-            if self._proxy_process.is_alive():
-                return  # Proxy is already running
-            else:
-                # Clean up dead process
-                self._proxy_process = None
-                self._stop_event = None
+            return
         
-        # Check if proxy is running on this machine
+        # Check if proxy is already running on this machine
+        self._logger.info(f"PID FILE: {self._pid_file}")
         if os.path.exists(self._pid_file):
-            try:
-                with open(self._pid_file, 'r') as f:
-                    pid = int(f.read())
-                    try:
-                        # Check if process exists and is a proxy
-                        os.kill(pid, 0)
-                        return  # Proxy is already running
-                    except OSError:
-                        # Process doesn't exist, remove stale pid file
-                        os.remove(self._pid_file)
-            except (ValueError, IOError):
-                # Invalid pid file, remove it
-                os.remove(self._pid_file)
+            self._logger.info("Already Proxy Running")
+            with open(self._pid_file, 'r') as f:
+                pid = int(f.read())
+                try:
+                    os.kill(pid, 0)  # Just check if process exists
+                    return  # Proxy is already running
+                except OSError:
+                    os.remove(self._pid_file)
         
         # Start new proxy process
+        self._logger.info("Starting new proxy process")
         self._stop_event = Event()
         self._proxy_process = Process(target=self._run_proxy, args=(self._stop_event,))
         self._proxy_process.daemon = True
@@ -78,6 +70,7 @@ class _ProxyManager:
     def stop_proxy(self):
         """Stop proxy if we started it and we're in the creating process"""
         if self._proxy_process is not None and self._parent_pid == os.getpid():
+            self._logger.info("Stopping proxy process")
             if self._stop_event is not None:
                 self._stop_event.set()
             self._proxy_process.join(timeout=5)
@@ -87,6 +80,7 @@ class _ProxyManager:
             self._stop_event = None
             
             # Force context termination to clear all buffers
+            self._logger.info("Terminating ZMQ context")
             zmq.Context.instance().term()
         elif os.path.exists(self._pid_file):
             try:
@@ -99,6 +93,9 @@ class _ProxyManager:
                 os.remove(self._pid_file)
             except (ValueError, OSError):
                 pass  # Ignore errors cleaning up pid file
+
+    def __del__(self):
+        self.stop_proxy()
 
 # Create singleton instance
 _proxy_manager = _ProxyManager()
@@ -332,7 +329,7 @@ def ether_pub(topic: Optional[str] = None):
             # Execute the function and get result
             result = func(self, *args, **kwargs)
             
-            print(f"Publishing result: {result}")
+            self._logger.info(f"Publishing result: {result}")
             # Validate result against return type
             if isinstance(return_type, type) and issubclass(return_type, BaseModel):
                 validated_result = return_type(**result).model_dump_json()
@@ -340,10 +337,10 @@ def ether_pub(topic: Optional[str] = None):
                 ResultModel = RootModel[return_type]
                 validated_result = ResultModel(result).model_dump_json()
             
-            print(f"Validated result: {validated_result}")
+            self._logger.info(f"Validated result: {validated_result}")
             # Get topic from metadata
             actual_topic = topic or f"{func.__qualname__}"
-            print(f"Publishing to topic: {actual_topic}")
+            self._logger.info(f"Publishing to topic: {actual_topic}")
 
             # Publish the validated result
             self._pub_socket.send_multipart([
@@ -351,7 +348,7 @@ def ether_pub(topic: Optional[str] = None):
                 validated_result.encode()
             ])
             
-            print(f"Published result: {result}")
+            self._logger.info(f"Published result: {result}")
             return result
         
         # Create and attach the metadata
@@ -419,7 +416,7 @@ class _EtherPubSubProxy:
         """Setup XPUB/XSUB sockets with optimized settings"""
         self.id = uuid.uuid4()
         self.name = f"EtherPubSubProxy_{self.id}"
-        self._logger = _get_logger(f"{self.__class__.__name__}:{self.name}", logging.INFO)
+        self._logger = logging.getLogger("Proxy")#_get_logger(f"{self.__class__.__name__}:{self.name}", logging.INFO)
 
         self._zmq_context = zmq.Context()
         
@@ -438,16 +435,18 @@ class _EtherPubSubProxy:
         # Set TCP keepalive options
         for socket in [self.frontend, self.backend]:
             socket.setsockopt(zmq.LINGER, 0)
-            socket.setsockopt(zmq.IMMEDIATE, 1)
+            
             socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
             socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 300)
+
+        # self.backend.setsockopt(zmq.IMMEDIATE, 1)
 
         # Create poller to monitor both sockets
         self._poller = zmq.Poller()
         self._poller.register(self.frontend, zmq.POLLIN)
         self._poller.register(self.backend, zmq.POLLIN)
         
-        self._logger.debug(f"Starting proxy with {self.frontend} and {self.backend}")  # Log socket details
+        self._logger.info(f"Starting proxy with {self.frontend} and {self.backend}")  # Log socket details
             
     
     def run(self, stop_event: Event):
@@ -466,14 +465,14 @@ class _EtherPubSubProxy:
                     
                     if self.frontend in events:
                         message = self.frontend.recv_multipart()
-                        print(f"Proxy forwarding from frontend: {len(message)} parts")
-                        print(f"Message: {message}")
+                        self._logger.info(f"Proxy forwarding from frontend: {len(message)} parts")
+                        self._logger.info(f"Message: {message}")
                         self.backend.send_multipart(message)
                     
                     if self.backend in events:
                         message = self.backend.recv_multipart()
-                        print(f"Proxy forwarding from backend: {len(message)} parts")
-                        print(f"Message: {message}")
+                        self._logger.info(f"Proxy forwarding from backend: {len(message)} parts")
+                        self._logger.info(f"Message: {message}")
                         self.frontend.send_multipart(message)
                         
                 except zmq.ZMQError as e:

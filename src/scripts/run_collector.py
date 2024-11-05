@@ -20,7 +20,7 @@ class DataCollector:
     
     @ether_sub()
     def collect_result(self, result_name: str, value: int):
-        print(f"Collected result: {result_name} = {value}")
+        self._logger.info(f"Collected result: {result_name} = {value}")
 
 if __name__ == "__main__":
     logger = setup_logging()
@@ -30,11 +30,11 @@ if __name__ == "__main__":
     
     collector = DataCollector()
     
-    def handle_signal(signum, frame):
-        stop_event.set()
+    # def handle_signal(signum, frame):
+    #     stop_event.set()
     
-    signal.signal(signal.SIGTERM, handle_signal)
-    signal.signal(signal.SIGINT, handle_signal)
+    # signal.signal(signal.SIGTERM, handle_signal)
+    # signal.signal(signal.SIGINT, handle_signal)
     
     logger.info("Starting collector event loop")
-    collector.run(stop_event) 
+    collector.run() 
