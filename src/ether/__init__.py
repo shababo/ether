@@ -2,12 +2,12 @@ import logging
 import zmq
 import time
 from ._ether import (
-    ether_pub, ether_sub,
+    ether_pub, ether_sub, EtherRegistry,
     _get_logger,
     _ETHER_PUB_PORT, _ETHER_SUB_PORT
 )
-from ._registry import EtherRegistry
-from ._proxy import _proxy_manager
+
+from ._proxy import proxy_manager as _proxy_manager
 _initialized = False
 
 def ether_init():

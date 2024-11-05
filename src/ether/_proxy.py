@@ -168,25 +168,25 @@ class _ProxyManager:
             # Force context termination to clear all buffers
             self._logger.info("Terminating ZMQ context")
             zmq.Context.instance().term()
-            if os.path.exists(self._pid_file):
-                try:
-                    with open(self._pid_file, 'r') as f:
-                        pid = int(f.read())
-                        try:
-                            os.kill(pid, signal.SIGTERM)
-                        except OSError:
-                            pass  # Process might already be gone
-                    os.remove(self._pid_file)
-                except (ValueError, OSError):
-                    pass  # Ignore errors cleaning up pid file
+        elif os.path.exists(self._pid_file):
+            try:
+                with open(self._pid_file, 'r') as f:
+                    pid = int(f.read())
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except OSError:
+                        pass  # Process might already be gone
+                os.remove(self._pid_file)
+            except (ValueError, OSError):
+                pass  # Ignore errors cleaning up pid file
 
     def __del__(self):
         self.stop_proxy()
 
 # Create singleton instance
-_proxy_manager = _ProxyManager()
+proxy_manager = _ProxyManager()
 
 # Register cleanup on exit
 @atexit.register
 def _cleanup_proxy():
-    _proxy_manager.stop_proxy() 
+    proxy_manager.stop_proxy()
