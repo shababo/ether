@@ -20,7 +20,7 @@ def _get_logger(process_name: str, instance_name: str = None, log_level=logging.
     
     Args:
         process_name: Name of the process (e.g., "DataGenerator", "Proxy")
-        instance_name: Optional instance name for instances
+        instance_name: Optional instance name for instances (not used for file path)
         log_level: Logging level
     """
     # Create logger
@@ -45,19 +45,21 @@ def _get_logger(process_name: str, instance_name: str = None, log_level=logging.
     logger.addHandler(console_handler)
     
     # Create file handler
-    if process_name in ["Proxy", "Redis", "EtherMonitor"]:
+    if process_name in ["Proxy", "Redis", "EtherMonitor", "EtherInit", "EtherRegistry"]:
         # Daemon processes
         _ensure_log_dir(_DAEMON_LOG_DIR)
         log_file = _DAEMON_LOG_DIR / f"{process_name.lower()}.log"
     else:
-        # Instance processes
-        if instance_name:
-            instance_dir = _INSTANCES_LOG_DIR / instance_name
-            _ensure_log_dir(instance_dir)
-            log_file = instance_dir / f"{instance_name}.log"
-        else:
-            _ensure_log_dir(_INSTANCES_LOG_DIR)
-            log_file = _INSTANCES_LOG_DIR / f"{process_name.lower()}.log"
+        # Instance processes - use module path and class name for directory structure
+        # e.g., "ether.examples.gen_process_collect.DataGenerator" ->
+        # logs/instances/ether/examples/gen_process_collect/DataGenerator/DataGenerator.log
+        module_parts = process_name.split('.')
+        class_name = module_parts[-1]
+        module_path = module_parts[:-1]
+        
+        class_dir = _INSTANCES_LOG_DIR.joinpath(*module_path, class_name)
+        _ensure_log_dir(class_dir)
+        log_file = class_dir / f"{class_name}.log"
     
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(file_formatter)

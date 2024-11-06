@@ -139,7 +139,7 @@ class _EtherDaemon:
 # Create singleton instance but don't start it
 daemon_manager = _EtherDaemon()
 
-# Register cleanup
-@atexit.register
-def _cleanup_daemon():
-    daemon_manager.shutdown()
+# # Register cleanup
+# @atexit.register
+# def _cleanup_daemon():
+#     daemon_manager.shutdown()

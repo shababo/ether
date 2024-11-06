@@ -67,6 +67,7 @@ def add_ether_functionality(cls):
             instance_name=self.name,
             log_level=log_level
         )
+        self._logger.debug(f"Initializing {self.name}")
         self._sub_address = f"tcp://localhost:{_ETHER_SUB_PORT}"
         self._pub_address = f"tcp://localhost:{_ETHER_PUB_PORT}"
         

@@ -1,6 +1,8 @@
 import pytest
 import time
 import multiprocessing
+import logging
+import uuid
 from ether import ether_init
 from ether._config import EtherConfig
 from ether._instance_tracker import EtherInstanceTracker
@@ -9,18 +11,26 @@ from ether.examples.gen_process_collect import DataGenerator
 def run_manual_generator_test():
     """Test manual generator with auto-running processor and collector"""
     tracker = EtherInstanceTracker()
+    tracker.cleanup_all()  # Ensure clean state
+    
+    # Use unique names for each test run
+    run_id = uuid.uuid4().hex[:8]
     
     # Configure processor and collector to autorun, but not generator
     config = {
         "instances": {
-            "processor1": {
+            f"processor_{run_id}": {
                 "class_path": "ether.examples.gen_process_collect.DataProcessor",
                 "args": [1],
                 "autorun": True
             },
-            "collector1": {
+            f"collector_{run_id}": {
                 "class_path": "ether.examples.gen_process_collect.DataCollector",
-                "autorun": True
+                "autorun": True,
+                "kwargs": {
+                    "log_level": logging.DEBUG,
+                    "name": f"collector_{run_id}"  # Explicit name for logging
+                }
             }
         }
     }
@@ -33,20 +43,21 @@ def run_manual_generator_test():
     instances = tracker.get_active_instances()
     assert len(instances) == 2
     instance_names = {i['name'] for i in instances.values()}
-    assert "processor1" in instance_names
-    assert "collector1" in instance_names
+    assert f"processor_{run_id}" in instance_names
+    assert f"collector_{run_id}" in instance_names
     
-    # Manually create and run generator
+    # Manually create and use generator
     generator = DataGenerator(process_id=1)
     time.sleep(0.5)  # Wait for connections
     
     # Generate data twice
     generator.generate_data()
-    time.sleep(5.0)
+    time.sleep(0.1)
     generator.generate_data()
     
-    # Cleanup
-    del generator
+    time.sleep(1.0)
+    # Optional cleanup
+    # del generator
 
 def test_manual_generator():
     """Test manual generator operation"""
@@ -54,4 +65,4 @@ def test_manual_generator():
     process = ctx.Process(target=run_manual_generator_test)
     process.start()
     process.join()
-    assert process.exitcode == 0 
+    assert process.exitcode == 0
