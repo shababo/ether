@@ -75,12 +75,12 @@ def run_subscriber(stop_event: Event, results_dir: str, subscriber_id: int):
     subscriber = BenchmarkSubscriber(results_dir, subscriber_id)
     subscriber.run(stop_event)
 
-def run_proxy(stop_event: Event):
-    """Create and run a proxy in its own process"""
-    proxy = _EtherPubSubProxy()
-    proxy.run(stop_event)
+# def run_proxy(stop_event: Event):
+#     """Create and run a proxy in its own process"""
+#     proxy = _EtherPubSubProxy()
+#     proxy.run(stop_event)
 
-def run_proxy_benchmark(message_size: int, num_messages: int, num_subscribers: int, num_publishers: int) -> BenchmarkResult:
+def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, num_publishers: int) -> BenchmarkResult:
     stop_event = Event()
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -198,7 +198,7 @@ def main():
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     root.addHandler(handler)
-    root.setLevel(logging.INFO)
+    root.setLevel(logging.DEBUG)
     
     # Benchmark parameters
     message_sizes = [1000, 100000]
@@ -216,7 +216,7 @@ def main():
             for size in message_sizes:
                 for num_messages in message_counts:
                     print(f"Testing {pub_count}p/{sub_count}s with {size} bytes, {num_messages} msgs... ", end='', flush=True)
-                    result = run_proxy_benchmark(size, num_messages, sub_count, pub_count)
+                    result = run_benchmark(size, num_messages, sub_count, pub_count)
                     print("\r", end='')
                     print(f"{pub_count}p/{sub_count:2d}s | {size:8d} | {num_messages:9d} | {result.messages_per_second:11.2f} | "
                           f"{result.latency_ms:11.2f} | {result.message_loss_percent:6.2f} | "

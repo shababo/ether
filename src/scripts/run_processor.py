@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 import sys
-import signal
-from multiprocessing import Event
 import logging
-from ether import ether_init, ether_pub, ether_sub
-from typing import Dict, Any
 import os
+
+from ether import ether_init
+from ether.examples.gen_process_collect import DataProcessor
+
 
 def setup_logging():
     logging.basicConfig(
@@ -16,20 +16,6 @@ def setup_logging():
     logger.info("Processor script starting")  # Add this line
     return logger
 
-class DataProcessor:
-    def __init__(self, process_id: int):
-        self.process_id = process_id
-    
-    @ether_sub()
-    @ether_pub(topic="DataCollector.collect_result")
-    def process_data(self, name: str, count: int = 0) -> Dict[str, Any]:
-        self._logger.info(f"Processing {name} with count {count}")
-        processed_count = count * 2
-        return {
-            "result_name": name,
-            "value": processed_count
-        }
-    
 
 if __name__ == "__main__":
     

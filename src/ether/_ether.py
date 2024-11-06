@@ -1,21 +1,18 @@
 from functools import wraps
-import importlib
 from multiprocessing import Event, Process
 import inspect
 from typing import Any, Set, Type, Optional
 import uuid
 import zmq
 from pydantic import BaseModel, create_model, RootModel
-import signal
 import logging
 import time
 import json
-import atexit
 import os
-import tempfile
 import sys
 
 from ._utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
+from ._instance_tracker import EtherInstanceTracker
 
 class EtherRegistry:
     """Registry to track and process classes with Ether methods"""
@@ -29,7 +26,7 @@ class EtherRegistry:
     @classmethod
     def process_pending_classes(cls):
         logger = logging.getLogger("EtherRegistry")
-        logger.info("Processing pending classes...")
+        logger.debug("Processing pending classes...")
         
         for qualname, module_name in cls._pending_classes.items():
             if qualname in cls._processed_classes:
@@ -40,10 +37,10 @@ class EtherRegistry:
             module = sys.modules.get(module_name)
             if module and hasattr(module, qualname):
                 class_obj = getattr(module, qualname)
-                logger.info(f"Adding Ether functionality to {qualname}")
+                logger.debug(f"Adding Ether functionality to {qualname}")
                 add_ether_functionality(class_obj)
                 cls._processed_classes.add(qualname)
-                logger.info(f"Successfully processed {qualname}")
+                logger.debug(f"Successfully processed {qualname}")
             else:
                 logger.warning(f"Could not find class {qualname} in module {module_name}")
 
@@ -63,7 +60,7 @@ def add_ether_functionality(cls):
     
     # Add core attributes
     def init_ether_vars(self, name=None, log_level=logging.INFO):
-        self.id = uuid.uuid4()
+        self.id = str(uuid.uuid4())
         self.name = name or self.id
         self._logger = logging.getLogger(f"{self.__class__.__name__}:{self.name}")
         self._sub_address = f"tcp://localhost:{_ETHER_SUB_PORT}"
@@ -85,14 +82,21 @@ def add_ether_functionality(cls):
         self.last_message_time = None
         self.subscription_time = None
         self.results_file = None
+        
+        # Register with instance tracker
+        self._instance_tracker = EtherInstanceTracker()
+        self._instance_tracker.register_instance(self.id, {
+            'name': self.name,
+            'class': self.__class__.__name__,
+            'pub_topics': [m._pub_metadata.topic for m in self._ether_methods_info.values() 
+                          if hasattr(m, '_pub_metadata')],
+            'sub_topics': [m._sub_metadata.topic for m in self._ether_methods_info.values() 
+                          if hasattr(m, '_sub_metadata')]
+        })
     
     def setup_sockets(self):
-        self._logger.info("SETUP SOCKETS")
-        self._logger.info(f"Setting up sockets for {self.name}")
+        self._logger.debug(f"Setting up sockets for {self.name}")
 
-        # Print initial state
-        self._logger.info(f"Initial topics: {self._sub_topics}")
-        self._logger.info(f"Initial metadata: {self._sub_metadata}")
 
         has_sub_method = False
         has_pub_method = False
@@ -100,18 +104,17 @@ def add_ether_functionality(cls):
             if hasattr(method, '_sub_metadata'):
                 has_sub_method = True
                 topic = method._sub_metadata.topic
-                self._logger.info(f"Adding sub topic: {topic}")
+                self._logger.debug(f"Adding sub topic: {topic}")
                 self._sub_topics.add(topic)
                 self._sub_metadata[topic] = method._sub_metadata
             if hasattr(method, '_pub_metadata'):
-                self._logger.info(f'pub to topic {method._pub_metadata.topic}')
+                self._logger.debug(f'pub to topic {method._pub_metadata.topic}')
                 has_pub_method = True
 
-        self._logger.info(f"Final topics: {self._sub_topics}")
-        self._logger.info(f"Final metadata: {self._sub_metadata}")
+        self._logger.debug(f"Final topics: {self._sub_topics}")
+        self._logger.debug(f"Final metadata: {self._sub_metadata}")
 
         if hasattr(self, '_sub_address') and has_sub_method:
-            self._logger.info("SUB ADDRESS")
             self._sub_socket = self._zmq_context.socket(zmq.SUB)
             if self._sub_address.startswith("tcp://*:"):
                 self._sub_socket.bind(self._sub_address)
@@ -124,13 +127,12 @@ def add_ether_functionality(cls):
             # Setup subscriptions
             for method in self._ether_methods_info.values():
                 if hasattr(method, '_sub_metadata'):
-                    self._logger.info(f"Subscribing with sub_metadata: {method._sub_metadata}")
+                    self._logger.debug(f"Subscribing with sub_metadata: {method._sub_metadata}")
                     topic = method._sub_metadata.topic
                     self._sub_socket.subscribe(topic.encode())
-                    self._logger.info(f"Subscribed to topic: {topic}")
+                    self._logger.debug(f"Subscribed to topic: {topic}")
         
         if hasattr(self, '_pub_address') and has_pub_method:
-            self._logger.info("PUB ADDRESS")
             self._pub_socket = self._zmq_context.socket(zmq.PUB)
             if self._pub_address.startswith("tcp://*:"):
                 self._pub_socket.bind(self._pub_address)
@@ -138,8 +140,8 @@ def add_ether_functionality(cls):
                 self._pub_socket.connect(self._pub_address)
             self._pub_socket.setsockopt(zmq.SNDHWM, 1000000)
             self._pub_socket.setsockopt(zmq.SNDBUF, 65536)
-            self._logger.info("finished pub address if")
-        
+
+
         time.sleep(0.1)
     
     # Add message tracking
@@ -196,20 +198,20 @@ def add_ether_functionality(cls):
     def receive_single_message(self, timeout=1000):
         if self._sub_socket and self._sub_socket.poll():
             topic = self._sub_socket.recv_string()
-            self._logger.info(f"Received raw topic: {topic}")
-            self._logger.info(f"Known topics: {self._sub_topics}")
-            self._logger.info(f"Known metadata: {self._sub_metadata}")
+            self._logger.debug(f"Received raw topic: {topic}")
+            self._logger.debug(f"Known topics: {self._sub_topics}")
+            self._logger.debug(f"Known metadata: {self._sub_metadata}")
             
             data = self._sub_socket.recv_json()
-            self._logger.info(f"Received data: {data}")
+            self._logger.debug(f"Received data: {data}")
             
             if topic in self._sub_topics:
-                self._logger.info(f"Found topic match: {topic}")
+                self._logger.debug(f"Found topic match: {topic}")
                 metadata = self._sub_metadata.get(topic)
                 if not metadata:
-                    self._logger.info(f"No metadata found for topic: {topic}")
+                    self._logger.debug(f"No metadata found for topic: {topic}")
                     return
-                self._logger.info(f"Found metadata: {metadata}")
+                self._logger.debug(f"Found metadata: {metadata}")
                 if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
                     args = {'root': metadata.args_model(data).root}
                 else:
@@ -217,21 +219,32 @@ def add_ether_functionality(cls):
                         model_instance = metadata.args_model(**data)
                         args = model_instance.model_dump()
                     except Exception as e:
-                        self._logger.info(f"Error processing data: {e}")
+                        self._logger.debug(f"Error processing data: {e}")
                         raise
                 
                 metadata.func(self, **args)
             else:
-                self._logger.info(f"Received message for unknown topic: {topic}")
+                self._logger.debug(f"Received message for unknown topic: {topic}")
+
+    def _ether_run(cls):
+        cls_instance = cls()
+        cls_instance.run()
     
     # Add run method
     def run(self):
+        last_refresh = 0
         while True:
             try:
+                # Refresh TTL periodically (half the TTL time)
+                now = time.time()
+                if now - last_refresh >= (self._instance_tracker.ttl / 2):
+                    self._instance_tracker.refresh_instance(self.id)
+                    last_refresh = now
+                
                 if self._sub_socket:
                     self.receive_single_message()
             except Exception as e:
-                print(f"Error in run loop: {e}")
+                self._logger.error(f"Error in run loop: {e}")
                 break
         
         self.save_results()
@@ -239,6 +252,8 @@ def add_ether_functionality(cls):
     
     # Add cleanup
     def cleanup(self):
+        if hasattr(self, '_instance_tracker'):
+            self._instance_tracker.deregister_instance(self.id)
         if hasattr(self, '_sub_socket') and self._sub_socket:
             self._sub_socket.close()
         if hasattr(self, '_pub_socket') and self._pub_socket:
@@ -254,11 +269,12 @@ def add_ether_functionality(cls):
     cls.run = run
     cls.cleanup = cleanup
     cls.receive_single_message = receive_single_message
+    cls._ether_run = classmethod(_ether_run)
+
     
     # Modify __init__ to initialize attributes
     original_init = cls.__init__
     def new_init(self, *args, **kwargs):
-        print("NEW INIT")
         self.init_ether(
             name=kwargs.pop('name', None),
             log_level=kwargs.pop('log_level', logging.INFO)
@@ -325,7 +341,7 @@ def ether_pub(topic: Optional[str] = None):
             # Execute the function and get result
             result = func(self, *args, **kwargs)
             
-            self._logger.info(f"Publishing result: {result}")
+            # self._logger.debug(f"Publishing result: {result}")
             # Validate result against return type
             if isinstance(return_type, type) and issubclass(return_type, BaseModel):
                 validated_result = return_type(**result).model_dump_json()
@@ -333,10 +349,10 @@ def ether_pub(topic: Optional[str] = None):
                 ResultModel = RootModel[return_type]
                 validated_result = ResultModel(result).model_dump_json()
             
-            self._logger.info(f"Validated result: {validated_result}")
+            # self._logger.debug(f"Validated result: {validated_result}")
             # Get topic from metadata
             actual_topic = topic or f"{func.__qualname__}"
-            self._logger.info(f"Publishing to topic: {actual_topic}")
+            # self._logger.debug(f"Publishing to topic: {actual_topic}")
 
             # Publish the validated result
             self._pub_socket.send_multipart([
@@ -344,7 +360,7 @@ def ether_pub(topic: Optional[str] = None):
                 validated_result.encode()
             ])
             
-            self._logger.info(f"Published result: {result}")
+            # self._logger.debug(f"Published result: {result}")
             return result
         
         # Create and attach the metadata

@@ -3,8 +3,9 @@ import sys
 import time
 import logging
 import os
-from ether import ether_init, ether_pub, ether_sub
-from typing import Dict, Any
+from ether import ether_init
+from ether.examples.gen_process_collect import DataGenerator
+
 
 def setup_logging():
     logging.basicConfig(
@@ -15,14 +16,7 @@ def setup_logging():
     logger.info("Generator script starting")
     return logger
 
-class DataGenerator:
-    def __init__(self, process_id: int):
-        self.process_id = process_id
-    
-    @ether_pub(topic="DataProcessor.process_data")
-    def generate_data(self, count: int = 42) -> Dict[str, Any]:
-        self._logger.info(f"Generating data: {count}")
-        return {"name": f"datagenerator_{self.process_id}", "count": count}
+
 
 if __name__ == "__main__":
     logger = setup_logging()

@@ -8,7 +8,7 @@ import tempfile
 import atexit
 import time
 
-from ._utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT
+from ._utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, _get_logger
 
 class _EtherPubSubProxy:
     """Proxy that uses XPUB/XSUB sockets for efficient message distribution.
@@ -26,7 +26,7 @@ class _EtherPubSubProxy:
         """Setup XPUB/XSUB sockets with optimized settings"""
         self.id = uuid.uuid4()
         self.name = f"EtherPubSubProxy_{self.id}"
-        self._logger = logging.getLogger("Proxy")
+        self._logger = _get_logger("Proxy")
 
         self._zmq_context = zmq.Context()
         
@@ -57,8 +57,6 @@ class _EtherPubSubProxy:
     
     def run(self):
         """Run the proxy with graceful shutdown support"""
-
-        
         try:
             self._running = True
             
@@ -101,85 +99,3 @@ class _EtherPubSubProxy:
 
     def __del__(self):
         self.cleanup()
-
-class _ProxyManager:
-    """Singleton manager for the Ether proxy process"""
-    _instance = None
-    _proxy_process = None
-    _pid_file = os.path.join(tempfile.gettempdir(), 'ether_proxy.pid')
-    _parent_pid = None
-    _logger = logging.getLogger("ProxyManager")
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(_ProxyManager, cls).__new__(cls)
-        return cls._instance
-    
-    def start_proxy(self):
-        """Start proxy if not already running. Safe to call multiple times."""
-        if self._proxy_process is not None:
-            return
-        
-        # Check if proxy is already running on this machine
-        self._logger.debug(f"PID FILE: {self._pid_file}")
-        if os.path.exists(self._pid_file):
-            self._logger.info("Proxy already running")
-            with open(self._pid_file, 'r') as f:
-                pid = int(f.read())
-                try:
-                    os.kill(pid, 0)  # Just check if process exists
-                    return  # Proxy is already running
-                except OSError:
-                    os.remove(self._pid_file)
-        
-        # Start new proxy process
-        self._logger.info("Starting new proxy")
-        self._proxy_process = Process(target=self._run_proxy)
-        self._proxy_process.daemon = True
-        self._proxy_process.start()
-        self._parent_pid = os.getpid()
-        
-        # Save PID
-        with open(self._pid_file, 'w') as f:
-            f.write(str(self._proxy_process.pid))
-    
-    def _run_proxy(self):
-        """Run the proxy process"""
-        proxy = _EtherPubSubProxy()
-        proxy.run()
-    
-    def stop_proxy(self):
-        """Stop proxy if we started it and we're in the creating process"""
-        if self._proxy_process is not None and self._parent_pid == os.getpid():
-            self._logger.info("Stopping proxy process")
-
-            self._proxy_process.join(timeout=5)
-            if self._proxy_process.is_alive():
-                self._proxy_process.terminate()
-            self._proxy_process = None
-            
-            # Force context termination to clear all buffers
-            self._logger.debug("Terminating ZMQ context")
-            zmq.Context.instance().term()
-            if os.path.exists(self._pid_file):
-                try:
-                    with open(self._pid_file, 'r') as f:
-                        pid = int(f.read())
-                        try:
-                            os.kill(pid, signal.SIGTERM)
-                        except OSError:
-                            pass  # Process might already be gone
-                    os.remove(self._pid_file)
-                except (ValueError, OSError):
-                    pass  # Ignore errors cleaning up pid file
-
-    def __del__(self):
-        self.stop_proxy()
-
-# Create singleton instance
-proxy_manager = _ProxyManager()
-
-# Register cleanup on exit
-@atexit.register
-def _cleanup_proxy():
-    proxy_manager.stop_proxy()
