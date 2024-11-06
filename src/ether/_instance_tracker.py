@@ -61,3 +61,10 @@ class EtherInstanceTracker:
                 instance_id = key.replace(self.instance_key_prefix, "")
                 instances[instance_id] = json.loads(data)
         return instances
+    
+    def cleanup_all(self):
+        """Remove all tracked instances"""
+        pattern = f"{self.instance_key_prefix}*"
+        keys = self.redis.keys(pattern)
+        if keys:
+            self.redis.delete(*keys)

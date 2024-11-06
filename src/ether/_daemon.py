@@ -101,7 +101,11 @@ class _EtherDaemon:
     def _start_redis_server(self):
         """Start Redis server process"""
         self._redis_process = subprocess.Popen(
-            ['redis-server', '--port', str(self._redis_port)],
+            [
+                'redis-server',
+                '--port', str(self._redis_port),
+                '--dir', tempfile.gettempdir()  # Use temp dir for dump.rdb
+            ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )

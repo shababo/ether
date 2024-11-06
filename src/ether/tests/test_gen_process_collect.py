@@ -10,13 +10,19 @@ from ether._instance_tracker import EtherInstanceTracker
 def setup_logging():
     logging.basicConfig(level=logging.DEBUG)
     yield
-    
-@pytest.fixture
-def tracker():
-    return EtherInstanceTracker()
 
-def test_instance_tracking(setup_logging, tracker):
+@pytest.fixture
+def clean_redis():
+    """Clean up Redis before and after each test"""
+    tracker = EtherInstanceTracker()
+    tracker.cleanup_all()
+    yield tracker
+    tracker.cleanup_all()
+
+def test_instance_tracking(setup_logging, clean_redis):
     """Test that instances are properly tracked in Redis"""
+    tracker = clean_redis  # Use the cleaned tracker
+    
     # Initialize Ether system
     ether_init()
     time.sleep(1)  # Wait for services to start
@@ -63,8 +69,10 @@ def test_instance_tracking(setup_logging, tracker):
     instances = tracker.get_active_instances()
     assert len(instances) == 0
 
-def test_instance_ttl(setup_logging, tracker):
+def test_instance_ttl(setup_logging, clean_redis):
     """Test that instances are properly expired"""
+    tracker = clean_redis  # Use the cleaned tracker
+    
     ether_init()
     
     # Create instance
@@ -82,8 +90,10 @@ def test_instance_ttl(setup_logging, tracker):
     instances = tracker.get_active_instances()
     assert len(instances) == 0
 
-def test_daemon_monitoring(setup_logging, tracker):
+def test_daemon_monitoring(setup_logging, clean_redis):
     """Test that daemon properly monitors instances"""
+    tracker = clean_redis  # Use the cleaned tracker
+    
     ether_init()
     time.sleep(1)  # Wait for services
     
@@ -94,9 +104,6 @@ def test_daemon_monitoring(setup_logging, tracker):
     # Wait for monitoring cycle
     time.sleep(11)  # Daemon monitors every 10 seconds
     
-    # Check daemon's monitor log for instance data
-    # (This would require adding some way to access monitor logs)
-    
     # Cleanup
     del generator
-    del processor 
+    del processor
