@@ -6,9 +6,10 @@ from multiprocessing import Process
 import signal
 import sys
 from ._ether import (
-    ether_pub, ether_sub, EtherRegistry,
-    _get_logger
+    _Ether, EtherRegistry,
+    
 )
+from ._utils import _get_logger
 from ._daemon import daemon_manager
 from ._instance_tracker import EtherInstanceTracker
 from ._config import EtherConfig
@@ -200,7 +201,7 @@ def stop_all_instances():
         stop_instance(instance_id)
 
 
-
+ether = _Ether()
 # Export public interface
-__all__ = ['ether_pub', 'ether_sub', 'ether_init', 'stop_instance', 'stop_all_instances']
+__all__ = ['ether_pub', 'ether_sub', 'ether_init', 'stop_instance', 'stop_all_instances', 'pub', 'sub', 'ether']
 

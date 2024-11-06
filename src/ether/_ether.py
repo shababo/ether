@@ -25,7 +25,7 @@ class EtherRegistry:
     
     @classmethod
     def process_pending_classes(cls):
-        logger = _get_logger("EtherRegistry", log_level=logging.DEBUG)
+        logger = _get_logger("EtherRegistry", log_level=logging.INFO)
         logger.debug("Processing pending classes...")
         
         for qualname, module_name in cls._pending_classes.items():
@@ -327,89 +327,91 @@ class EtherSubMetadata:
         self.topic = topic
         self.args_model = args_model
 
-def ether_pub(topic: Optional[str] = None):
-    """Decorator for methods that should publish messages."""
-    def decorator(func):
-        # Get return type hint if it exists
-        return_type = inspect.signature(func).return_annotation
-        if return_type == inspect.Parameter.empty:
-            raise TypeError(f"Function {func.__name__} must have a return type hint")
-        
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if not hasattr(self, '_pub_socket'):
-                raise RuntimeError("Cannot publish: no publisher socket configured")
+
+class _Ether:
+    def ether_pub(topic: Optional[str] = None):
+        """Decorator for methods that should publish messages."""
+        def decorator(func):
+            # Get return type hint if it exists
+            return_type = inspect.signature(func).return_annotation
+            if return_type == inspect.Parameter.empty:
+                raise TypeError(f"Function {func.__name__} must have a return type hint")
             
-            # Execute the function and get result
-            result = func(self, *args, **kwargs)
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                if not hasattr(self, '_pub_socket'):
+                    raise RuntimeError("Cannot publish: no publisher socket configured")
+                
+                # Execute the function and get result
+                result = func(self, *args, **kwargs)
+                
+                # self._logger.debug(f"Publishing result: {result}")
+                # Validate result against return type
+                if isinstance(return_type, type) and issubclass(return_type, BaseModel):
+                    validated_result = return_type(**result).model_dump_json()
+                else:
+                    ResultModel = RootModel[return_type]
+                    validated_result = ResultModel(result).model_dump_json()
+                
+                # self._logger.debug(f"Validated result: {validated_result}")
+                # Get topic from metadata
+                actual_topic = topic or f"{func.__qualname__}"
+                # self._logger.debug(f"Publishing to topic: {actual_topic}")
+
+                # Publish the validated result
+                self._pub_socket.send_multipart([
+                    actual_topic.encode(),
+                    validated_result.encode()
+                ])
+                
+                # self._logger.debug(f"Published result: {result}")
+                return result
             
-            # self._logger.debug(f"Publishing result: {result}")
-            # Validate result against return type
-            if isinstance(return_type, type) and issubclass(return_type, BaseModel):
-                validated_result = return_type(**result).model_dump_json()
-            else:
-                ResultModel = RootModel[return_type]
-                validated_result = ResultModel(result).model_dump_json()
-            
-            # self._logger.debug(f"Validated result: {validated_result}")
-            # Get topic from metadata
+            # Create and attach the metadata
             actual_topic = topic or f"{func.__qualname__}"
-            # self._logger.debug(f"Publishing to topic: {actual_topic}")
-
-            # Publish the validated result
-            self._pub_socket.send_multipart([
-                actual_topic.encode(),
-                validated_result.encode()
-            ])
+            wrapper._pub_metadata = EtherPubMetadata(func, actual_topic)
             
-            # self._logger.debug(f"Published result: {result}")
-            return result
-        
-        # Create and attach the metadata
-        actual_topic = topic or f"{func.__qualname__}"
-        wrapper._pub_metadata = EtherPubMetadata(func, actual_topic)
-        
-        # Mark the containing class for Ether processing
-        frame = inspect.currentframe().f_back
-        while frame:
-            locals_dict = frame.f_locals
-            if '__module__' in locals_dict and '__qualname__' in locals_dict:
-                EtherRegistry.mark_for_processing(
-                    locals_dict['__qualname__'],
-                    locals_dict['__module__']
-                )
-                break
-            frame = frame.f_back
-        
-        return wrapper
-    return decorator
+            # Mark the containing class for Ether processing
+            frame = inspect.currentframe().f_back
+            while frame:
+                locals_dict = frame.f_locals
+                if '__module__' in locals_dict and '__qualname__' in locals_dict:
+                    EtherRegistry.mark_for_processing(
+                        locals_dict['__qualname__'],
+                        locals_dict['__module__']
+                    )
+                    break
+                frame = frame.f_back
+            
+            return wrapper
+        return decorator
 
-def ether_sub(topic: Optional[str] = None):
-    """Decorator for methods that should receive messages."""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-        
-        # Create and attach the metadata
-        args_model = _create_model_from_signature(func)
-        actual_topic = topic or f"{func.__qualname__}"
-        wrapper._sub_metadata = EtherSubMetadata(func, actual_topic, args_model)
-        
-        # Mark the containing class for Ether processing
-        frame = inspect.currentframe().f_back
-        while frame:
-            locals_dict = frame.f_locals
-            if '__module__' in locals_dict and '__qualname__' in locals_dict:
-                EtherRegistry.mark_for_processing(
-                    locals_dict['__qualname__'],
-                    locals_dict['__module__']
-                )
-                break
-            frame = frame.f_back
-        
-        return wrapper
-    return decorator
+    def ether_sub(topic: Optional[str] = None):
+        """Decorator for methods that should receive messages."""
+        def decorator(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+            
+            # Create and attach the metadata
+            args_model = _create_model_from_signature(func)
+            actual_topic = topic or f"{func.__qualname__}"
+            wrapper._sub_metadata = EtherSubMetadata(func, actual_topic, args_model)
+            
+            # Mark the containing class for Ether processing
+            frame = inspect.currentframe().f_back
+            while frame:
+                locals_dict = frame.f_locals
+                if '__module__' in locals_dict and '__qualname__' in locals_dict:
+                    EtherRegistry.mark_for_processing(
+                        locals_dict['__qualname__'],
+                        locals_dict['__module__']
+                    )
+                    break
+                frame = frame.f_back
+            
+            return wrapper
+        return decorator
 
 
 
