@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.9.2",
     "psutil>=6.1.0",
     "sqlalchemy>=2.0.36",
+    "redis>=5.2.0",
 ]
 
 [build-system]
