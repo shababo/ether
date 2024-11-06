@@ -6,7 +6,7 @@ import uuid
 from ether import ether_init
 from ether._config import EtherConfig
 from ether._instance_tracker import EtherInstanceTracker
-from ether.examples.gen_process_collect import DataGenerator
+from examples.simple_data_processing import DataGenerator
 
 def run_manual_generator_test():
     """Test manual generator with auto-running processor and collector"""
@@ -20,12 +20,12 @@ def run_manual_generator_test():
     config = {
         "instances": {
             f"processor_{run_id}": {
-                "class_path": "ether.examples.gen_process_collect.DataProcessor",
+                "class_path": "examples.simple_data_processing.DataProcessor",
                 "args": [1],
                 "autorun": True
             },
             f"collector_{run_id}": {
-                "class_path": "ether.examples.gen_process_collect.DataCollector",
+                "class_path": "examples.simple_data_processing.DataCollector",
                 "autorun": True,
                 "kwargs": {
                     # "log_level": logging.DEBUG,

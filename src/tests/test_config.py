@@ -12,12 +12,12 @@ def run_mixed_autorun_test():
     config = {
         "instances": {
             "test_generator": {
-                "class_path": "ether.examples.gen_process_collect.DataGenerator",
+                "class_path": "examples.simple_data_processing.DataGenerator",
                 "args": [1],
                 "autorun": True
             },
             "test_processor": {
-                "class_path": "ether.examples.gen_process_collect.DataProcessor",
+                "class_path": "examples.simple_data_processing.DataProcessor",
                 "args": [1],
                 "autorun": False
             }
