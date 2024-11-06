@@ -2,7 +2,7 @@ import pytest
 import time
 import logging
 from ether import ether_init
-from ether.examples.gen_process_collect import DataGenerator, DataProcessor, DataCollector
+from examples.simple_data_processing import DataGenerator, DataProcessor, DataCollector
 from ether._daemon import daemon_manager
 from ether._instance_tracker import EtherInstanceTracker
 
