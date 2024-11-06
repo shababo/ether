@@ -136,6 +136,10 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None):
             
             # Wait for instances to be ready
             time.sleep(1.0)
+
+            # Register cleanup on exit
+            atexit.register(_cleanup_all)
+            atexit.register(_cleanup_logger)  # Make sure logger cleanup happens last
             
             return config  # Return the config object for manual launching if needed
 
@@ -157,9 +161,7 @@ def stop_all_instances():
     for instance_id in list(_instance_processes.keys()):
         stop_instance(instance_id)
 
-# Register cleanup on exit
-atexit.register(_cleanup_all)
-atexit.register(_cleanup_logger)  # Make sure logger cleanup happens last
+
 
 # Export public interface
 __all__ = ['ether_pub', 'ether_sub', 'ether_init', 'stop_instance', 'stop_all_instances']

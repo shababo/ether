@@ -37,7 +37,6 @@ def run_manual_generator_test():
     
     # Initialize system and start processor/collector
     ether_init(config)
-    time.sleep(1)  # Wait for services to start
     
     # Verify processor and collector are running
     instances = tracker.get_active_instances()
