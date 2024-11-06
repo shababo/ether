@@ -18,11 +18,11 @@ _ether_initialized = False
 _instance_processes: Dict[str, Process] = {}
 _logger = None  # Initialize later
 
-def _init_logger():
+def _init_logger(log_level: int = logging.INFO):
     """Initialize logger with proper cleanup"""
     global _logger
     if _logger is None:
-        _logger = _get_logger("EtherInit")
+        _logger = _get_logger("EtherMain", log_level=log_level)
 
 def _cleanup_logger():
     """Properly close logger handlers"""
@@ -61,18 +61,16 @@ def _wait_for_redis():
 def _cleanup_handler():
     """Combined cleanup handler for both resources and logger"""
     _init_logger()
-    _logger.info("Starting cleanup...")
+    _logger.debug("Starting cleanup...")
     
     try:
         # Stop all instances
         stop_all_instances()
         
         # Wait for instances to finish
-        _logger.info(f"Waiting for {len(_instance_processes)} instances to finish")
+        _logger.debug(f"Waiting for {len(_instance_processes)} instances to finish")
         for process in _instance_processes.values():
-            _logger.info(f"Joining process {process.name}")
             process.join(timeout=5)
-            _logger.info(f"Joined process {process.name}")
             if process.is_alive():
                 _logger.warning(f"Process {process.name} didn't stop gracefully, terminating")
                 process.terminate()
@@ -98,7 +96,7 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None, force_rei
     if _ether_initialized and force_reinit:
         # Clean up existing system
         _init_logger()
-        _logger.info("Force reinitializing Ether system...")
+        _logger.debug("Force reinitializing Ether system...")
         _cleanup_handler()
         _ether_initialized = False
         
@@ -136,7 +134,7 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None, force_rei
             for instance_id, info in existing.items():
                 _logger.warning(f"  {instance_id}: {info.get('name')} ({info.get('class')})")
         elif existing:
-            _logger.info("No existing instances found after cull")
+            _logger.debug("No existing instances found after cull")
         
         # Process any pending classes
         EtherRegistry.process_pending_classes()
@@ -166,7 +164,7 @@ def stop_instance(instance_id: str):
     """Stop a specific instance"""
     if instance_id in _instance_processes:
         process = _instance_processes[instance_id]
-        _logger.info(f"Stopping instance {instance_id}")
+        _logger.debug(f"Stopping instance {instance_id}")
         
         # Get instance info before stopping
         tracker = EtherInstanceTracker()
@@ -189,7 +187,7 @@ def stop_instance(instance_id: str):
             
         # Deregister from Redis if we found the ID
         if redis_id:
-            _logger.info(f"Deregistering instance {instance_id} (Redis ID: {redis_id})")
+            _logger.debug(f"Deregistering instance {instance_id} (Redis ID: {redis_id})")
             tracker.deregister_instance(redis_id)
         else:
             _logger.warning(f"Could not find Redis ID for instance {instance_id}")

@@ -25,7 +25,7 @@ class EtherRegistry:
     
     @classmethod
     def process_pending_classes(cls):
-        logger = logging.getLogger("EtherRegistry")
+        logger = _get_logger("EtherRegistry", log_level=logging.DEBUG)
         logger.debug("Processing pending classes...")
         
         for qualname, module_name in cls._pending_classes.items():

@@ -1,4 +1,3 @@
-from typing import Any
 import time
 from ether import ether_sub, ether_pub, ether_init
 
@@ -7,19 +6,20 @@ class DataGenerator:
         self.process_id = process_id
     
     @ether_pub(topic="DataProcessor.process_data")
-    def generate_data(self, data: int = 42) -> dict[str, Any]:
+    def generate_data(self, data: int = 42) -> dict:
         self._logger.info(f"Generating data: {data}")
         return {"name": f"datagenerator_{self.process_id}", "data": data}
     
 class DataProcessor:
-    def __init__(self, process_id: int = 0):
+    def __init__(self, process_id: int = 0, multiplier: int = 2):
         self.process_id = process_id
+        self.multiplier = multiplier
     
     @ether_sub()
     @ether_pub(topic="DataCollector.collect_result")
-    def process_data(self, name: str, data: int = 0) -> dict[str, Any]:
+    def process_data(self, name: str, data: int = 0) -> dict:
         self._logger.info(f"Processing {name} with data {data}")
-        processed_data = data * 2
+        processed_data = data * self.multiplier
         return {
             "result_name": name,
             "value": processed_data
@@ -39,14 +39,16 @@ if __name__ == "__main__":
     # Configure processor and collector to autorun, but not generator
     config = {
         "instances": {
-            f"processor": {
+            "processor2x": {
                 "class_path": "ether.examples.gen_process_collect.DataProcessor",
             },
-            f"collector": {
-                "class_path": "ether.examples.gen_process_collect.DataCollector",
-
+            "processor4x": {
+                "class_path": "ether.examples.gen_process_collect.DataProcessor",
+                "kwargs": {
+                    "multiplier": 4
+                }
             },
-            f"collector2": {
+            "collector": {
                 "class_path": "ether.examples.gen_process_collect.DataCollector",
 
             }
@@ -54,11 +56,9 @@ if __name__ == "__main__":
     }
     ether_init(config)
 
-    generator = DataGenerator(process_id=1)
+    generator = DataGenerator(name="generator", process_id=1)
     time.sleep(0.5)  # Wait for connections
     
     # Generate data twice
     generator.generate_data(data=42)
-    time.sleep(0.1)
     generator.generate_data(data=43)
-    # time.sleep(0.01)
