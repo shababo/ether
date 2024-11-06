@@ -3,6 +3,8 @@ from typing import Optional, Dict, Any
 import json
 import time
 import uuid
+import os
+import logging
 
 class EtherInstanceTracker:
     """Tracks Ether instances using Redis"""
@@ -19,6 +21,7 @@ class EtherInstanceTracker:
         self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
         self.instance_key_prefix = "ether:instance:"
         self._ttl = 60  # seconds until instance considered dead
+        self._logger = logging.getLogger("InstanceTracker")
     
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         # __new__ handles initialization
@@ -40,6 +43,7 @@ class EtherInstanceTracker:
         """Register a new Ether instance"""
         key = f"{self.instance_key_prefix}{instance_id}"
         metadata['registered_at'] = time.time()
+        metadata['pid'] = os.getpid()  # Add process ID
         self.redis.set(key, json.dumps(metadata), ex=self._ttl)
     
     def refresh_instance(self, instance_id: str) -> None:
@@ -68,3 +72,28 @@ class EtherInstanceTracker:
         keys = self.redis.keys(pattern)
         if keys:
             self.redis.delete(*keys)
+    
+    def cull_dead_processes(self) -> int:
+        """Remove instances whose processes no longer exist
+        
+        Returns:
+            Number of instances removed
+        """
+        removed = 0
+        instances = self.get_active_instances()
+        
+        for instance_id, info in instances.items():
+            pid = info.get('pid')
+            if pid is None:
+                continue
+                
+            try:
+                # Check if process exists
+                os.kill(pid, 0)
+            except OSError:
+                # Process doesn't exist
+                self._logger.info(f"Culling dead instance {instance_id} (PID {pid})")
+                self.deregister_instance(instance_id)
+                removed += 1
+                
+        return removed

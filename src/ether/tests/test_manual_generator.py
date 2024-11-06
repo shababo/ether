@@ -11,7 +11,7 @@ from ether.examples.gen_process_collect import DataGenerator
 def run_manual_generator_test():
     """Test manual generator with auto-running processor and collector"""
     tracker = EtherInstanceTracker()
-    tracker.cleanup_all()  # Ensure clean state
+
     
     # Use unique names for each test run
     run_id = uuid.uuid4().hex[:8]

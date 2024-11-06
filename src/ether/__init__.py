@@ -117,6 +117,14 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None):
             _logger.warning(f"Found {len(existing)} existing instances in Redis:")
             for instance_id, info in existing.items():
                 _logger.warning(f"  {instance_id}: {info.get('name')} ({info.get('class')})")
+        tracker.cull_dead_processes()
+        existing_after_cull = tracker.get_active_instances()
+        if existing_after_cull:
+            _logger.warning(f"Found {len(existing_after_cull)} existing instances in Redis AFTER CULL:")
+            for instance_id, info in existing.items():
+                _logger.warning(f"  {instance_id}: {info.get('name')} ({info.get('class')})")
+        elif existing:
+            _logger.info("No existing instances found after cull")
         
         # Process any pending classes
         EtherRegistry.process_pending_classes()

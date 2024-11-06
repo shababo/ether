@@ -14,6 +14,9 @@ from ._utils import _get_logger
 from ._pubsub import _EtherPubSubProxy
 from ._instance_tracker import EtherInstanceTracker
 
+# Constants
+CULL_INTERVAL = 10  # seconds between culling checks
+
 def _run_pubsub():
     """Standalone function to run PubSub proxy"""
     proxy = _EtherPubSubProxy()
@@ -26,9 +29,15 @@ def _run_monitor():
     
     while True:
         try:
+            # Cull dead processes first
+            culled = tracker.cull_dead_processes()
+            if culled:
+                logger.info(f"Culled {culled} dead instances")
+            
+            # Get remaining active instances
             instances = tracker.get_active_instances()
             logger.debug(f"Active instances: {instances}")
-            time.sleep(10)  # Check every 10 seconds
+            time.sleep(CULL_INTERVAL)  # Check every CULL_INTERVAL seconds
         except Exception as e:
             logger.error(f"Error monitoring instances: {e}")
             time.sleep(1)
