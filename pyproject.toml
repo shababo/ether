@@ -10,6 +10,7 @@ dependencies = [
     "psutil>=6.1.0",
     "sqlalchemy>=2.0.36",
     "redis>=5.2.0",
+    "pytest>=8.3.3",
 ]
 
 [build-system]

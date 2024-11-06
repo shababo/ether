@@ -10,19 +10,31 @@ class EtherInstanceTracker:
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
         self.instance_key_prefix = "ether:instance:"
-        self.ttl = 60  # seconds until instance considered dead
-        
+        self._ttl = 60  # seconds until instance considered dead
+    
+    @property
+    def ttl(self) -> int:
+        return self._ttl
+    
+    @ttl.setter
+    def ttl(self, value: int):
+        """Set TTL and update all existing instances"""
+        self._ttl = value
+        # Update TTL for all existing instances
+        for key in self.redis.keys(f"{self.instance_key_prefix}*"):
+            self.redis.expire(key, value)
+    
     def register_instance(self, instance_id: str, metadata: Dict[str, Any]) -> None:
         """Register a new Ether instance"""
         key = f"{self.instance_key_prefix}{instance_id}"
         metadata['registered_at'] = time.time()
-        self.redis.set(key, json.dumps(metadata), ex=self.ttl)
+        self.redis.set(key, json.dumps(metadata), ex=self._ttl)
     
     def refresh_instance(self, instance_id: str) -> None:
         """Refresh instance TTL"""
         key = f"{self.instance_key_prefix}{instance_id}"
         if data := self.redis.get(key):
-            self.redis.expire(key, self.ttl)
+            self.redis.expire(key, self._ttl)
     
     def deregister_instance(self, instance_id: str) -> None:
         """Remove an instance registration"""
@@ -36,4 +48,4 @@ class EtherInstanceTracker:
             if data := self.redis.get(key):
                 instance_id = key.replace(self.instance_key_prefix, "")
                 instances[instance_id] = json.loads(data)
-        return instances 
+        return instances
