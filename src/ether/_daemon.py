@@ -136,10 +136,13 @@ class _EtherDaemon:
     def shutdown(self):
         """Shutdown all services"""
         if self._pubsub_process:
+            self._logger.info("Shutting down PubSub proxy")
             self._pubsub_process.terminate()
         if self._monitor_process:
+            self._logger.info("Shutting down monitor")
             self._monitor_process.terminate()
         if self._redis_process:
+            self._logger.info("Shutting down Redis server")
             self._redis_process.terminate()
             self._redis_process.wait(timeout=5)
             if self._redis_pidfile.exists():

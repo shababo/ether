@@ -58,16 +58,8 @@ def _wait_for_redis():
             time.sleep(0.5)
     return False
 
-def _cleanup_handler(signum, frame):
-    """Handle cleanup on signals"""
-    _init_logger()
-    _logger.info(f"Received signal {signum}, cleaning up...")
-    _cleanup_all()
-    _cleanup_logger()
-    sys.exit(0)
-
-def _cleanup_all():
-    """Clean up all resources"""
+def _cleanup_handler():
+    """Combined cleanup handler for both resources and logger"""
     _init_logger()
     _logger.info("Starting cleanup...")
     
@@ -75,8 +67,11 @@ def _cleanup_all():
     stop_all_instances()
     
     # Wait for instances to finish
+    _logger.info(f"Waiting for {len(_instance_processes)} instances to finish")
     for process in _instance_processes.values():
+        _logger.info(f"Joining process {process.name}")
         process.join(timeout=5)
+        _logger.info(f"Joined process {process.name}")
         if process.is_alive():
             _logger.warning(f"Process {process.name} didn't stop gracefully, terminating")
             process.terminate()
@@ -86,6 +81,9 @@ def _cleanup_all():
     daemon_manager.shutdown()
     
     _logger.info("Cleanup complete")
+    
+    # Clean up logger last
+    _cleanup_logger()
 
 def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None):
     """Initialize the Ether messaging system."""
@@ -133,6 +131,9 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None):
         _ether_initialized = True
         _logger.info("Ether system initialized")
         
+        # Register single cleanup handler
+        atexit.register(_cleanup_handler)
+        
         # Handle configuration if provided - do this last after classes are processed
         if config is not None:
             if isinstance(config, str):
@@ -144,10 +145,6 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None):
             
             # Wait for instances to be ready
             time.sleep(1.0)
-
-            # Register cleanup on exit
-            atexit.register(_cleanup_all)
-            atexit.register(_cleanup_logger)  # Make sure logger cleanup happens last
             
             return config  # Return the config object for manual launching if needed
 
@@ -156,12 +153,33 @@ def stop_instance(instance_id: str):
     if instance_id in _instance_processes:
         process = _instance_processes[instance_id]
         _logger.info(f"Stopping instance {instance_id}")
+        
+        # Get instance info before stopping
+        tracker = EtherInstanceTracker()
+        instances = tracker.get_active_instances()
+        
+        # Find the Redis ID for this process
+        redis_id = None
+        for rid, info in instances.items():
+            if info.get('process_name') == instance_id:
+                redis_id = rid
+                break
+        
+        # Stop the process
         process.terminate()
         process.join(timeout=5)
         if process.is_alive():
             _logger.warning(f"Instance {instance_id} didn't stop gracefully, killing")
             process.kill()
             process.join(timeout=1)
+            
+        # Deregister from Redis if we found the ID
+        if redis_id:
+            _logger.info(f"Deregistering instance {instance_id} (Redis ID: {redis_id})")
+            tracker.deregister_instance(redis_id)
+        else:
+            _logger.warning(f"Could not find Redis ID for instance {instance_id}")
+            
         del _instance_processes[instance_id]
 
 def stop_all_instances():
