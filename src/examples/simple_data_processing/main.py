@@ -1,6 +1,6 @@
 import time
 
-from .generator import DataGenerator
+from examples.simple_data_processing import DataGenerator
 from ether import ether_init
 
 if __name__ == "__main__":
@@ -9,16 +9,16 @@ if __name__ == "__main__":
     config = {
         "instances": {
             "processor2x": {
-                "class_path": ".DataProcessor",
+                "class_path": "examples.simple_data_processing.processor.DataProcessor",
             },
             "processor4x": {
-                "class_path": ".DataProcessor",
+                "class_path": "examples.simple_data_processing.processor.DataProcessor",
                 "kwargs": {
                     "multiplier": 4
                 }
             },
             "collector": {
-                "class_path": ".DataCollector",
+                "class_path": "examples.simple_data_processing.collector.DataCollector",
 
             }
         }

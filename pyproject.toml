@@ -1,7 +1,7 @@
 [project]
 name = "ether"
 version = "0.1.0"
-description = "Add your description here"
+description = "Developer focused framework for building distributed data acquisition and analysis systems."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -10,8 +10,12 @@ dependencies = [
     "psutil>=6.1.0",
     "sqlalchemy>=2.0.36",
     "redis>=5.2.0",
-    "pytest>=8.3.3",
     "pyyaml>=6.0.2",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
 ]
 
 [build-system]

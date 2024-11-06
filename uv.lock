@@ -48,19 +48,23 @@ source = { editable = "." }
 dependencies = [
     { name = "psutil" },
     { name = "pydantic" },
-    { name = "pytest" },
     { name = "pyyaml" },
     { name = "pyzmq" },
     { name = "redis" },
     { name = "sqlalchemy" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "psutil", specifier = ">=6.1.0" },
     { name = "pydantic", specifier = ">=2.9.2" },
-    { name = "pytest", specifier = ">=8.3.3" },
-    { name = "pyyaml" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "pyzmq", specifier = ">=26.2.0" },
     { name = "redis", specifier = ">=5.2.0" },
     { name = "sqlalchemy", specifier = ">=2.0.36" },

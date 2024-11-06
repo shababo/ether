@@ -2,6 +2,9 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
+*.pyo
+*.pyd
 
 # C extensions
 *.so
@@ -164,3 +167,7 @@ cython_debug/
 # redis
 redis-server.conf
 *.rdb
+
+# UV
+.venv/
+uv.lock
