@@ -6,11 +6,23 @@ import uuid
 
 class EtherInstanceTracker:
     """Tracks Ether instances using Redis"""
+    _instance = None
     
-    def __init__(self, redis_url: str = "redis://localhost:6379"):
+    def __new__(cls, redis_url: str = "redis://localhost:6379"):
+        if cls._instance is None:
+            cls._instance = super(EtherInstanceTracker, cls).__new__(cls)
+            cls._instance._init(redis_url)
+        return cls._instance
+    
+    def _init(self, redis_url: str):
+        """Initialize the instance (only called once)"""
         self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
         self.instance_key_prefix = "ether:instance:"
         self._ttl = 60  # seconds until instance considered dead
+    
+    def __init__(self, redis_url: str = "redis://localhost:6379"):
+        # __new__ handles initialization
+        pass
     
     @property
     def ttl(self) -> int:

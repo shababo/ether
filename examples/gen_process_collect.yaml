@@ -1,14 +1,14 @@
 instances:
-  - class_path: ether.examples.gen_process_collect.DataGenerator
-    args: [1]  # process_id
-    kwargs:
-      name: generator1
-  
-  - class_path: ether.examples.gen_process_collect.DataProcessor
+  generator1:
+    class_path: ether.examples.gen_process_collect.DataGenerator
     args: [1]
-    kwargs:
-      name: processor1
+    autorun: true
   
-  - class_path: ether.examples.gen_process_collect.DataCollector
-    kwargs:
-      name: collector1 
+  processor1:
+    class_path: ether.examples.gen_process_collect.DataProcessor
+    args: [1]
+    autorun: true
+  
+  collector1:
+    class_path: ether.examples.gen_process_collect.DataCollector
+    autorun: false  # Manual launch required 

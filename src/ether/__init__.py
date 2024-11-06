@@ -39,8 +39,9 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None):
             elif isinstance(config, dict):
                 config = EtherConfig.model_validate(config)
             
-            # Launch configured instances
             _instance_processes = config.launch_instances()
+            
+            return config  # Return the config object for manual launching if needed
 
 def stop_instance(instance_id: str):
     """Stop a specific instance"""

@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union
 from pydantic import BaseModel
 import yaml
 import importlib
@@ -6,11 +6,14 @@ from multiprocessing import Process
 import uuid
 
 from ._ether import EtherRegistry
+from ._instance_tracker import EtherInstanceTracker
+
 class EtherInstanceConfig(BaseModel):
     """Configuration for a single Ether instance"""
     class_path: str  # format: "module.submodule.ClassName"
-    args: List[Any] = []
+    args: list[Any] = []
     kwargs: Dict[str, Any] = {}
+    autorun: bool = True  # Whether to automatically launch this instance
     
     def get_class(self):
         """Get and ensure the class is processed"""
@@ -24,15 +27,19 @@ class EtherInstanceConfig(BaseModel):
             
         return cls
     
-    def run(self):
+    def run(self, instance_name: str):
         """Run a single instance with the configured args and kwargs"""
         cls = self.get_class()
-        instance = cls(*self.args, **self.kwargs)
+        kwargs = self.kwargs.copy()
+        # Override name if not explicitly set in kwargs
+        if 'name' not in kwargs:
+            kwargs['name'] = instance_name
+        instance = cls(*self.args, **kwargs)
         instance.run()
 
 class EtherConfig(BaseModel):
     """Complete Ether configuration"""
-    instances: List[EtherInstanceConfig]
+    instances: Dict[str, EtherInstanceConfig]  # name -> config
     
     @classmethod
     def from_yaml(cls, path: str) -> "EtherConfig":
@@ -41,22 +48,36 @@ class EtherConfig(BaseModel):
             data = yaml.safe_load(f)
         return cls.model_validate(data)
     
-    def launch_instances(self) -> Dict[str, Process]:
-        """Launch all configured instances in separate processes"""
-        processes = {}
+    def launch_instances(self, only_autorun: bool = True) -> Dict[str, Process]:
+        """Launch configured instances
         
-        for instance_config in self.instances:
-            # Generate instance ID
-            class_name = instance_config.class_path.split('.')[-1]
-            instance_id = f"{class_name}_{uuid.uuid4().hex[:8]}"
+        Args:
+            only_autorun: If True, only launch instances with autorun=True
+        """
+        processes = {}
+        tracker = EtherInstanceTracker()
+        current_instances = tracker.get_active_instances()
+        
+        for instance_name, instance_config in self.instances.items():
+            if only_autorun and not instance_config.autorun:
+                continue
+            
+            # Check if instance is already running by process name
+            already_running = any(
+                info.get('process_name') == instance_name 
+                for info in current_instances.values()
+            )
+            if already_running:
+                continue
             
             # Create and start process
             process = Process(
                 target=instance_config.run,
-                name=instance_id
+                args=(instance_name,),
+                name=instance_name
             )
             process.daemon = True
             process.start()
-            processes[instance_id] = process
+            processes[instance_name] = process
         
         return processes

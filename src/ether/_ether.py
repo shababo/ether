@@ -87,6 +87,7 @@ def add_ether_functionality(cls):
         self._instance_tracker = EtherInstanceTracker()
         self._instance_tracker.register_instance(self.id, {
             'name': self.name,
+            'process_name': name,
             'class': self.__class__.__name__,
             'pub_topics': [m._pub_metadata.topic for m in self._ether_methods_info.values() 
                           if hasattr(m, '_pub_metadata')],
