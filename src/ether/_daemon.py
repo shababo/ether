@@ -52,6 +52,13 @@ class _EtherDaemon:
         self._redis_port = 6379
         self._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
         self._pubsub_process = None
+        self._monitor_process = None
+        self._started = False
+    
+    def start(self):
+        """Start all daemon services"""
+        if self._started:
+            return
         
         # Start services
         self._ensure_redis_running()
@@ -61,6 +68,8 @@ class _EtherDaemon:
         self._monitor_process = Process(target=_run_monitor)
         self._monitor_process.daemon = True
         self._monitor_process.start()
+        
+        self._started = True
     
     def _ensure_redis_running(self):
         """Ensure Redis server is running, start if not"""
@@ -123,7 +132,7 @@ class _EtherDaemon:
             if self._redis_pidfile.exists():
                 self._redis_pidfile.unlink()
 
-# Create singleton instance
+# Create singleton instance but don't start it
 daemon_manager = _EtherDaemon()
 
 # Register cleanup

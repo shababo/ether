@@ -226,9 +226,11 @@ def add_ether_functionality(cls):
             else:
                 self._logger.debug(f"Received message for unknown topic: {topic}")
 
-    def _ether_run(cls):
-        cls_instance = cls()
-        cls_instance.run()
+    # @staticmethod
+    # def _ether_run(*args, **kwargs):
+    #     """Run an instance of this class with the given args and kwargs"""
+    #     instance = cls(*args, **kwargs)
+    #     instance.run()
     
     # Add run method
     def run(self):
@@ -269,7 +271,7 @@ def add_ether_functionality(cls):
     cls.run = run
     cls.cleanup = cleanup
     cls.receive_single_message = receive_single_message
-    cls._ether_run = classmethod(_ether_run)
+    # cls._ether_run = _ether_run
 
     
     # Modify __init__ to initialize attributes
