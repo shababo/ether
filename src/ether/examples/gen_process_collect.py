@@ -45,6 +45,10 @@ if __name__ == "__main__":
             f"collector": {
                 "class_path": "ether.examples.gen_process_collect.DataCollector",
 
+            },
+            f"collector2": {
+                "class_path": "ether.examples.gen_process_collect.DataCollector",
+
             }
         }
     }

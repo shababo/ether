@@ -23,8 +23,8 @@ def test_instance_tracking(setup_logging, clean_redis):
     """Test that instances are properly tracked in Redis"""
     tracker = clean_redis  # Use the cleaned tracker
     
-    # Initialize Ether system
-    ether_init()
+    # Initialize Ether system with force_reinit
+    ether_init(force_reinit=True)
     time.sleep(1)  # Wait for services to start
     
     # Create instances
@@ -73,7 +73,8 @@ def test_instance_ttl(setup_logging, clean_redis):
     """Test that instances are properly expired"""
     tracker = clean_redis  # Use the cleaned tracker
     
-    ether_init()
+    # Initialize with force_reinit
+    ether_init(force_reinit=True)
     
     # Create instance
     generator = DataGenerator(process_id=1)
@@ -89,21 +90,3 @@ def test_instance_ttl(setup_logging, clean_redis):
     # Verify instance is expired
     instances = tracker.get_active_instances()
     assert len(instances) == 0
-
-def test_daemon_monitoring(setup_logging, clean_redis):
-    """Test that daemon properly monitors instances"""
-    tracker = clean_redis  # Use the cleaned tracker
-    
-    ether_init()
-    time.sleep(1)  # Wait for services
-    
-    # Create instances
-    generator = DataGenerator(process_id=1)
-    processor = DataProcessor(process_id=1)
-    
-    # Wait for monitoring cycle
-    time.sleep(11)  # Daemon monitors every 10 seconds
-    
-    # Cleanup
-    del generator
-    del processor

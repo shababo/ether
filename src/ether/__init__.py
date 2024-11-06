@@ -63,31 +63,45 @@ def _cleanup_handler():
     _init_logger()
     _logger.info("Starting cleanup...")
     
-    # Stop all instances
-    stop_all_instances()
-    
-    # Wait for instances to finish
-    _logger.info(f"Waiting for {len(_instance_processes)} instances to finish")
-    for process in _instance_processes.values():
-        _logger.info(f"Joining process {process.name}")
-        process.join(timeout=5)
-        _logger.info(f"Joined process {process.name}")
-        if process.is_alive():
-            _logger.warning(f"Process {process.name} didn't stop gracefully, terminating")
-            process.terminate()
-            process.join(timeout=1)
-    
-    # Shutdown daemon services
-    daemon_manager.shutdown()
-    
-    _logger.info("Cleanup complete")
-    
-    # Clean up logger last
-    _cleanup_logger()
+    try:
+        # Stop all instances
+        stop_all_instances()
+        
+        # Wait for instances to finish
+        _logger.info(f"Waiting for {len(_instance_processes)} instances to finish")
+        for process in _instance_processes.values():
+            _logger.info(f"Joining process {process.name}")
+            process.join(timeout=5)
+            _logger.info(f"Joined process {process.name}")
+            if process.is_alive():
+                _logger.warning(f"Process {process.name} didn't stop gracefully, terminating")
+                process.terminate()
+                process.join(timeout=1)
+        
+        # Shutdown daemon services
+        daemon_manager.shutdown()
+        
+        _logger.info("Cleanup complete")
+    finally:
+        # Clean up logger last
+        _cleanup_logger()
 
-def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None):
-    """Initialize the Ether messaging system."""
+def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None, force_reinit: bool = False):
+    """Initialize the Ether messaging system.
+    
+    Args:
+        config: Optional configuration for instances
+        force_reinit: If True, will cleanup and reinitialize even if already initialized
+    """
     global _ether_initialized, _instance_processes
+    
+    if _ether_initialized and force_reinit:
+        # Clean up existing system
+        _init_logger()
+        _logger.info("Force reinitializing Ether system...")
+        _cleanup_handler()
+        _ether_initialized = False
+        
     if not _ether_initialized:
         # Initialize logger
         _init_logger()
