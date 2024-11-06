@@ -21,7 +21,7 @@ def _run_pubsub():
 
 def _run_monitor():
     """Standalone function to run instance monitoring"""
-    logger = _get_logger("EtherMonitor")
+    logger = _get_logger("EtherMonitor", log_level=logging.INFO)
     tracker = EtherInstanceTracker()
     
     while True:
@@ -47,7 +47,7 @@ class _EtherDaemon:
             return
         
         self._initialized = True
-        self._logger = _get_logger("EtherDaemon")
+        self._logger = _get_logger("EtherDaemon", log_level=logging.INFO)
         self._redis_process = None
         self._redis_port = 6379
         self._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'

@@ -62,7 +62,11 @@ def add_ether_functionality(cls):
     def init_ether_vars(self, name=None, log_level=logging.INFO):
         self.id = str(uuid.uuid4())
         self.name = name or self.id
-        self._logger = logging.getLogger(f"{self.__class__.__name__}:{self.name}")
+        self._logger = _get_logger(
+            process_name=self.__class__.__name__,
+            instance_name=self.name,
+            log_level=log_level
+        )
         self._sub_address = f"tcp://localhost:{_ETHER_SUB_PORT}"
         self._pub_address = f"tcp://localhost:{_ETHER_PUB_PORT}"
         

@@ -26,7 +26,7 @@ class _EtherPubSubProxy:
         """Setup XPUB/XSUB sockets with optimized settings"""
         self.id = uuid.uuid4()
         self.name = f"EtherPubSubProxy_{self.id}"
-        self._logger = _get_logger("Proxy")
+        self._logger = _get_logger("Proxy", log_level=logging.INFO)
 
         self._zmq_context = zmq.Context()
         
