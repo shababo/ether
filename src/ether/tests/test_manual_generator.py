@@ -28,7 +28,7 @@ def run_manual_generator_test():
                 "class_path": "ether.examples.gen_process_collect.DataCollector",
                 "autorun": True,
                 "kwargs": {
-                    "log_level": logging.DEBUG,
+                    # "log_level": logging.DEBUG,
                     "name": f"collector_{run_id}"  # Explicit name for logging
                 }
             }
@@ -51,13 +51,10 @@ def run_manual_generator_test():
     time.sleep(0.5)  # Wait for connections
     
     # Generate data twice
-    generator.generate_data()
+    generator.generate_data(data=42)
     time.sleep(0.1)
-    generator.generate_data()
+    generator.generate_data(data=43)
     
-    time.sleep(1.0)
-    # Optional cleanup
-    # del generator
 
 def test_manual_generator():
     """Test manual generator operation"""

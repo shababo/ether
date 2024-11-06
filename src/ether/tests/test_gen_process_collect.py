@@ -56,7 +56,7 @@ def test_instance_tracking(setup_logging, clean_redis):
     assert not coll_metadata.get('pub_topics')
     
     # Test message flow
-    generator.generate_data(count=42)
+    generator.generate_data(data=42)
     time.sleep(0.5)  # Allow time for message processing
     
     # Cleanup
