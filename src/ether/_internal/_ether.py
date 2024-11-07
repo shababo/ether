@@ -11,6 +11,7 @@ import zmq
 from typing import Union, Dict
 from pydantic import BaseModel
 import json
+import signal
 
 from ._utils import _ETHER_PUB_PORT, _get_logger
 from ._pubsub import _EtherPubSubProxy
@@ -25,6 +26,17 @@ CULL_INTERVAL = 10  # seconds between culling checks
 def _run_pubsub():
     """Standalone function to run PubSub proxy"""
     proxy = _EtherPubSubProxy()
+    
+    def handle_stop(signum, frame):
+        """Handle stop signal by cleaning up proxy"""
+        proxy._logger.debug("Received stop signal, shutting down proxy...")
+        proxy.cleanup()
+        os._exit(0)  # Exit cleanly
+    
+    # Register signal handlers
+    signal.signal(signal.SIGTERM, handle_stop)
+    signal.signal(signal.SIGINT, handle_stop)
+    
     proxy.run()
 
 def _run_monitor():
@@ -230,11 +242,11 @@ class _Ether:
 
     def shutdown(self):
         """Shutdown all services"""
-
         try:
             # stop all instances
             if self._instance_manager:
                 self._instance_manager.stop_all_instances()
+            
             # close publishing socket and context
             if self._pub_socket:
                 self._pub_socket.close()
@@ -242,21 +254,42 @@ class _Ether:
             if self._zmq_context:
                 self._zmq_context.term()
                 self._zmq_context = None
+                
             # Terminate pubsub proxy process
             if self._pubsub_process:
                 self._logger.debug("Shutting down PubSub proxy")
-                self._pubsub_process.terminate()
+                self._pubsub_process.terminate()  # This will trigger SIGTERM
+                self._pubsub_process.join(timeout=2)
+                if self._pubsub_process.is_alive():
+                    self._logger.warning("PubSub proxy didn't stop gracefully, killing")
+                    self._pubsub_process.kill()
+                    self._pubsub_process.join(timeout=1)
+                self._pubsub_process = None
+                
             # Terminate instance monitoring process
             if self._monitor_process:
                 self._logger.debug("Shutting down monitor")
                 self._monitor_process.terminate()
+                self._monitor_process.join(timeout=2)
+                if self._monitor_process.is_alive():
+                    self._monitor_process.kill()
+                    self._monitor_process.join(timeout=1)
+                self._monitor_process = None
+                
             # Terminate Redis server
             if self._redis_process:
                 self._logger.debug("Shutting down Redis server")
                 self._redis_process.terminate()
                 self._redis_process.wait(timeout=5)
+                if self._redis_process.is_alive():
+                    self._redis_process.kill()
+                    self._redis_process.wait(timeout=1)
                 if self._redis_pidfile.exists():
                     self._redis_pidfile.unlink()
+                self._redis_process = None
+                
+            self._started = False
+            
         except Exception as e:
             self._logger.error(f"Error shutting down services: {e}")
         finally:

@@ -264,10 +264,10 @@ def main():
     root.setLevel(logging.INFO)
     
     # Benchmark parameters
-    message_sizes = [1000, 10000]
-    message_counts = [1000]#, 5000, 100000]
-    subscriber_counts = [2]#, 4, 8]
-    publisher_counts = [2]#, 4, 8]
+    message_sizes = [100, 1000, 1000]
+    message_counts = [10, 1000, 100000]
+    subscriber_counts = [2, 4, 8]
+    publisher_counts = [2, 4, 8]
     
     print("\nRunning Ether Benchmark...")
     print("Pubs/Subs | Msg Size | Msg Count | Messages/sec | Latency (ms) | Loss % | Sent/Expected | Received/Expected | Memory (MB)")
