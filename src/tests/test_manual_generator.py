@@ -28,7 +28,7 @@ def run_manual_generator_test():
                 "class_path": "examples.simple_data_processing.DataCollector",
                 "autorun": True,
                 "kwargs": {
-                    # "log_level": logging.DEBUG,
+                    # "log_level": logging.INFO,
                     "name": f"collector_{run_id}"  # Explicit name for logging
                 }
             }

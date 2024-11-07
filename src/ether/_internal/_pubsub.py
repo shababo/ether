@@ -17,8 +17,8 @@ class _EtherPubSubProxy:
     as messages, allowing for proper subscription forwarding.
     """
     def __init__(self):
-        self.frontend = None
-        self.backend = None
+        self.capture_socket = None
+        self.broadcast_socket = None
         self._running = False
         self.setup_sockets()
 
@@ -31,29 +31,29 @@ class _EtherPubSubProxy:
         self._zmq_context = zmq.Context()
         
         # Use standard ports
-        self.frontend = self._zmq_context.socket(zmq.XSUB)
-        self.frontend.bind(f"tcp://*:{_ETHER_PUB_PORT}")
-        self.frontend.setsockopt(zmq.RCVHWM, 1000000)
-        self.frontend.setsockopt(zmq.RCVBUF, 65536)
+        self.capture_socket = self._zmq_context.socket(zmq.XSUB)
+        self.capture_socket.bind(f"tcp://*:{_ETHER_PUB_PORT}")
+        self.capture_socket.setsockopt(zmq.RCVHWM, 1000000)
+        self.capture_socket.setsockopt(zmq.RCVBUF, 65536)
         
-        self.backend = self._zmq_context.socket(zmq.XPUB)
-        self.backend.bind(f"tcp://*:{_ETHER_SUB_PORT}")
-        self.backend.setsockopt(zmq.SNDHWM, 1000000)
-        self.backend.setsockopt(zmq.SNDBUF, 65536)
-        self.backend.setsockopt(zmq.XPUB_VERBOSE, 1)
+        self.broadcast_socket = self._zmq_context.socket(zmq.XPUB)
+        self.broadcast_socket.bind(f"tcp://*:{_ETHER_SUB_PORT}")
+        self.broadcast_socket.setsockopt(zmq.SNDHWM, 1000000)
+        self.broadcast_socket.setsockopt(zmq.SNDBUF, 65536)
+        self.broadcast_socket.setsockopt(zmq.XPUB_VERBOSE, 1)
         
         # Set TCP keepalive options
-        # for socket in [self.frontend, self.backend]:
-        #     # socket.setsockopt(zmq.LINGER, 0)
-        #     socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
-        #     socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 300)
+        for socket in [self.capture_socket, self.broadcast_socket]:
+            socket.setsockopt(zmq.LINGER, 0)
+            socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+            socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 300)
 
         # Create poller to monitor both sockets
         self._poller = zmq.Poller()
-        self._poller.register(self.frontend, zmq.POLLIN)
-        self._poller.register(self.backend, zmq.POLLIN)
+        self._poller.register(self.capture_socket, zmq.POLLIN)
+        self._poller.register(self.broadcast_socket, zmq.POLLIN)
         
-        self._logger.debug(f"Starting proxy with {self.frontend} and {self.backend}")
+        self._logger.debug(f"Starting proxy with {self.capture_socket} and {self.broadcast_socket}")
     
     def run(self):
         """Run the proxy with graceful shutdown support"""
@@ -64,17 +64,17 @@ class _EtherPubSubProxy:
                 try:
                     events = dict(self._poller.poll(timeout=100))  # 100ms timeout
                     
-                    if self.frontend in events:
-                        message = self.frontend.recv_multipart()
-                        self._logger.debug(f"Proxy forwarding from frontend: {len(message)} parts")
-                        self._logger.debug(f"Message: {message}")
-                        self.backend.send_multipart(message)
+                    if self.capture_socket in events:
+                        message = self.capture_socket.recv_multipart()
+                        self._logger.debug(f"Proxy forwarding from capture_socket: {len(message)} parts")
+                        self._logger.debug(f"Topic: {message[0]}")
+                        self.broadcast_socket.send_multipart(message)
                     
-                    if self.backend in events:
-                        message = self.backend.recv_multipart()
-                        self._logger.debug(f"Proxy forwarding from backend: {len(message)} parts")
-                        self._logger.debug(f"Message: {message}")
-                        self.frontend.send_multipart(message)
+                    if self.broadcast_socket in events:
+                        message = self.broadcast_socket.recv_multipart()
+                        self._logger.debug(f"Proxy forwarding from broadcast_socket: {len(message)} parts")
+                        self._logger.debug(f"Topic: {message[0]}")
+                        self.capture_socket.send_multipart(message)
                         
                 except zmq.ZMQError as e:
                     if e.errno == zmq.EAGAIN:  # Timeout, just continue
@@ -90,10 +90,10 @@ class _EtherPubSubProxy:
 
     def cleanup(self):
         self._running = False
-        if self.frontend:
-            self.frontend.close()
-        if self.backend:
-            self.backend.close()
+        if self.capture_socket:
+            self.capture_socket.close()
+        if self.broadcast_socket:
+            self.broadcast_socket.close()
         if self._zmq_context:
             self._zmq_context.term()
 

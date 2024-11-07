@@ -25,7 +25,7 @@ class EtherRegistry:
     
     @classmethod
     def process_pending_classes(cls):
-        logger = _get_logger("EtherRegistry", log_level=logging.DEBUG)
+        logger = _get_logger("EtherRegistry", log_level=logging.INFO)
         logger.debug("Processing pending classes...")
         
         for qualname, module_name in cls._pending_classes.items():
@@ -202,35 +202,30 @@ def add_ether_functionality(cls):
             json.dump(results, f)
 
     def receive_single_message(self, timeout=1000):
-        if self._sub_socket and self._sub_socket.poll():
-            topic = self._sub_socket.recv_string()
-            self._logger.debug(f"Received raw topic: {topic}")
-            # self._logger.debug(f"Known topics: {self._sub_topics}")
-            # self._logger.debug(f"Known metadata: {self._sub_metadata}")
-            
-            data = self._sub_socket.recv_json()
-            # self._logger.debug(f"Received data: {data}")
-            
-            if topic in self._sub_topics:
-                # self._logger.debug(f"Found topic match: {topic}")
-                metadata = self._sub_metadata.get(topic)
-                if not metadata:
-                    self._logger.debug(f"No metadata found for topic: {topic}")
-                    return
-                # self._logger.debug(f"Found metadata: {metadata}")
-                if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
-                    args = {'root': metadata.args_model(data).root}
-                else:
-                    try:
-                        model_instance = metadata.args_model(**data)
-                        args = model_instance.model_dump()
-                    except Exception as e:
-                        self._logger.debug(f"Error processing data: {e}")
-                        raise
+        if self._sub_socket and self._sub_socket.poll(timeout=timeout):
+            try:
+                # Receive multipart message
+                message = self._sub_socket.recv_multipart()
+                topic = message[0].decode()
+                data = json.loads(message[1].decode())
                 
-                metadata.func(self, **args)
-            else:
-                self._logger.debug(f"Received message for unknown topic: {topic}")
+                self._logger.debug(f"Received message: topic={topic}, data={data}")
+                
+                if topic in self._sub_topics:
+                    metadata = self._sub_metadata.get(topic)
+                    if metadata:
+                        if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
+                            args = {'root': metadata.args_model(data).root}
+                        else:
+                            try:
+                                model_instance = metadata.args_model(**data)
+                                args = model_instance.model_dump()
+                                metadata.func(self, **args)
+                            except Exception as e:
+                                self._logger.error(f"Error processing message: {e}")
+                                raise
+            except Exception as e:
+                self._logger.error(f"Error receiving message: {e}")
 
     
     # Add run method

@@ -8,7 +8,7 @@ from ether._instance_tracker import EtherInstanceLiaison
 
 @pytest.fixture
 def setup_logging():
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     yield
 
 @pytest.fixture

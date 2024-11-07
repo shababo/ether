@@ -49,6 +49,7 @@ class BenchmarkPublisher:
         self.message["sequence"] = self.message_count
         
         self.message_count += 1
+        self._logger.debug(f"Publishing message: {self.message}")
         return self.message
 
 class BenchmarkSubscriber:
@@ -56,42 +57,53 @@ class BenchmarkSubscriber:
     def __init__(self, results_dir: str = None, subscriber_id: int = 0):
         self.subscriber_id = subscriber_id
         self.results_file = None
-        self.received_messages = []
+        self.received_messages = set()
         self.latencies = []
         self.publishers = {}
+        self.first_message_time = None
+        self.last_message_time = None
         
         # Set results file if directory provided
         if results_dir:
             self.results_file = os.path.join(results_dir, f"subscriber_{subscriber_id}.json")
-            # Only log after instance is properly initialized with _logger
-            if hasattr(self, '_logger'):
-                self._logger.debug(f"Results file set to: {self.results_file}")
     
     @ether_sub()
     def receive_message(self, data: str, timestamp: float, message_id: int, 
                        publisher_id: str, sequence: int):
         """Track received message statistics"""
-        now = time.time()
-        latency = (now - timestamp) * 1000  # Convert to ms
-        self.latencies.append(latency)
-        self.received_messages.append((publisher_id, sequence))
-        
-        if publisher_id not in self.publishers:
-            self.publishers[publisher_id] = {
-                "sequences": set(),
-                "gaps": [],
-                "last_sequence": None
-            }
-        
-        pub_stats = self.publishers[publisher_id]
-        if pub_stats["last_sequence"] is not None:
-            expected = pub_stats["last_sequence"] + 1
-            if sequence > expected:
-                gap = sequence - expected
-                pub_stats["gaps"].append((expected, sequence, gap))
-        
-        pub_stats["last_sequence"] = sequence
-        pub_stats["sequences"].add(sequence)
+        try:
+            now = time.time()
+            latency = (now - timestamp) * 1000  # Convert to ms
+            self.latencies.append(latency)
+            self.received_messages.add((publisher_id, sequence))
+            
+            if publisher_id not in self.publishers:
+                self.publishers[publisher_id] = {
+                    "sequences": set(),
+                    "gaps": [],
+                    "last_sequence": None,
+                    "first_time": now
+                }
+            
+            pub_stats = self.publishers[publisher_id]
+            if pub_stats["last_sequence"] is not None:
+                expected = pub_stats["last_sequence"] + 1
+                if sequence > expected:
+                    gap = sequence - expected
+                    pub_stats["gaps"].append((expected, sequence, gap))
+            
+            pub_stats["last_sequence"] = sequence
+            pub_stats["sequences"].add(sequence)
+            
+            # Track message timing
+            if self.first_message_time is None:
+                self.first_message_time = now
+            self.last_message_time = now
+            
+            # Save results after each message
+            # self.save_results()
+        except Exception as e:
+            self._logger.error(f"Error processing message: {e}", exc_info=True)
     
     @ether_save()
     def save_results(self):
@@ -102,7 +114,7 @@ class BenchmarkSubscriber:
             
         results = {
             "latencies": self.latencies,
-            "received_messages": self.received_messages,
+            "received_messages": list(self.received_messages),
             "publishers": {
                 pid: {
                     "sequences": list(stats["sequences"]),
@@ -113,7 +125,7 @@ class BenchmarkSubscriber:
             }
         }
         
-        self._logger.info(f"Saving results to {self.results_file}")
+        self._logger.debug(f"Saving results to {self.results_file}")
         with open(self.results_file, 'w') as f:
             json.dump(results, f)
 
@@ -184,13 +196,18 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
                 total_messages_sent += 1
                 time.sleep(message_interval)
         
+        # Give time for last messages to be processed
+        time.sleep(0.5)
+        
+        # Save results and wait for save to complete
         ether.save()
-
+        time.sleep(0.5)  # Wait for save message to be processed
+        
         end_time = time.time()
         duration = end_time - start_time
         
         # Allow time for final messages to be processed
-        time.sleep(1.0)
+        time.sleep(1.0)  # Reduced from 10.0 as we only need a short wait here
         
         # Collect and process results
         all_latencies = []
@@ -248,7 +265,7 @@ def main():
     
     # Benchmark parameters
     message_sizes = [1000, 10000]
-    message_counts = [2]#, 5000, 100000]
+    message_counts = [1000]#, 5000, 100000]
     subscriber_counts = [2]#, 4, 8]
     publisher_counts = [2]#, 4, 8]
     

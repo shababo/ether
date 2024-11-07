@@ -16,7 +16,7 @@ class _EtherInstanceManager:
             autolaunch: bool = True
         ):
         self._instance_processes: Dict[str, Process] = {}
-        self._logger = _get_logger("EtherInstanceManager", log_level=logging.DEBUG)
+        self._logger = _get_logger("EtherInstanceManager", log_level=logging.INFO)
         self._liaison = EtherInstanceLiaison()
         self._config = config
         self._autolaunch = autolaunch

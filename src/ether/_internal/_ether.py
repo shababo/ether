@@ -1,12 +1,10 @@
 # Modify existing _proxy.py to include daemon functionality
 import subprocess
-import socket
 import time
 from pathlib import Path
 import tempfile
 import redis
 import os
-import atexit
 import logging
 from multiprocessing import Process
 import zmq
@@ -14,7 +12,7 @@ from typing import Union, Dict
 from pydantic import BaseModel
 import json
 
-from ._utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, _get_logger
+from ._utils import _ETHER_PUB_PORT, _get_logger
 from ._pubsub import _EtherPubSubProxy
 from ._instances._liaison import EtherInstanceLiaison 
 from ._instances._manager import _EtherInstanceManager
@@ -73,8 +71,8 @@ class _Ether:
         self._started = False
         
         # Add ZMQ publishing setup
-        
         self._pub_socket = None
+        self._zmq_context = None
     
     def _setup_publisher(self):
         """Set up the ZMQ publisher socket"""
@@ -103,7 +101,7 @@ class _Ether:
             json_data = json.dumps(data)
         else:
             raise TypeError("Data must be a dict or Pydantic model")
-            
+        
         # Publish message
         self._pub_socket.send_multipart([
             topic.encode(),
@@ -138,6 +136,8 @@ class _Ether:
 
         if config:
             self._start_instances(config)
+
+        self._setup_publisher()
         
         self._started = True
     

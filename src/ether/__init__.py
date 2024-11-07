@@ -64,7 +64,7 @@ class Ether:
             # Register single cleanup handler
             atexit.register(_ether.shutdown)
 
-def _init_logger(log_level: int = logging.DEBUG):
+def _init_logger(log_level: int = logging.INFO):
     """Initialize logger with proper cleanup"""
     global _logger
     if _logger is None:
