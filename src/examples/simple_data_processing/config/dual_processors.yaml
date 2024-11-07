@@ -1,14 +1,9 @@
-instances:
-  generator1:
-    class_path: ether.examples.gen_process_collect.DataGenerator
-    args: [1]
-    autorun: true
-  
-  processor1:
-    class_path: ether.examples.gen_process_collect.DataProcessor
-    args: [1]
-    autorun: true
-  
+instances:  
+  processor2x:
+    class_path: examples.simple_data_processing.DataProcessor
+  processor4x:
+    class_path: examples.simple_data_processing.DataProcessor
+    kwargs:
+      multiplier: 4
   collector1:
-    class_path: ether.examples.gen_process_collect.DataCollector
-    autorun: false  # Manual launch required 
+    class_path: examples.simple_data_processing.DataCollector

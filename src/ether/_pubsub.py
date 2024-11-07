@@ -43,10 +43,10 @@ class _EtherPubSubProxy:
         self.backend.setsockopt(zmq.XPUB_VERBOSE, 1)
         
         # Set TCP keepalive options
-        for socket in [self.frontend, self.backend]:
-            socket.setsockopt(zmq.LINGER, 0)
-            socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
-            socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 300)
+        # for socket in [self.frontend, self.backend]:
+        #     # socket.setsockopt(zmq.LINGER, 0)
+        #     socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+        #     socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 300)
 
         # Create poller to monitor both sockets
         self._poller = zmq.Poller()

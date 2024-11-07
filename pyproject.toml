@@ -11,6 +11,7 @@ dependencies = [
     "sqlalchemy>=2.0.36",
     "redis>=5.2.0",
     "pyyaml>=6.0.2",
+    "argparse>=1.4.0",
 ]
 
 [project.optional-dependencies]

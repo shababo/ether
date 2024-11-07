@@ -41,7 +41,7 @@ def test_instance_tracking(setup_logging, clean_redis):
     assert len(generator_instances) == 1
     gen_metadata = generator_instances[0]
     assert gen_metadata['pub_topics'] == ['DataProcessor.process_data']
-    assert not gen_metadata.get('sub_topics')
+    assert gen_metadata['sub_topics'] == ['DataGenerator.generate_data']
     
     processor_instances = [i for i in instances.values() if i['class'] == 'DataProcessor']
     assert len(processor_instances) == 1
