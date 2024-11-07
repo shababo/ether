@@ -7,10 +7,10 @@ from multiprocessing import Process
 import signal
 import sys
 from pydantic import BaseModel
-from ._decorators import ether_pub, ether_sub, ether_save, ether_cleanup
-from ._utils import _get_logger
-from ._ether import _ether
-from ._config import EtherConfig
+from .decorators import ether_pub, ether_sub, ether_save, ether_cleanup
+from ._internal._utils import _get_logger
+from ._internal._ether import _ether
+from ._internal._config import EtherConfig
 import atexit
 
 # _ether_initialized = False
