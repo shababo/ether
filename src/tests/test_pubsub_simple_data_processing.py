@@ -4,7 +4,7 @@ import logging
 from ether import ether_init
 from examples.simple_data_processing import DataGenerator, DataProcessor, DataCollector
 from ether._daemon import daemon_manager
-from ether._instance_tracker import EtherInstanceTracker
+from ether._instance_tracker import EtherInstanceLiaison
 
 @pytest.fixture
 def setup_logging():
@@ -14,10 +14,10 @@ def setup_logging():
 @pytest.fixture
 def clean_redis():
     """Clean up Redis before and after each test"""
-    tracker = EtherInstanceTracker()
-    tracker.cleanup_all()
+    tracker = EtherInstanceLiaison()
+    tracker.deregister_all()
     yield tracker
-    tracker.cleanup_all()
+    tracker.deregister_all()
 
 def test_instance_tracking(setup_logging, clean_redis):
     """Test that instances are properly tracked in Redis"""

@@ -9,11 +9,13 @@ import os
 import atexit
 import logging
 from multiprocessing import Process
+import zmq
 
 from ._utils import _get_logger
 from ._pubsub import _EtherPubSubProxy
 from ._instance_tracker import EtherInstanceLiaison
-
+from ._decorators import ether_cleanup
+from ._ether import EtherRegistry
 # Constants
 CULL_INTERVAL = 10  # seconds between culling checks
 
@@ -70,8 +72,10 @@ class _EtherDaemon:
             return
         
         # Start services
-        self._ensure_redis_running()
-        self._ensure_pubsub_running()
+        if not self._ensure_redis_running():
+            raise RuntimeError("Redis server failed to start")
+        if not self._ensure_pubsub_running():
+            raise RuntimeError("PubSub proxy failed to start")
         
         # Start monitoring in separate process
         self._monitor_process = Process(target=_run_monitor)
@@ -80,32 +84,54 @@ class _EtherDaemon:
         
         self._started = True
     
-    def _ensure_redis_running(self):
+    def _ensure_redis_running(self) -> bool:
         """Ensure Redis server is running, start if not"""
         if self._redis_pidfile.exists():
             with open(self._redis_pidfile) as f:
                 pid = int(f.read().strip())
             try:
                 os.kill(pid, 0)
-                self._test_redis_connection()
-                return
+                return self._test_redis_connection()
             except (OSError, redis.ConnectionError):
                 self._redis_pidfile.unlink()
         
         self._start_redis_server()
+        return self._test_redis_connection()
     
-    def _ensure_pubsub_running(self):
+    def _ensure_pubsub_running(self) -> bool:
         """Ensure PubSub proxy is running"""
+        # Clean up any existing ZMQ contexts
+        zmq.Context.instance().term()
         if self._pubsub_process is None:
             self._pubsub_process = Process(target=_run_pubsub)
             self._pubsub_process.daemon = True
             self._pubsub_process.start()
+
+        return self._test_pubsub_connection()
+
     
-    def _test_redis_connection(self):
+    def _test_redis_connection(self) -> bool:
         """Test Redis connection"""
-        r = redis.Redis(port=self._redis_port)
-        r.ping()
-        r.close()
+        try:
+            r = redis.Redis(port=self._redis_port)
+            r.ping()
+            r.close()
+            return True
+        except redis.ConnectionError:
+            return False
+        
+    def _test_pubsub_connection(self) -> bool:
+        context = zmq.Context()
+        socket = context.socket(zmq.SUB)
+        for _ in range(10):  # Try for 5 seconds
+            try:
+                socket.connect(f"tcp://localhost:5555")
+                socket.close()
+                context.term()
+                return True
+            except zmq.error.ZMQError:
+                time.sleep(0.5)
+        return False
     
     def _start_redis_server(self):
         """Start Redis server process"""
@@ -133,8 +159,15 @@ class _EtherDaemon:
         else:
             raise RuntimeError("Redis server failed to start")
     
+    def _stop_all_instances(self):
+        """Stop all instances"""
+        tracker = EtherInstanceLiaison()
+        tracker.stop_all_instances()
+
     def shutdown(self):
         """Shutdown all services"""
+
+        self._stop_all_instances()
         try:
             if self._pubsub_process:
                 self._logger.debug("Shutting down PubSub proxy")
@@ -148,6 +181,7 @@ class _EtherDaemon:
                 self._redis_process.wait(timeout=5)
                 if self._redis_pidfile.exists():
                     self._redis_pidfile.unlink()
+            # self.cleanup()
         finally:
             # Clean up logger
             if hasattr(self, '_logger'):
@@ -156,6 +190,8 @@ class _EtherDaemon:
                     self._logger.removeHandler(handler)
 
 # Create singleton instance but don't start it
+# Process any pending classes
+EtherRegistry.process_pending_classes()
 daemon_manager = _EtherDaemon()
 
 # # Register cleanup

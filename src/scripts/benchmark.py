@@ -8,15 +8,11 @@ from typing import Dict
 import psutil
 import os
 from ether import (
-    ether_pub, ether_sub, _get_logger, ether_init
+    Ether, ether_pub, ether_sub, ether_init, ether_save
 )
 import logging
 import tempfile
-import signal
-from threading import Thread
 import uuid
-
-from ether._instance_tracker import EtherInstanceTracker
 
 @dataclass
 class BenchmarkResult:
@@ -59,12 +55,17 @@ class BenchmarkSubscriber:
     """Subscriber that receives messages and tracks statistics."""
     def __init__(self, results_dir: str = None, subscriber_id: int = 0):
         self.subscriber_id = subscriber_id
-        if results_dir:
-            self.results_file = os.path.join(results_dir, f"subscriber_{subscriber_id}.json")
-        self._logger.info(f"Results file set to: {self.results_file}")
+        self.results_file = None
         self.received_messages = []
         self.latencies = []
         self.publishers = {}
+        
+        # Set results file if directory provided
+        if results_dir:
+            self.results_file = os.path.join(results_dir, f"subscriber_{subscriber_id}.json")
+            # Only log after instance is properly initialized with _logger
+            if hasattr(self, '_logger'):
+                self._logger.debug(f"Results file set to: {self.results_file}")
     
     @ether_sub()
     def receive_message(self, data: str, timestamp: float, message_id: int, 
@@ -92,9 +93,11 @@ class BenchmarkSubscriber:
         pub_stats["last_sequence"] = sequence
         pub_stats["sequences"].add(sequence)
     
+    @ether_save()
     def save_results(self):
         """Save results to file"""
-        if not hasattr(self, 'results_file'):
+        if not self.results_file:  # Changed from hasattr check to direct attribute check
+            self._logger.warning("No results file path set")
             return
             
         results = {
@@ -126,35 +129,40 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
                     "kwargs": {
                         "results_dir": temp_dir,
                         "subscriber_id": i,
-                        "name": f"benchmark_subscriber_{i}"
+                        "name": f"benchmark_subscriber_{i}",
+                        "log_level": logging.INFO
                     },
                 } for i in range(num_subscribers)
             }
         }
         
         # Initialize Ether system with configuration
-        ether_init(config=config, force_reinit=True)
+        ether_init(
+            config=config, 
+            # quiet=True,
+            force_reinit=True
+        )
         
         # Create publishers (these we'll manage manually)
         publishers = []
         for i in range(num_publishers):
-            publisher = BenchmarkPublisher(message_size)
+            publisher = BenchmarkPublisher(message_size=message_size,log_level = logging.INFO)
             publishers.append(publisher)
         
         # Allow time for connections to establish
         time.sleep(1.0)
         
         # Warmup period
-        warmup_messages = 100
-        messages_per_second = 1000
-        sleep_per_message = 1.0 / messages_per_second
+        # warmup_messages = 100
+        # messages_per_second = 1000
+        # sleep_per_message = 1.0 / messages_per_second
         
-        for publisher in publishers:
-            for _ in range(warmup_messages):
-                publisher.publish_message(time.time())
-                time.sleep(sleep_per_message)
+        # for publisher in publishers:
+        #     for _ in range(warmup_messages):
+        #         publisher.publish_message(time.time())
+        #         time.sleep(sleep_per_message)
         
-        time.sleep(0.5)  # Additional stabilization time
+        # time.sleep(1.0)  # Additional stabilization time
         
         # Reset message counters after warmup
         for publisher in publishers:
@@ -176,23 +184,13 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
                 total_messages_sent += 1
                 time.sleep(message_interval)
         
+        Ether.save()
+
         end_time = time.time()
         duration = end_time - start_time
         
         # Allow time for final messages to be processed
         time.sleep(1.0)
-        
-        # # Get all instances and call save_results
-        # from ether._instance_tracker import EtherInstanceTracker
-        # tracker = EtherInstanceTracker()
-        # instances = tracker.get_active_instances()
-        
-        # Stop all instances (this will trigger save_results)
-        from ether import stop_all_instances
-        stop_all_instances()
-        
-        # Additional wait to ensure files are written
-        time.sleep(0.5)
         
         # Collect and process results
         all_latencies = []
@@ -203,10 +201,10 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
             try:
                 with open(result_file, 'r') as f:
                     results = json.load(f)
-                    results["received_messages"] = [
-                        msg for msg in results["received_messages"]
-                        if isinstance(msg[1], int) and msg[1] < messages_per_publisher
-                    ]
+                    # results["received_messages"] = [
+                    #     msg for msg in results["received_messages"]
+                    #     if isinstance(msg[1], int) and msg[1] < messages_per_publisher
+                    # ]
                     all_latencies.extend(results["latencies"])
                     subscriber_results.append(results)
             except FileNotFoundError:
@@ -222,6 +220,7 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
         total_received = sum(len(results["received_messages"]) for results in subscriber_results)
         message_loss_percent = 100 * (1 - total_received / total_expected)
         
+        Ether.cleanup_all()
         return BenchmarkResult(
             messages_per_second=total_messages_sent / duration if duration > 0 else 0,
             latency_ms=statistics.mean(all_latencies) if all_latencies else 0,
@@ -248,10 +247,10 @@ def main():
     root.setLevel(logging.INFO)
     
     # Benchmark parameters
-    message_sizes = [1000]#, 100000]
-    message_counts = [1000]#, 5000, 100000]
-    subscriber_counts = [1]
-    publisher_counts = [1]
+    message_sizes = [1000, 10000]
+    message_counts = [2]#, 5000, 100000]
+    subscriber_counts = [2]#, 4, 8]
+    publisher_counts = [2]#, 4, 8]
     
     print("\nRunning Ether Benchmark...")
     print("Pubs/Subs | Msg Size | Msg Count | Messages/sec | Latency (ms) | Loss % | Sent/Expected | Received/Expected | Memory (MB)")

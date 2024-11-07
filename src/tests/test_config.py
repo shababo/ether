@@ -3,11 +3,11 @@ import time
 import multiprocessing
 from ether import ether_init
 from ether._config import EtherConfig
-from ether._instance_tracker import EtherInstanceTracker
+from ether._instance_tracker import EtherInstanceLiaison
 
 def run_mixed_autorun_test():
     """Test mixed autorun configuration"""
-    tracker = EtherInstanceTracker()
+    tracker = EtherInstanceLiaison()
     
     config = {
         "instances": {

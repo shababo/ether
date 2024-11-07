@@ -5,12 +5,12 @@ import logging
 import uuid
 from ether import ether_init
 from ether._config import EtherConfig
-from ether._instance_tracker import EtherInstanceTracker
+from ether._instance_tracker import EtherInstanceLiaison
 from examples.simple_data_processing import DataGenerator
 
 def run_manual_generator_test():
     """Test manual generator with auto-running processor and collector"""
-    tracker = EtherInstanceTracker()
+    tracker = EtherInstanceLiaison()
 
     
     # Use unique names for each test run

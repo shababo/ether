@@ -26,16 +26,16 @@ def main(config_name):
 
     Expected output:
     INFO - EtherMain: - Ether system initialized
-    INFO - DataGenerator:generator - Generating data: 42
+    INFO - DataGenerator:generator_within_process - Generating data: 42
     INFO - DataProcessor:processor2x - Processing datagenerator_0 with data 42
     INFO - DataProcessor:processor4x - Processing datagenerator_0 with data 42
-    INFO - DataGenerator:generator - Generating data: 43
-    INFO - DataProcessor:processor2x - Processing datagenerator_0 with data 43
-    INFO - DataProcessor:processor4x - Processing datagenerator_0 with data 43
-    INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 84
     INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 168
-    INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 86
-    INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 172
+    INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 84
+    INFO - DataGenerator:generator_interprocess - Generating data: 44
+    INFO - DataProcessor:processor4x - Processing datagenerator_0 with data 44
+    INFO - DataProcessor:processor2x - Processing datagenerator_0 with data 44
+    INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 176
+    INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 88
     INFO - EtherMain: - Cleanup complete
     """
 

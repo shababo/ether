@@ -110,7 +110,7 @@ class EtherInstanceLiaison:
                 instances[instance_id] = json.loads(data)
         return instances
     
-    def cleanup_all(self):
+    def deregister_all(self):
         """Remove all tracked instances"""
         pattern = f"{self.instance_key_prefix}*"
         keys = self.redis.keys(pattern)

@@ -1,3 +1,4 @@
+import functools
 import logging
 import zmq
 import time
@@ -7,8 +8,9 @@ import signal
 import sys
 from pydantic import BaseModel
 from ._ether import (
-    _Ether, EtherRegistry,    
+    EtherRegistry
 )
+from ._decorators import ether_pub, ether_sub, ether_save, ether_cleanup
 from ._utils import _get_logger
 from ._daemon import daemon_manager
 from ._instance_tracker import EtherInstanceLiaison
@@ -18,8 +20,27 @@ import atexit
 _ether_initialized = False
 _instance_processes: Dict[str, Process] = {}
 _logger = None  # Initialize later
+# daemon_manager = None
+def pub(data: Union[Dict, BaseModel], topic: str):
+    """Publish data to a topic
+    
+    Args:
+        data: Data to publish (dict or Pydantic model)
+        topic: Topic to publish to
+    """
+    liaison = EtherInstanceLiaison()
+    liaison.publish(data, topic)
 
-def _init_logger(log_level: int = logging.INFO):
+
+
+# Ether interaction methods
+class Ether:
+    pass
+
+Ether.save = functools.partial(pub, {}, topic="Ether.save")
+Ether.cleanup_all = functools.partial(pub, {}, topic="Ether.cleanup")
+
+def _init_logger(log_level: int = logging.DEBUG):
     """Initialize logger with proper cleanup"""
     global _logger
     if _logger is None:
@@ -33,19 +54,7 @@ def _cleanup_logger():
             handler.close()
             _logger.removeHandler(handler)
 
-def _wait_for_pubsub():
-    """Wait for PubSub proxy to be ready"""
-    context = zmq.Context()
-    socket = context.socket(zmq.SUB)
-    for _ in range(10):  # Try for 5 seconds
-        try:
-            socket.connect(f"tcp://localhost:5555")
-            socket.close()
-            context.term()
-            return True
-        except zmq.error.ZMQError:
-            time.sleep(0.5)
-    return False
+
 
 def _wait_for_redis():
     """Wait for Redis to be ready"""
@@ -77,8 +86,9 @@ def _cleanup_handler():
                 process.terminate()
                 process.join(timeout=1)
         
-        # Shutdown daemon services
-        daemon_manager.shutdown()
+        # # Shutdown daemon services
+        # daemon_manager.shutdown()
+        Ether.cleanup_all()
         
         _logger.info("Cleanup complete")
     finally:
@@ -98,28 +108,26 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None, force_rei
         # Clean up existing system
         _init_logger()
         _logger.debug("Force reinitializing Ether system...")
-        _cleanup_handler()
+        daemon_manager.shutdown()
         _ether_initialized = False
         
     if not _ether_initialized:
         # Initialize logger
         _init_logger()
+
+        # Process any pending classes
+        EtherRegistry.process_pending_classes()
+
+        # daemon_manager = _EtherDaemon()
         
         # Set up signal handlers
         signal.signal(signal.SIGINT, _cleanup_handler)
         signal.signal(signal.SIGTERM, _cleanup_handler)
         
-        # Clean up any existing ZMQ contexts
-        zmq.Context.instance().term()
-        
-        # Start daemon (which manages Redis and PubSub)
-        daemon_manager.start()
-        
-        # Wait for services to be ready
-        if not _wait_for_redis():
-            raise RuntimeError("Redis failed to start")
-        if not _wait_for_pubsub():
-            raise RuntimeError("PubSub proxy failed to start")
+        # Start daemon
+        if not daemon_manager._initialized:
+            daemon_manager.start()
+    
             
         # Check for existing instances
         tracker = EtherInstanceLiaison()
@@ -132,13 +140,11 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None, force_rei
         existing_after_cull = tracker.get_active_instances()
         if existing_after_cull:
             _logger.warning(f"Found {len(existing_after_cull)} existing instances in Redis AFTER CULL:")
-            for instance_id, info in existing.items():
+            for instance_id, info in existing_after_cull.items():
                 _logger.warning(f"  {instance_id}: {info.get('name')} ({info.get('class')})")
         elif existing:
             _logger.debug("No existing instances found after cull")
         
-        # Process any pending classes
-        EtherRegistry.process_pending_classes()
         
         # Mark as initialized
         _ether_initialized = True
@@ -161,9 +167,15 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None, force_rei
             
             return config  # Return the config object for manual launching if needed
 
-def stop_instance(instance_id: str):
+def stop_instance(instance_id: str, force: bool = False):
     """Stop a specific instance"""
     if instance_id in _instance_processes:
+
+        # only stop if not _EtherDaemon or force is True
+        # if not force and (daemon_manager is not None and instance_id == daemon_manager.name):
+        #     _logger.debug(f"Not stopping _EtherDaemon ({instance_id})")
+        #     return
+        
         process = _instance_processes[instance_id]
         _logger.debug(f"Stopping instance {instance_id}")
         
@@ -195,25 +207,13 @@ def stop_instance(instance_id: str):
             
         del _instance_processes[instance_id]
 
-def stop_all_instances():
+def stop_all_instances(force: bool = False):
     """Stop all running instances"""
     for instance_id in list(_instance_processes.keys()):
-        stop_instance(instance_id)
+        stop_instance(instance_id, force)
 
-def pub(data: Union[Dict, BaseModel], topic: str):
-    """Publish data to a topic
-    
-    Args:
-        data: Data to publish (dict or Pydantic model)
-        topic: Topic to publish to
-    """
-    liaison = EtherInstanceLiaison()
-    liaison.publish(data, topic)
 
-# ether = _Ether()
-ether_pub = _Ether.ether_pub
-ether_sub = _Ether.ether_sub
 
 # Export public interface
-__all__ = ['ether_pub', 'ether_sub', 'ether_init', 'stop_instance', 'stop_all_instances', 'pub']
+__all__ = ['ether_pub', 'ether_sub', 'ether_save', 'ether_init', 'stop_instance', 'stop_all_instances', 'Ether', 'ether_cleanup']
 
