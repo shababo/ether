@@ -10,11 +10,14 @@ import atexit
 import logging
 from multiprocessing import Process
 import zmq
+from typing import Union, Dict
+from pydantic import BaseModel
+import json
 
 from ._utils import _get_logger
 from ._pubsub import _EtherPubSubProxy
-from ._instances import EtherInstanceLiaison
-from ._decorators import ether_cleanup
+from ._instances import EtherInstanceLiaison, _EtherInstanceManager
+from ._config import EtherConfig
 from ._registry import EtherRegistry
 # Constants
 CULL_INTERVAL = 10  # seconds between culling checks
@@ -65,22 +68,72 @@ class _Ether:
         self._pubsub_process = None
         self._monitor_process = None
         self._started = False
-    
-    def start(self):
-        """Start all daemon services"""
-        if self._started:
-            return
         
-        # Start services
+        # Add ZMQ publishing setup
+        self._zmq_context = zmq.Context()
+        self._pub_socket = None
+    
+    def _setup_publisher(self):
+        """Set up the ZMQ publisher socket"""
+        if self._pub_socket is None:
+            self._pub_socket = self._zmq_context.socket(zmq.PUB)
+            self._pub_socket.connect(f"tcp://localhost:{_ETHER_PUB_PORT}")
+    
+    def publish(self, data: Union[Dict, BaseModel], topic: str) -> None:
+        """Publish data to a topic
+        
+        Args:
+            data: Data to publish (dict or Pydantic model)
+            topic: Topic to publish to
+        """
+        if not self._started:
+            raise RuntimeError("Cannot publish: Ether system not started")
+            
+        if self._pub_socket is None:
+            self._setup_publisher()
+            
+        # Convert data to JSON
+        if isinstance(data, BaseModel):
+            json_data = data.model_dump_json()
+        elif isinstance(data, dict):
+            json_data = json.dumps(data)
+        else:
+            raise TypeError("Data must be a dict or Pydantic model")
+            
+        # Publish message
+        self._pub_socket.send_multipart([
+            topic.encode(),
+            json_data.encode()
+        ])
+        self._logger.debug(f"Published to {topic}: {json_data}")
+    
+    def start(self, config = None, restart: bool = False):
+        """Start all daemon services"""
+
+        if self._started:
+            if restart:
+                self.shutdown()
+            else:
+                return
+        
+        # Process any pending classes
+        EtherRegistry.process_pending_classes()
+        
+        # Start Redis
         if not self._ensure_redis_running():
             raise RuntimeError("Redis server failed to start")
+        
+        # Start Messaging
         if not self._ensure_pubsub_running():
             raise RuntimeError("PubSub proxy failed to start")
         
-        # Start monitoring in separate process
+        # Start instance process monitoring (DO WE NEED THIS?)
         self._monitor_process = Process(target=_run_monitor)
         self._monitor_process.daemon = True
         self._monitor_process.start()
+
+        if config:
+            self._start_instances(config)
         
         self._started = True
     
@@ -159,29 +212,43 @@ class _Ether:
         else:
             raise RuntimeError("Redis server failed to start")
     
-    def _stop_all_instances(self):
-        """Stop all instances"""
-        tracker = EtherInstanceLiaison()
-        tracker.stop_all_instances()
+    def _start_instances(self, config: EtherConfig = None):
+        """Start instances from configuration"""
+        
+        self._instance_manager = _EtherInstanceManager(config=config)        
+        # Wait for instances to be ready
+        time.sleep(1.0)
+
 
     def shutdown(self):
         """Shutdown all services"""
 
-        self._stop_all_instances()
         try:
+            # stop all instances
+            if self._instance_manager:
+                self._instance_manager.stop_all_instances()
+            # close publishing socket and context
+            if self._pub_socket:
+                self._pub_socket.close()
+                self._pub_socket = None 
+            if self._zmq_context:
+                self._zmq_context.term()
+            # Terminate pubsub proxy process
             if self._pubsub_process:
                 self._logger.debug("Shutting down PubSub proxy")
                 self._pubsub_process.terminate()
+            # Terminate instance monitoring process
             if self._monitor_process:
                 self._logger.debug("Shutting down monitor")
                 self._monitor_process.terminate()
+            # Terminate Redis server
             if self._redis_process:
                 self._logger.debug("Shutting down Redis server")
                 self._redis_process.terminate()
                 self._redis_process.wait(timeout=5)
                 if self._redis_pidfile.exists():
                     self._redis_pidfile.unlink()
-            # self.cleanup()
+
         finally:
             # Clean up logger
             if hasattr(self, '_logger'):

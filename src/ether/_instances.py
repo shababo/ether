@@ -2,17 +2,15 @@ import redis
 from typing import Optional, Dict, Any, Union
 import json
 import time
-import uuid
+from multiprocessing import Process
 import os
 import logging
-import zmq
-from multiprocessing import Process
-from pydantic import BaseModel, RootModel
 
-from ._utils import _ETHER_PUB_PORT, _get_logger
+from ._utils import _get_logger
+from ._config import EtherConfig
 
 class EtherInstanceLiaison:
-    """Manages Ether instances and provides direct message publishing capabilities"""
+    """An interface for (de)registrations and process tracking for instances"""
     _instance = None
     
     def __new__(cls, redis_url: str = "redis://localhost:6379"):
@@ -27,51 +25,11 @@ class EtherInstanceLiaison:
         self.instance_key_prefix = "ether:instance:"
         self._ttl = 60  # seconds until instance considered dead
         self._logger = logging.getLogger("InstanceLiaison")
-        
-        # Initialize ZMQ context and publisher socket
-        self._zmq_context = zmq.Context()
-        self._pub_socket = self._zmq_context.socket(zmq.PUB)
-        self._pub_socket.connect(f"tcp://localhost:{_ETHER_PUB_PORT}")
-        
+    
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         # __new__ handles initialization
         pass
     
-    def publish(self, data: Union[Dict, BaseModel], topic: str) -> None:
-        """Publish data to a topic
-        
-        Args:
-            data: Data to publish (dict or Pydantic model)
-            topic: Topic to publish to
-        """
-        if not hasattr(self, '_pub_socket'):
-            raise RuntimeError("Publisher socket not initialized")
-            
-        # Convert data to JSON
-        if isinstance(data, BaseModel):
-            json_data = data.model_dump_json()
-        elif isinstance(data, dict):
-            json_data = json.dumps(data)
-        else:
-            raise TypeError("Data must be a dict or Pydantic model")
-            
-        # Publish message
-        self._pub_socket.send_multipart([
-            topic.encode(),
-            json_data.encode()
-        ])
-        self._logger.debug(f"Published to {topic}: {json_data}")
-    
-    def cleanup(self):
-        """Cleanup ZMQ resources"""
-        if hasattr(self, '_pub_socket'):
-            self._pub_socket.close()
-        if hasattr(self, '_zmq_context'):
-            self._zmq_context.term()
-    
-    def __del__(self):
-        self.cleanup()
-
     @property
     def ttl(self) -> int:
         return self._ttl
@@ -143,12 +101,20 @@ class EtherInstanceLiaison:
                 
         return removed
 
-class EtherInstanceManager:
+class _EtherInstanceManager:
     """Manages Ether instance processes"""
-    def __init__(self):
+    def __init__(
+            self, 
+            config: Union[EtherConfig, str, dict] = None, 
+            autolaunch: bool = True
+        ):
         self._instance_processes: Dict[str, Process] = {}
         self._logger = _get_logger("EtherInstanceManager", log_level=logging.INFO)
         self._liaison = EtherInstanceLiaison()
+        self._config = config
+        self._autolaunch = autolaunch
+        if self._autolaunch:
+            self.launch_instances(self._config)
 
     def stop_instance(self, instance_id: str, force: bool = False):
         """Stop a specific instance"""
@@ -182,6 +148,53 @@ class EtherInstanceManager:
                 self._logger.warning(f"Could not find Redis ID for instance {instance_id}")
                 
             del self._instance_processes[instance_id]
+
+    def launch_instances(self, config: Union[EtherConfig, str, dict] = None) -> Dict[str, Process]:
+        """Launch configured instances
+        
+        Args:
+            only_autorun: If True, only launch instances with autorun=True
+        """
+
+        processes = {}
+
+        if not config or not isinstance(config, (str, dict, EtherConfig)):
+            return processes
+        elif isinstance(config, str):
+            config = EtherConfig.from_yaml(config)
+        elif isinstance(config, dict):
+            config = EtherConfig.model_validate(config)
+
+        liaison = EtherInstanceLiaison()
+        current_instances = liaison.get_active_instances()
+        
+        for instance_name, instance_config in config.instances.items():
+            if not instance_config.autorun:
+                continue
+            
+            # Check if instance is already running by process name
+            already_running = any(
+                info.get('process_name') == instance_name 
+                for info in current_instances.values()
+            )
+            if already_running:
+                continue
+            
+            # Create and start process
+            process = Process(
+                target=instance_config.run,
+                args=(instance_name,),
+                name=instance_name
+            )
+            process.daemon = True
+            process.start()
+            processes[instance_name] = process
+
+            liaison.add_instance(instance_name, process)
+        
+
+        self._instance_processes.update(processes)
+        return processes
 
     def stop_all_instances(self, force: bool = False):
         """Stop all running instances"""

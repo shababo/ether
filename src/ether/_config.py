@@ -1,19 +1,17 @@
-from typing import Dict, Any, Optional, Union
+from typing import Any
 from pydantic import BaseModel
 import yaml
 import importlib
-from multiprocessing import Process
-import uuid
+
 
 from ._registry import EtherRegistry
-from ._instances import EtherInstanceLiaison
-from ._ether import _ether
+
 
 class EtherInstanceConfig(BaseModel):
     """Configuration for a single Ether instance"""
     class_path: str  # format: "module.submodule.ClassName"
     args: list[Any] = []
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     autorun: bool = True  # Whether to automatically launch this instance
     
     def get_class(self):
@@ -40,7 +38,7 @@ class EtherInstanceConfig(BaseModel):
 
 class EtherConfig(BaseModel):
     """Complete Ether configuration"""
-    instances: Dict[str, EtherInstanceConfig]  # name -> config
+    instances: dict[str, EtherInstanceConfig]  # name -> config
     
     @classmethod
     def from_yaml(cls, path: str) -> "EtherConfig":
@@ -49,36 +47,4 @@ class EtherConfig(BaseModel):
             data = yaml.safe_load(f)
         return cls.model_validate(data)
     
-    def launch_instances(self, only_autorun: bool = True) -> Dict[str, Process]:
-        """Launch configured instances
-        
-        Args:
-            only_autorun: If True, only launch instances with autorun=True
-        """
-        processes = {}
-        tracker = EtherInstanceLiaison()
-        current_instances = tracker.get_active_instances()
-        
-        for instance_name, instance_config in self.instances.items():
-            if only_autorun and not instance_config.autorun:
-                continue
-            
-            # Check if instance is already running by process name
-            already_running = any(
-                info.get('process_name') == instance_name 
-                for info in current_instances.values()
-            )
-            if already_running:
-                continue
-            
-            # Create and start process
-            process = Process(
-                target=instance_config.run,
-                args=(instance_name,),
-                name=instance_name
-            )
-            process.daemon = True
-            process.start()
-            processes[instance_name] = process
-        
-        return processes
+    

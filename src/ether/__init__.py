@@ -13,12 +13,12 @@ from ._registry import (
 from ._decorators import ether_pub, ether_sub, ether_save, ether_cleanup
 from ._utils import _get_logger
 from ._ether import _ether
-from ._instances import EtherInstanceLiaison, EtherInstanceManager
+from ._instances import EtherInstanceLiaison, _EtherInstanceManager
 from ._config import EtherConfig
 import atexit
 
 _ether_initialized = False
-_instance_manager = EtherInstanceManager()
+_instance_manager = _EtherInstanceManager()
 _logger = None  # Initialize later
 
 def pub(data: Union[Dict, BaseModel], topic: str):
@@ -37,6 +37,7 @@ class Ether:
 
 Ether.save = functools.partial(pub, {}, topic="Ether.save")
 Ether.cleanup_all = functools.partial(pub, {}, topic="Ether.cleanup")
+Ether.shutdown = functools.partial(pub, {}, topic="Ether.shutdown")
 
 def _init_logger(log_level: int = logging.DEBUG):
     """Initialize logger with proper cleanup"""
@@ -52,16 +53,6 @@ def _cleanup_logger():
             handler.close()
             _logger.removeHandler(handler)
 
-def _wait_for_redis():
-    """Wait for Redis to be ready"""
-    for _ in range(10):  # Try for 5 seconds
-        try:
-            tracker = EtherInstanceLiaison()
-            tracker.redis.ping()
-            return True
-        except Exception:
-            time.sleep(0.5)
-    return False
 
 def _cleanup_handler():
     """Combined cleanup handler for both resources and logger"""
@@ -93,12 +84,8 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None, force_rei
         # Initialize logger
         _init_logger()
 
-        # Process any pending classes
-        EtherRegistry.process_pending_classes()
-        
-        # Start daemon
-        if not _ether._initialized:
-            _ether.start()
+        # Start ether
+        _ether.start(confi)
             
         # Check for existing instances
         tracker = EtherInstanceLiaison()
