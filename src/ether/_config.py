@@ -6,7 +6,8 @@ from multiprocessing import Process
 import uuid
 
 from ._registry import EtherRegistry
-from ._instance_tracker import EtherInstanceLiaison
+from ._instances import EtherInstanceLiaison
+from ._ether import _ether
 
 class EtherInstanceConfig(BaseModel):
     """Configuration for a single Ether instance"""

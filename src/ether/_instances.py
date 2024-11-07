@@ -6,9 +6,10 @@ import uuid
 import os
 import logging
 import zmq
+from multiprocessing import Process
 from pydantic import BaseModel, RootModel
 
-from ._utils import _ETHER_PUB_PORT
+from ._utils import _ETHER_PUB_PORT, _get_logger
 
 class EtherInstanceLiaison:
     """Manages Ether instances and provides direct message publishing capabilities"""
@@ -141,3 +142,60 @@ class EtherInstanceLiaison:
                 removed += 1
                 
         return removed
+
+class EtherInstanceManager:
+    """Manages Ether instance processes"""
+    def __init__(self):
+        self._instance_processes: Dict[str, Process] = {}
+        self._logger = _get_logger("EtherInstanceManager", log_level=logging.INFO)
+        self._liaison = EtherInstanceLiaison()
+
+    def stop_instance(self, instance_id: str, force: bool = False):
+        """Stop a specific instance"""
+        if instance_id in self._instance_processes:
+            process = self._instance_processes[instance_id]
+            self._logger.debug(f"Stopping instance {instance_id}")
+            
+            # Get instance info before stopping
+            instances = self._liaison.get_active_instances()
+            
+            # Find the Redis ID for this process
+            redis_id = None
+            for rid, info in instances.items():
+                if info.get('process_name') == instance_id:
+                    redis_id = rid
+                    break
+            
+            # Stop the process
+            process.terminate()
+            process.join(timeout=5)
+            if process.is_alive():
+                self._logger.warning(f"Instance {instance_id} didn't stop gracefully, killing")
+                process.kill()
+                process.join(timeout=1)
+                
+            # Deregister from Redis if we found the ID
+            if redis_id:
+                self._logger.debug(f"Deregistering instance {instance_id} (Redis ID: {redis_id})")
+                self._liaison.deregister_instance(redis_id)
+            else:
+                self._logger.warning(f"Could not find Redis ID for instance {instance_id}")
+                
+            del self._instance_processes[instance_id]
+
+    def stop_all_instances(self, force: bool = False):
+        """Stop all running instances"""
+        for instance_id in list(self._instance_processes.keys()):
+            self.stop_instance(instance_id, force)
+
+    def add_instance(self, instance_id: str, process: Process):
+        """Add a running instance to be managed"""
+        self._instance_processes[instance_id] = process
+
+    def get_instance_processes(self) -> Dict[str, Process]:
+        """Get all managed instance processes"""
+        return self._instance_processes.copy()
+
+    def cleanup(self):
+        """Clean up all instances and resources"""
+        self.stop_all_instances() 

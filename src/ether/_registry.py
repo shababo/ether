@@ -12,7 +12,7 @@ import os
 import sys
 
 from ._utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
-from ._instance_tracker import EtherInstanceLiaison
+from ._instances import EtherInstanceLiaison
 
 class EtherRegistry:
     """Registry to track and process classes with Ether methods"""

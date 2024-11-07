@@ -13,7 +13,7 @@ import zmq
 
 from ._utils import _get_logger
 from ._pubsub import _EtherPubSubProxy
-from ._instance_tracker import EtherInstanceLiaison
+from ._instances import EtherInstanceLiaison
 from ._decorators import ether_cleanup
 from ._registry import EtherRegistry
 # Constants
@@ -44,13 +44,13 @@ def _run_monitor():
             logger.error(f"Error monitoring instances: {e}")
             time.sleep(1)
 
-class _EtherDaemon:
-    """Manages Redis and PubSub services for Ether"""
+class _Ether:
+    """Singleton to manage Ether services behind the scenes."""
     _instance = None
     
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(_EtherDaemon, cls).__new__(cls)
+            cls._instance = super(_Ether, cls).__new__(cls)
         return cls._instance
     
     def __init__(self):
@@ -190,9 +190,7 @@ class _EtherDaemon:
                     self._logger.removeHandler(handler)
 
 # Create singleton instance but don't start it
-# Process any pending classes
-EtherRegistry.process_pending_classes()
-daemon_manager = _EtherDaemon()
+_ether = _Ether()
 
 # # Register cleanup
 # @atexit.register
