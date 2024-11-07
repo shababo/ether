@@ -3,7 +3,7 @@ import time
 import click
 
 from examples.simple_data_processing import DataGenerator
-from ether import ether_init
+from ether import ether_init, pub
 
 def _get_config_path(config_name: str) -> str:
     return os.path.join(os.path.dirname(__file__), "config", f"{config_name}.yaml")
@@ -44,13 +44,16 @@ def main(config_name):
     ether_init(config=config_path)
 
     # use the DataGenerator class normally to generate some data
-    generator = DataGenerator(name="generator")
-    
-    # Generate data twice with small delay between calls
+    generator = DataGenerator(name="generator_within_process")
     generator.generate_data(data=42)
     time.sleep(0.002)
-    generator.generate_data(data=43)
+    # delete the instance
+    del generator
 
+    # use the pub function to trigger DataGenerator.generate_data
+    # via the automatically launched DataGenerator instance in the config
+    pub({"data": 44}, topic="DataGenerator.generate_data")
+    time.sleep(0.002)
 
 if __name__ == "__main__":
     main()

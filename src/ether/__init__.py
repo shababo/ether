@@ -5,6 +5,7 @@ from typing import Optional, Union, List, Dict
 from multiprocessing import Process
 import signal
 import sys
+from pydantic import BaseModel
 from ._ether import (
     _Ether, EtherRegistry,    
 )
