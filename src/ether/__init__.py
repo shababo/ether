@@ -7,7 +7,7 @@ from multiprocessing import Process
 import signal
 import sys
 from pydantic import BaseModel
-from ._ether import (
+from ._registry import (
     EtherRegistry
 )
 from ._decorators import ether_pub, ether_sub, ether_save, ether_cleanup

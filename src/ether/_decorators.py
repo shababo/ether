@@ -1,5 +1,5 @@
 import functools
-from ether._ether import ether_pub, ether_sub
+from ether._registry import ether_pub, ether_sub
 
 # helper decorators
 ether_save = functools.partial(ether_sub, topic="Ether.save")

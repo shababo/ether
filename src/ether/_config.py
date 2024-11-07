@@ -5,7 +5,7 @@ import importlib
 from multiprocessing import Process
 import uuid
 
-from ._ether import EtherRegistry
+from ._registry import EtherRegistry
 from ._instance_tracker import EtherInstanceLiaison
 
 class EtherInstanceConfig(BaseModel):

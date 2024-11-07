@@ -15,7 +15,7 @@ from ._utils import _get_logger
 from ._pubsub import _EtherPubSubProxy
 from ._instance_tracker import EtherInstanceLiaison
 from ._decorators import ether_cleanup
-from ._ether import EtherRegistry
+from ._registry import EtherRegistry
 # Constants
 CULL_INTERVAL = 10  # seconds between culling checks
 
