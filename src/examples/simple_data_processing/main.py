@@ -27,3 +27,19 @@ if __name__ == "__main__":
     generator.generate_data(data=42)
     time.sleep(0.002)
     generator.generate_data(data=43)
+
+    # expected output to console
+    '''
+    INFO - EtherMain: - Ether system initialized
+    INFO - DataGenerator:generator - Generating data: 42
+    INFO - DataProcessor:processor2x - Processing datagenerator_0 with data 42
+    INFO - DataProcessor:processor4x - Processing datagenerator_0 with data 42
+    INFO - DataGenerator:generator - Generating data: 43
+    INFO - DataProcessor:processor2x - Processing datagenerator_0 with data 43
+    INFO - DataProcessor:processor4x - Processing datagenerator_0 with data 43
+    INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 84
+    INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 168
+    INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 86
+    INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 172
+    INFO - EtherMain: - Cleanup complete
+    '''
