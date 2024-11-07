@@ -1,18 +1,22 @@
 import redis
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 import json
 import time
 import uuid
 import os
 import logging
+import zmq
+from pydantic import BaseModel, RootModel
 
-class EtherInstanceTracker:
-    """Tracks Ether instances using Redis"""
+from ._utils import _ETHER_PUB_PORT
+
+class EtherInstanceLiaison:
+    """Manages Ether instances and provides direct message publishing capabilities"""
     _instance = None
     
     def __new__(cls, redis_url: str = "redis://localhost:6379"):
         if cls._instance is None:
-            cls._instance = super(EtherInstanceTracker, cls).__new__(cls)
+            cls._instance = super(EtherInstanceLiaison, cls).__new__(cls)
             cls._instance._init(redis_url)
         return cls._instance
     
@@ -21,12 +25,52 @@ class EtherInstanceTracker:
         self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
         self.instance_key_prefix = "ether:instance:"
         self._ttl = 60  # seconds until instance considered dead
-        self._logger = logging.getLogger("InstanceTracker")
-    
+        self._logger = logging.getLogger("InstanceLiaison")
+        
+        # Initialize ZMQ context and publisher socket
+        self._zmq_context = zmq.Context()
+        self._pub_socket = self._zmq_context.socket(zmq.PUB)
+        self._pub_socket.connect(f"tcp://localhost:{_ETHER_PUB_PORT}")
+        
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         # __new__ handles initialization
         pass
     
+    def publish(self, data: Union[Dict, BaseModel], topic: str) -> None:
+        """Publish data to a topic
+        
+        Args:
+            data: Data to publish (dict or Pydantic model)
+            topic: Topic to publish to
+        """
+        if not hasattr(self, '_pub_socket'):
+            raise RuntimeError("Publisher socket not initialized")
+            
+        # Convert data to JSON
+        if isinstance(data, BaseModel):
+            json_data = data.model_dump_json()
+        elif isinstance(data, dict):
+            json_data = json.dumps(data)
+        else:
+            raise TypeError("Data must be a dict or Pydantic model")
+            
+        # Publish message
+        self._pub_socket.send_multipart([
+            topic.encode(),
+            json_data.encode()
+        ])
+        self._logger.debug(f"Published to {topic}: {json_data}")
+    
+    def cleanup(self):
+        """Cleanup ZMQ resources"""
+        if hasattr(self, '_pub_socket'):
+            self._pub_socket.close()
+        if hasattr(self, '_zmq_context'):
+            self._zmq_context.term()
+    
+    def __del__(self):
+        self.cleanup()
+
     @property
     def ttl(self) -> int:
         return self._ttl

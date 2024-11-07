@@ -6,7 +6,7 @@ from multiprocessing import Process
 import uuid
 
 from ._ether import EtherRegistry
-from ._instance_tracker import EtherInstanceTracker
+from ._instance_tracker import EtherInstanceLiaison
 
 class EtherInstanceConfig(BaseModel):
     """Configuration for a single Ether instance"""
@@ -55,7 +55,7 @@ class EtherConfig(BaseModel):
             only_autorun: If True, only launch instances with autorun=True
         """
         processes = {}
-        tracker = EtherInstanceTracker()
+        tracker = EtherInstanceLiaison()
         current_instances = tracker.get_active_instances()
         
         for instance_name, instance_config in self.instances.items():

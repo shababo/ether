@@ -12,7 +12,7 @@ import os
 import sys
 
 from ._utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
-from ._instance_tracker import EtherInstanceTracker
+from ._instance_tracker import EtherInstanceLiaison
 
 class EtherRegistry:
     """Registry to track and process classes with Ether methods"""
@@ -89,7 +89,7 @@ def add_ether_functionality(cls):
         self.results_file = None
         
         # Register with instance tracker
-        self._instance_tracker = EtherInstanceTracker()
+        self._instance_tracker = EtherInstanceLiaison()
         self._instance_tracker.register_instance(self.id, {
             'name': self.name,
             'process_name': name,
@@ -279,7 +279,7 @@ def add_ether_functionality(cls):
     def new_init(self, *args, **kwargs):
         self.init_ether(
             name=kwargs.pop('name', None),
-            log_level=kwargs.pop('log_level', logging.INFO)
+            log_level=kwargs.pop('log_level', logging.INFO),
         )
         original_init(self, *args, **kwargs)
         self.setup_sockets()

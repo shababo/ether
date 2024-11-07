@@ -61,7 +61,7 @@ class BenchmarkSubscriber:
         self.subscriber_id = subscriber_id
         if results_dir:
             self.results_file = os.path.join(results_dir, f"subscriber_{subscriber_id}.json")
-        self._logger.info(f"Saving results to {self.results_file}")
+        self._logger.info(f"Results file set to: {self.results_file}")
         self.received_messages = []
         self.latencies = []
         self.publishers = {}
@@ -182,6 +182,18 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
         # Allow time for final messages to be processed
         time.sleep(1.0)
         
+        # # Get all instances and call save_results
+        # from ether._instance_tracker import EtherInstanceTracker
+        # tracker = EtherInstanceTracker()
+        # instances = tracker.get_active_instances()
+        
+        # Stop all instances (this will trigger save_results)
+        from ether import stop_all_instances
+        stop_all_instances()
+        
+        # Additional wait to ensure files are written
+        time.sleep(0.5)
+        
         # Collect and process results
         all_latencies = []
         subscriber_results = []
@@ -199,6 +211,7 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
                     subscriber_results.append(results)
             except FileNotFoundError:
                 print(f"Warning: Could not find results file for subscriber {i}")
+                print(f"Results file: {result_file}")
                 continue
         
         # Calculate metrics
@@ -256,7 +269,7 @@ def main():
                           f"{result.messages_sent:6d}/{result.expected_sent:<6d} | "
                           f"{result.messages_received:6d}/{result.expected_received:<6d} | "
                           f"{result.memory_mb:10.1f}")
-                    time.sleep(1.0)
+                    time.sleep(0.1)
 
 if __name__ == "__main__":
     main()

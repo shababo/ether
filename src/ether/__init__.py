@@ -10,7 +10,7 @@ from ._ether import (
 )
 from ._utils import _get_logger
 from ._daemon import daemon_manager
-from ._instance_tracker import EtherInstanceTracker
+from ._instance_tracker import EtherInstanceLiaison
 from ._config import EtherConfig
 import atexit
 
@@ -48,10 +48,10 @@ def _wait_for_pubsub():
 
 def _wait_for_redis():
     """Wait for Redis to be ready"""
-    from ._instance_tracker import EtherInstanceTracker
+    from ._instance_tracker import EtherInstanceLiaison
     for _ in range(10):  # Try for 5 seconds
         try:
-            tracker = EtherInstanceTracker()
+            tracker = EtherInstanceLiaison()
             tracker.redis.ping()
             return True
         except Exception:
@@ -121,7 +121,7 @@ def ether_init(config: Optional[Union[str, dict, EtherConfig]] = None, force_rei
             raise RuntimeError("PubSub proxy failed to start")
             
         # Check for existing instances
-        tracker = EtherInstanceTracker()
+        tracker = EtherInstanceLiaison()
         existing = tracker.get_active_instances()
         if existing:
             _logger.warning(f"Found {len(existing)} existing instances in Redis:")
@@ -167,7 +167,7 @@ def stop_instance(instance_id: str):
         _logger.debug(f"Stopping instance {instance_id}")
         
         # Get instance info before stopping
-        tracker = EtherInstanceTracker()
+        tracker = EtherInstanceLiaison()
         instances = tracker.get_active_instances()
         
         # Find the Redis ID for this process
@@ -199,11 +199,20 @@ def stop_all_instances():
     for instance_id in list(_instance_processes.keys()):
         stop_instance(instance_id)
 
+def pub(data: Union[Dict, BaseModel], topic: str):
+    """Publish data to a topic
+    
+    Args:
+        data: Data to publish (dict or Pydantic model)
+        topic: Topic to publish to
+    """
+    liaison = EtherInstanceLiaison()
+    liaison.publish(data, topic)
 
 # ether = _Ether()
 ether_pub = _Ether.ether_pub
 ether_sub = _Ether.ether_sub
 
 # Export public interface
-__all__ = ['ether_pub', 'ether_sub', 'ether_init', 'stop_instance', 'stop_all_instances']
+__all__ = ['ether_pub', 'ether_sub', 'ether_init', 'stop_instance', 'stop_all_instances', 'pub']
 

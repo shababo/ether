@@ -12,7 +12,7 @@ from multiprocessing import Process
 
 from ._utils import _get_logger
 from ._pubsub import _EtherPubSubProxy
-from ._instance_tracker import EtherInstanceTracker
+from ._instance_tracker import EtherInstanceLiaison
 
 # Constants
 CULL_INTERVAL = 10  # seconds between culling checks
@@ -25,7 +25,7 @@ def _run_pubsub():
 def _run_monitor():
     """Standalone function to run instance monitoring"""
     logger = _get_logger("EtherMonitor", log_level=logging.INFO)
-    tracker = EtherInstanceTracker()
+    tracker = EtherInstanceLiaison()
     
     while True:
         try:
