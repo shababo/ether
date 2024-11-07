@@ -8,7 +8,7 @@ from typing import Dict
 import psutil
 import os
 from ether import (
-    Ether, ether_pub, ether_sub, ether_init, ether_save
+    ether, ether_pub, ether_sub, ether_save
 )
 import logging
 import tempfile
@@ -137,10 +137,10 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
         }
         
         # Initialize Ether system with configuration
-        ether_init(
+        ether.init(
             config=config, 
             # quiet=True,
-            force_reinit=True
+            restart=True
         )
         
         # Create publishers (these we'll manage manually)
@@ -184,7 +184,7 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
                 total_messages_sent += 1
                 time.sleep(message_interval)
         
-        Ether.save()
+        ether.save()
 
         end_time = time.time()
         duration = end_time - start_time
@@ -220,7 +220,7 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
         total_received = sum(len(results["received_messages"]) for results in subscriber_results)
         message_loss_percent = 100 * (1 - total_received / total_expected)
         
-        Ether.cleanup_all()
+        # ether.cleanup_all()
         return BenchmarkResult(
             messages_per_second=total_messages_sent / duration if duration > 0 else 0,
             latency_ms=statistics.mean(all_latencies) if all_latencies else 0,

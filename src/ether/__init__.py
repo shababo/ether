@@ -16,7 +16,7 @@ import atexit
 # _ether_initialized = False
 _logger = None  # Initialize later
 
-def pub(data: Union[Dict, BaseModel], topic: str):
+def _pub(data: Union[Dict, BaseModel], topic: str):
     """Publish data to a topic
     
     Args:
@@ -28,9 +28,9 @@ def pub(data: Union[Dict, BaseModel], topic: str):
 
 # Public singleton instance of Ether API
 class Ether:
-    save = functools.partial(pub, {}, topic="Ether.save")
-    cleanup_all = functools.partial(pub, {}, topic="Ether.cleanup")
-    shutdown = functools.partial(pub, {}, topic="Ether.shutdown")
+    save = staticmethod(functools.partial(_pub, {}, topic="Ether.save"))
+    cleanup_all = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
+    shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
     _initialized = False
     _instance = None
     
@@ -39,26 +39,26 @@ class Ether:
             cls._instance = super(Ether, cls).__new__(cls)
         return cls._instance
 
-    def init(self,config: Optional[Union[str, dict, EtherConfig]] = None, force_reinit: bool = False):
+    def init(self,config: Optional[Union[str, dict, EtherConfig]] = None, restart: bool = False):
         """Initialize the Ether messaging system."""
         # global _ether_initialized
         
-        if cls._ether_initialized and force_reinit:
+        if self._initialized and restart:
             # Clean up existing system
             _init_logger()
             _logger.debug("Force reinitializing Ether system...")
             _ether.shutdown()
-            _ether_initialized = False
+            _initialized = False
             
-        if not _ether_initialized:
+        if not self._initialized or restart:
             # Initialize logger
             _init_logger()
 
             # Start ether
-            _ether.start(config=config)
+            _ether.start(config=config, restart=restart)
         
             # Mark as initialized
-            _ether_initialized = True
+            self._initialized = True
             _logger.info("Ether system initialized")
             
             # Register single cleanup handler
@@ -83,6 +83,6 @@ def _init_logger(log_level: int = logging.DEBUG):
         
 
 # Export public interface
-
-__all__ = ['Ether', 'ether_init', 'ether_pub', 'ether_sub', 'ether_save', 'ether_cleanup']
+ether = Ether()
+__all__ = ['ether', 'ether_pub', 'ether_sub', 'ether_save', 'ether_cleanup']
 

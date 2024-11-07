@@ -16,9 +16,11 @@ import json
 
 from ._utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, _get_logger
 from ._pubsub import _EtherPubSubProxy
-from ._instances import EtherInstanceLiaison, _EtherInstanceManager
+from ._instances._liaison import EtherInstanceLiaison 
+from ._instances._manager import _EtherInstanceManager
 from ._config import EtherConfig
 from ._registry import EtherRegistry
+
 # Constants
 CULL_INTERVAL = 10  # seconds between culling checks
 
@@ -67,15 +69,17 @@ class _Ether:
         self._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
         self._pubsub_process = None
         self._monitor_process = None
+        self._instance_manager = None
         self._started = False
         
         # Add ZMQ publishing setup
-        self._zmq_context = zmq.Context()
+        
         self._pub_socket = None
     
     def _setup_publisher(self):
         """Set up the ZMQ publisher socket"""
         if self._pub_socket is None:
+            self._zmq_context = zmq.Context()
             self._pub_socket = self._zmq_context.socket(zmq.PUB)
             self._pub_socket.connect(f"tcp://localhost:{_ETHER_PUB_PORT}")
     
@@ -215,7 +219,11 @@ class _Ether:
     def _start_instances(self, config: EtherConfig = None):
         """Start instances from configuration"""
         
-        self._instance_manager = _EtherInstanceManager(config=config)        
+        self._logger.debug("Starting instances")
+        if not self._instance_manager:
+            self._instance_manager = _EtherInstanceManager(config=config)
+        else:
+            self._instance_manager.launch_instances(config)
         # Wait for instances to be ready
         time.sleep(1.0)
 
@@ -233,6 +241,7 @@ class _Ether:
                 self._pub_socket = None 
             if self._zmq_context:
                 self._zmq_context.term()
+                self._zmq_context = None
             # Terminate pubsub proxy process
             if self._pubsub_process:
                 self._logger.debug("Shutting down PubSub proxy")
@@ -248,7 +257,8 @@ class _Ether:
                 self._redis_process.wait(timeout=5)
                 if self._redis_pidfile.exists():
                     self._redis_pidfile.unlink()
-
+        except Exception as e:
+            self._logger.error(f"Error shutting down services: {e}")
         finally:
             # Clean up logger
             if hasattr(self, '_logger'):

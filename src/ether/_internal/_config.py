@@ -3,7 +3,6 @@ from pydantic import BaseModel
 import yaml
 import importlib
 
-
 from ._registry import EtherRegistry
 
 
