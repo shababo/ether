@@ -1,6 +1,6 @@
 import os
 import time
-import argparse
+import click
 
 from examples.simple_data_processing import DataGenerator
 from ether import ether_init
@@ -9,15 +9,12 @@ def _get_config_path(config_name: str) -> str:
     return os.path.join(os.path.dirname(__file__), "config", f"{config_name}.yaml")
 
 # @ether_config(config_path="config/dual_processors.yaml")
-if __name__ == "__main__":
-
-    # parse input args for config
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config_name", type=str, default="dual_processors")
-    args = parser.parse_args()
-    config_path = _get_config_path(args.config_name)
+@click.command()
+@click.option('--config-name', default='dual_processors', help='Name of the configuration file')
+def main(config_name):
 
     # init ether
+    config_path = _get_config_path(config_name)
     ether_init(config=config_path)
 
     # use the DataGenerator class normally to generate some data
@@ -43,3 +40,6 @@ if __name__ == "__main__":
     INFO - DataCollector:collector1 - Collected result: datagenerator_0 = 172
     INFO - EtherMain: - Cleanup complete
     '''
+
+if __name__ == "__main__":
+    main()
