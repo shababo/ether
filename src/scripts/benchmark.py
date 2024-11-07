@@ -8,14 +8,15 @@ from typing import Dict
 import psutil
 import os
 from ether import (
-    ether_pub, ether_sub, _get_logger,
+    ether_pub, ether_sub, _get_logger, ether_init
 )
 import logging
 import tempfile
 import signal
 from threading import Thread
 import uuid
-from ether import ether_init
+
+from ether._instance_tracker import EtherInstanceTracker
 
 @dataclass
 class BenchmarkResult:
@@ -31,11 +32,7 @@ class BenchmarkResult:
     expected_received: int      # Total messages expected to be received (num_messages * num_subscribers)
 
 class BenchmarkPublisher:
-    """Publisher that sends messages to the broker or subscribers.
-    
-    Each publisher creates messages of a specific size and sends them with
-    timestamps and unique IDs for tracking.
-    """
+    """Publisher that sends messages to subscribers."""
     def __init__(self, message_size: int):
         self.message_size = message_size
         self.message_count = 0
@@ -60,62 +57,104 @@ class BenchmarkPublisher:
 
 class BenchmarkSubscriber:
     """Subscriber that receives messages and tracks statistics."""
-    def __init__(self, results_dir: str, subscriber_id: int):
+    def __init__(self, results_dir: str = None, subscriber_id: int = 0):
         self.subscriber_id = subscriber_id
+        if results_dir:
+            self.results_file = os.path.join(results_dir, f"subscriber_{subscriber_id}.json")
+        self._logger.info(f"Saving results to {self.results_file}")
+        self.received_messages = []
+        self.latencies = []
+        self.publishers = {}
     
     @ether_sub()
     def receive_message(self, data: str, timestamp: float, message_id: int, 
                        publisher_id: str, sequence: int):
-        self.track_message(publisher_id, sequence, timestamp)
+        """Track received message statistics"""
+        now = time.time()
+        latency = (now - timestamp) * 1000  # Convert to ms
+        self.latencies.append(latency)
+        self.received_messages.append((publisher_id, sequence))
+        
+        if publisher_id not in self.publishers:
+            self.publishers[publisher_id] = {
+                "sequences": set(),
+                "gaps": [],
+                "last_sequence": None
+            }
+        
+        pub_stats = self.publishers[publisher_id]
+        if pub_stats["last_sequence"] is not None:
+            expected = pub_stats["last_sequence"] + 1
+            if sequence > expected:
+                gap = sequence - expected
+                pub_stats["gaps"].append((expected, sequence, gap))
+        
+        pub_stats["last_sequence"] = sequence
+        pub_stats["sequences"].add(sequence)
+    
+    def save_results(self):
+        """Save results to file"""
+        if not hasattr(self, 'results_file'):
+            return
+            
+        results = {
+            "latencies": self.latencies,
+            "received_messages": self.received_messages,
+            "publishers": {
+                pid: {
+                    "sequences": list(stats["sequences"]),
+                    "gaps": stats["gaps"],
+                    "last_sequence": stats["last_sequence"]
+                }
+                for pid, stats in self.publishers.items()
+            }
+        }
+        
+        self._logger.info(f"Saving results to {self.results_file}")
+        with open(self.results_file, 'w') as f:
+            json.dump(results, f)
 
-
-# Helper functions to run components in separate processes
-def run_subscriber(stop_event: Event, results_dir: str, subscriber_id: int):
-    """Create and run a subscriber in its own process"""
-    subscriber = BenchmarkSubscriber(results_dir, subscriber_id)
-    subscriber.run(stop_event)
-
-# def run_proxy(stop_event: Event):
-#     """Create and run a proxy in its own process"""
-#     proxy = _EtherPubSubProxy()
-#     proxy.run(stop_event)
 
 def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, num_publishers: int) -> BenchmarkResult:
-    stop_event = Event()
-    
+    """Run a single benchmark configuration"""
     with tempfile.TemporaryDirectory() as temp_dir:
-        # # Start proxy process (no port parameters needed)
-        # proxy_process = Process(target=run_proxy, args=(stop_event,))
-        # proxy_process.start()
+        # Create configuration for subscribers
+        config = {
+            "instances": {
+                f"benchmark_subscriber_{i}": {
+                    "class_path": "scripts.benchmark.BenchmarkSubscriber",
+                    "kwargs": {
+                        "results_dir": temp_dir,
+                        "subscriber_id": i,
+                        "name": f"benchmark_subscriber_{i}"
+                    },
+                } for i in range(num_subscribers)
+            }
+        }
         
-        # Start subscribers
-        sub_processes = []
-        for i in range(num_subscribers):
-            process = Process(target=run_subscriber, args=(stop_event, temp_dir, i))
-            process.start()
-            sub_processes.append(process)
+        # Initialize Ether system with configuration
+        ether_init(config=config, force_reinit=True)
         
-        # Create publishers
+        # Create publishers (these we'll manage manually)
         publishers = []
-        for _ in range(num_publishers):
+        for i in range(num_publishers):
             publisher = BenchmarkPublisher(message_size)
-            publisher.setup_sockets()
             publishers.append(publisher)
         
-        # Warmup period with scaled sleep time
-        warmup_messages = 100
-        messages_per_second = 1000  # Target rate during warmup
-        sleep_per_message = 1.0 / messages_per_second  # Time to sleep between messages
+        # Allow time for connections to establish
+        time.sleep(1.0)
         
-        # Send warmup messages at controlled rate
+        # Warmup period
+        warmup_messages = 100
+        messages_per_second = 1000
+        sleep_per_message = 1.0 / messages_per_second
+        
         for publisher in publishers:
             for _ in range(warmup_messages):
                 publisher.publish_message(time.time())
-                time.sleep(sleep_per_message)  # Control send rate
+                time.sleep(sleep_per_message)
         
-        # Additional stabilization time proportional to warmup messages
-        stabilization_time = 0.1 * (warmup_messages / 1000)  # 0.1s per 1000 messages
-        time.sleep(stabilization_time)
+        time.sleep(0.5)  # Additional stabilization time
         
         # Reset message counters after warmup
         for publisher in publishers:
@@ -127,7 +166,6 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
         # Start actual benchmark
         start_time = time.time()
         
-        # Send messages with rate limiting
         messages_per_publisher = num_messages
         total_messages_sent = 0
         message_interval = 0.0001 * (num_subscribers / 2)
@@ -141,32 +179,29 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
         end_time = time.time()
         duration = end_time - start_time
         
+        # Allow time for final messages to be processed
         time.sleep(1.0)
         
-        stop_event.set()
-        for p in sub_processes:
-            p.join(timeout=5)
-        
-        # Collect results
+        # Collect and process results
         all_latencies = []
         subscriber_results = []
         
         for i in range(num_subscribers):
             result_file = os.path.join(temp_dir, f"subscriber_{i}.json")
-            with open(result_file, 'r') as f:
-                results = json.load(f)
-                # Filter out warmup messages based on sequence numbers
-                results["received_messages"] = [
-                    msg for msg in results["received_messages"]
-                    if isinstance(msg[1], int) and msg[1] < messages_per_publisher
-                ]
-                all_latencies.extend(results["latencies"])
-                subscriber_results.append(results)
+            try:
+                with open(result_file, 'r') as f:
+                    results = json.load(f)
+                    results["received_messages"] = [
+                        msg for msg in results["received_messages"]
+                        if isinstance(msg[1], int) and msg[1] < messages_per_publisher
+                    ]
+                    all_latencies.extend(results["latencies"])
+                    subscriber_results.append(results)
+            except FileNotFoundError:
+                print(f"Warning: Could not find results file for subscriber {i}")
+                continue
         
-        for publisher in publishers:
-            publisher.cleanup()
-        
-        # Calculate metrics (excluding warmup)
+        # Calculate metrics
         total_messages_sent = num_messages * num_publishers
         expected_per_sub = total_messages_sent
         total_expected = expected_per_sub * num_subscribers
@@ -187,27 +222,25 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
         )
 
 def main():
-    """Run benchmarks with various configurations and display results"""
-    # Remove all handlers from root logger
+    """Run benchmarks with various configurations"""
+    # Configure logging
     root = logging.getLogger()
     for handler in root.handlers[:]:
         root.removeHandler(handler)
     
-    # Configure single handler for root logger
     handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     root.addHandler(handler)
-    root.setLevel(logging.DEBUG)
+    root.setLevel(logging.INFO)
     
     # Benchmark parameters
-    message_sizes = [1000, 100000]
-    message_counts = [1000, 5000, 100000]
-    subscriber_counts = [2, 8]
-    publisher_counts = [2, 8]
+    message_sizes = [1000]#, 100000]
+    message_counts = [1000]#, 5000, 100000]
+    subscriber_counts = [1]
+    publisher_counts = [1]
     
-    # Run proxy benchmark
-    print("\nRunning XPUB/XSUB Proxy Pattern Benchmark...")
+    print("\nRunning Ether Benchmark...")
     print("Pubs/Subs | Msg Size | Msg Count | Messages/sec | Latency (ms) | Loss % | Sent/Expected | Received/Expected | Memory (MB)")
     print("-" * 120)
     
@@ -226,5 +259,4 @@ def main():
                     time.sleep(1.0)
 
 if __name__ == "__main__":
-    ether_init()  # Initialize Ether system
-    main() 
+    main()
