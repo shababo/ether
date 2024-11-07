@@ -14,7 +14,7 @@ from typing import Union, Dict
 from pydantic import BaseModel
 import json
 
-from ._utils import _get_logger
+from ._utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, _get_logger
 from ._pubsub import _EtherPubSubProxy
 from ._instances import EtherInstanceLiaison, _EtherInstanceManager
 from ._config import EtherConfig
@@ -30,17 +30,17 @@ def _run_pubsub():
 def _run_monitor():
     """Standalone function to run instance monitoring"""
     logger = _get_logger("EtherMonitor", log_level=logging.INFO)
-    tracker = EtherInstanceLiaison()
+    liaison = EtherInstanceLiaison()
     
     while True:
         try:
             # Cull dead processes first
-            culled = tracker.cull_dead_processes()
+            culled = liaison.cull_dead_processes()
             if culled:
                 logger.debug(f"Culled {culled} dead instances")
             
             # Get remaining active instances
-            instances = tracker.get_active_instances()
+            instances = liaison.get_active_instances()
             logger.debug(f"Active instances: {instances}")
             time.sleep(CULL_INTERVAL)  # Check every CULL_INTERVAL seconds
         except Exception as e:
