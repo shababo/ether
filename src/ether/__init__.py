@@ -28,6 +28,7 @@ def _pub(data: Union[Dict, BaseModel], topic: str):
 
 # Public singleton instance of Ether API
 class Ether:
+    pub = staticmethod(_pub)
     save = staticmethod(functools.partial(_pub, {}, topic="Ether.save"))
     cleanup_all = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
     shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
@@ -48,9 +49,9 @@ class Ether:
             _init_logger()
             _logger.debug("Force reinitializing Ether system...")
             _ether.shutdown()
-            _initialized = False
+            self._initialized = False
             
-        if not self._initialized or restart:
+        if not self._initialized:
             # Initialize logger
             _init_logger()
 

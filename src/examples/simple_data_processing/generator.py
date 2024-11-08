@@ -8,4 +8,4 @@ class DataGenerator:
     @ether_pub(topic="DataProcessor.process_data")
     def generate_data(self, data: int = 42) -> dict:
         self._logger.info(f"Generating data: {data}")
-        return {"name": f"datagenerator_{self.process_id}", "data": data}
+        return {"name": self.name, "data": data}
