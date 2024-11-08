@@ -1,0 +1,1 @@
+`ether` is an ultra-lightweight, user-friendly scientific data acquisition and analysis framework for orchestrating hardware and compute.
