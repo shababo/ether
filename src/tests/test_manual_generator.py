@@ -3,9 +3,9 @@ import time
 import multiprocessing
 import logging
 import uuid
-from ether import ether_init
-from ether._config import EtherConfig
-from ether._instance_tracker import EtherInstanceLiaison
+from ether import ether
+from ether._internal._config import EtherConfig
+from ether._internal._instances._liaison import EtherInstanceLiaison
 from examples.simple_data_processing import DataGenerator
 
 def run_manual_generator_test():
@@ -36,7 +36,7 @@ def run_manual_generator_test():
     }
     
     # Initialize system and start processor/collector
-    ether_init(config)
+    ether.init(config)
     
     # Verify processor and collector are running
     instances = tracker.get_active_instances()

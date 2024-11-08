@@ -1,10 +1,9 @@
 import pytest
 import time
 import logging
-from ether import ether_init
+from ether import ether
 from examples.simple_data_processing import DataGenerator, DataProcessor, DataCollector
-from ether._daemon import daemon_manager
-from ether._instance_tracker import EtherInstanceLiaison
+from ether._internal._instances._liaison import EtherInstanceLiaison
 
 @pytest.fixture
 def setup_logging():
@@ -24,7 +23,7 @@ def test_instance_tracking(setup_logging, clean_redis):
     tracker = clean_redis  # Use the cleaned tracker
     
     # Initialize Ether system with force_reinit
-    ether_init(force_reinit=True)
+    ether.init(restart=True)
     time.sleep(1)  # Wait for services to start
     
     # Create instances
@@ -74,7 +73,7 @@ def test_instance_ttl(setup_logging, clean_redis):
     tracker = clean_redis  # Use the cleaned tracker
     
     # Initialize with force_reinit
-    ether_init(force_reinit=True)
+    ether.init(restart=True)
     
     # Create instance
     generator = DataGenerator(process_id=1)
