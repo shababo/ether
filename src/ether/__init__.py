@@ -1,11 +1,6 @@
 import functools
 import logging
-import zmq
-import time
-from typing import Optional, Union, List, Dict
-from multiprocessing import Process
-import signal
-import sys
+from typing import Optional, Union, Dict
 from pydantic import BaseModel
 from .decorators import ether_pub, ether_sub, ether_save, ether_cleanup
 from ._internal._utils import _get_logger
@@ -70,20 +65,8 @@ def _init_logger(log_level: int = logging.INFO):
     global _logger
     if _logger is None:
         _logger = _get_logger("EtherMain", log_level=log_level)
-
-# def _cleanup_logger():
-#     """Properly close logger handlers"""
-#     global _logger
-#     if _logger:
-#         for handler in _logger.handlers[:]:
-#             handler.close()
-#             _logger.removeHandler(handler)
-
-
-
-        
+ 
 
 # Export public interface
 ether = Ether()
 __all__ = ['ether', 'ether_pub', 'ether_sub', 'ether_save', 'ether_cleanup']
-
