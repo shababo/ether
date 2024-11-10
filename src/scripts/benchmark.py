@@ -129,6 +129,12 @@ class BenchmarkSubscriber:
         with open(self.results_file, 'w') as f:
             json.dump(results, f)
 
+    # cleanup all services
+    def cleanup(self):
+        self._logger.info(f"Cleaning up subscriber {self.subscriber_id}")
+        ether.cleanup(self.subscriber_id)
+
+
 
 def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, num_publishers: int) -> BenchmarkResult:
     """Run a single benchmark configuration"""
@@ -264,8 +270,8 @@ def main():
     root.setLevel(logging.INFO)
     
     # Benchmark parameters
-    message_sizes = [100, 1000, 1000]
-    message_counts = [10, 1000, 100000]
+    message_sizes = [10, 1000]
+    message_counts = [10000]
     subscriber_counts = [2, 4, 8]
     publisher_counts = [2, 4, 8]
     

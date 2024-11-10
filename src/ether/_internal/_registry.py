@@ -4,7 +4,7 @@ import inspect
 from typing import Any, Set, Type, Optional
 import uuid
 import zmq
-from pydantic import BaseModel, create_model, RootModel
+from pydantic import BaseModel, ValidationError, create_model, RootModel
 import logging
 import time
 import json
@@ -203,29 +203,29 @@ def add_ether_functionality(cls):
 
     def receive_single_message(self, timeout=1000):
         if self._sub_socket and self._sub_socket.poll(timeout=timeout):
-            try:
+            # try:
                 # Receive multipart message
-                message = self._sub_socket.recv_multipart()
-                topic = message[0].decode()
-                data = json.loads(message[1].decode())
-                
-                self._logger.debug(f"Received message: topic={topic}, data={data}")
-                
-                if topic in self._sub_topics:
-                    metadata = self._sub_metadata.get(topic)
-                    if metadata:
-                        if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
-                            args = {'root': metadata.args_model(data).root}
-                        else:
-                            try:
-                                model_instance = metadata.args_model(**data)
-                                args = model_instance.model_dump()
-                                metadata.func(self, **args)
-                            except Exception as e:
-                                self._logger.error(f"Error processing message: {e}")
-                                raise
-            except Exception as e:
-                self._logger.error(f"Error receiving message: {e}")
+            message = self._sub_socket.recv_multipart()
+            topic = message[0].decode()
+            data = json.loads(message[1].decode())
+            
+            self._logger.debug(f"Received message: topic={topic}, data={data}")
+            
+            if topic in self._sub_topics:
+                metadata = self._sub_metadata.get(topic)
+                if metadata:
+                    if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
+                        args = {'root': metadata.args_model(data).root}
+                    else:
+                        model_instance = metadata.args_model(**data)
+                        args = model_instance.model_dump()
+                    try:
+                        metadata.func(self, **args)
+                    except ValidationError as e:
+                        self._logger.error(f"Validation error receiving message: {e}")
+                            # raise
+            # except Exception as e:
+            #     self._logger.error(f"Error receiving message: {e}")
 
     
     # Add run method
@@ -343,7 +343,7 @@ def ether_pub(topic: Optional[str] = None):
             
             # self._logger.debug(f"Publishing result: {result}")
             # Validate result against return type
-            if isinstance(return_type, type) and issubclass(return_type, BaseModel):
+            if not isinstance(result, return_type) and isinstance(return_type, type) and issubclass(return_type, BaseModel):
                 validated_result = return_type(**result).model_dump_json()
             else:
                 ResultModel = RootModel[return_type]
@@ -385,6 +385,7 @@ def ether_pub(topic: Optional[str] = None):
 def ether_sub(topic: Optional[str] = None, subtopic: Optional[str] = None):
     """Decorator for methods that should receive messages."""
     def decorator(func):
+        
         @wraps(func)
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)

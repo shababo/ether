@@ -25,7 +25,7 @@ def run_mixed_autorun_test():
     }
     
     # Initialize - should only start generator
-    config_obj = ether.init(config=config)
+    ether.init(config=config)
     time.sleep(1)
     
     # Check that only generator is running
