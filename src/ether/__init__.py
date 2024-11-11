@@ -8,14 +8,6 @@ from ._internal._ether import _ether
 from ._internal._config import EtherConfig
 import atexit
 
-# _ether_initialized = False
-_logger = None  # Initialize later
-
-def _init_logger(log_level: int = logging.INFO):
-    """Initialize logger with proper cleanup"""
-    global _logger
-    if _logger is None:
-        _logger = _get_logger("EtherInit", log_level=log_level)
 
 def _pub(data: Union[Dict, BaseModel], topic: str):
     """Publish data to a topic
@@ -47,21 +39,18 @@ class Ether:
         
         if self._initialized and restart:
             # Clean up existing system
-            _init_logger()
-            _logger.debug("Force reinitializing Ether system...")
+            print("Force reinitializing Ether system...")
             self.shutdown()
             self._initialized = False
             
         if not self._initialized:
-            # Initialize logger
-            _init_logger()
 
             # Start ether
             _ether.start(config=config, restart=restart)
         
             # Mark as initialized
             self._initialized = True
-            _logger.info("Ether system initialized")
+            print("Ether system initialized")
             
             # Register single cleanup handler
             atexit.register(self.shutdown)
