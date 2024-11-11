@@ -219,11 +219,13 @@ def add_ether_functionality(cls):
                     else:
                         model_instance = metadata.args_model(**data)
                         args = model_instance.model_dump()
-                    try:
-                        metadata.func(self, **args)
-                    except ValidationError as e:
-                        self._logger.error(f"Validation error receiving message: {e}")
-                            # raise
+                    # try:
+                    metadata.func(self, **args)
+                    # except ValidationError as e:
+                    #     validation_err_msg = f"Validation error receiving message: {e}"
+                        # self._logger.error(validation_err_msg)
+                        # assert False, validation_err_msg
+                        #     # raise
             # except Exception as e:
             #     self._logger.error(f"Error receiving message: {e}")
 

@@ -66,6 +66,21 @@ class EtherInstanceLiaison:
                 instances[instance_id] = json.loads(data)
         return instances
     
+    def get_instance_data(self, instance_id: str) -> Dict[str, Any]:
+        """Get data for a specific instance"""
+        key = f"{self.instance_key_prefix}{instance_id}"
+        data = self.redis.get(key)
+        if data:
+            return json.loads(data)
+        return {}
+    
+    def update_instance_data(self, instance_id: str, data: Dict[str, Any]) -> None:
+        """Update data for a specific instance"""
+        key = f"{self.instance_key_prefix}{instance_id}"
+        existing_data = self.get_instance_data(instance_id)
+        existing_data.update(data)
+        self.redis.set(key, json.dumps(existing_data), ex=self._ttl)
+    
     def deregister_all(self):
         """Remove all tracked instances"""
         pattern = f"{self.instance_key_prefix}*"

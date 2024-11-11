@@ -105,13 +105,7 @@ def run_valid_type_test():
         print(f"Error in valid type test: {e}")
         raise
 
-def test_valid_types():
-    """Test that valid type messages are processed correctly"""
-    ctx = multiprocessing.get_context('spawn')
-    process = ctx.Process(target=run_valid_type_test)
-    process.start()
-    process.join(timeout=10)
-    assert process.exitcode == 0
+
 
 def run_invalid_type_test():
     """Test invalid type scenarios"""
@@ -139,15 +133,19 @@ def run_invalid_type_test():
 
 
 class MismatchPublisher(PublisherBase):
-    @ether_pub(topic="mismatched_types")
-    def send_message(self) -> dict:
+    @ether_pub(topic="MismatchSubscriber.receive_message")
+    def wrong_field_name(self) -> dict:
         return {"wrong_field_name": 42}
+    
+    @ether_pub(topic="MismatchSubscriber.receive_message")
+    def wrong_field_type(self) -> dict:
+        return {"correct_field_name": "not an int"}
 
 class MismatchSubscriber:
     def __init__(self):
         self.error_received = False
     
-    @ether_sub(topic="mismatched_types")
+    @ether_sub()
     def receive_message(self, correct_field_name: int):  # Mismatched field name
         pass
 
@@ -165,8 +163,17 @@ def run_type_mismatch_test():
     time.sleep(0.5)
     
     publisher = MismatchPublisher()
-    publisher.send_message()  # This should cause an error in the subscriber
+    publisher.wrong_field_name()  # This should cause an error in the subscriber
     time.sleep(0.5)
+    publisher.wrong_field_type()
+
+def test_valid_types():
+    """Test that valid type messages are processed correctly"""
+    ctx = multiprocessing.get_context('spawn')
+    process = ctx.Process(target=run_valid_type_test)
+    process.start()
+    process.join(timeout=10)
+    assert process.exitcode == 0 
 
 def test_type_mismatch():
     """Test that mismatched types between pub/sub are handled appropriately"""
