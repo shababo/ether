@@ -11,6 +11,12 @@ import atexit
 # _ether_initialized = False
 _logger = None  # Initialize later
 
+def _init_logger(log_level: int = logging.INFO):
+    """Initialize logger with proper cleanup"""
+    global _logger
+    if _logger is None:
+        _logger = _get_logger("EtherInit", log_level=log_level)
+
 def _pub(data: Union[Dict, BaseModel], topic: str):
     """Publish data to a topic
     
@@ -25,7 +31,7 @@ def _pub(data: Union[Dict, BaseModel], topic: str):
 class Ether:
     pub = staticmethod(_pub)
     save = staticmethod(functools.partial(_pub, {}, topic="Ether.save"))
-    cleanup_all = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
+    cleanup = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
     shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
     _initialized = False
     _instance = None
@@ -43,7 +49,7 @@ class Ether:
             # Clean up existing system
             _init_logger()
             _logger.debug("Force reinitializing Ether system...")
-            _ether.shutdown()
+            self.shutdown()
             self._initialized = False
             
         if not self._initialized:
@@ -58,13 +64,12 @@ class Ether:
             _logger.info("Ether system initialized")
             
             # Register single cleanup handler
-            atexit.register(_ether.shutdown)
+            atexit.register(self.shutdown)
 
-def _init_logger(log_level: int = logging.INFO):
-    """Initialize logger with proper cleanup"""
-    global _logger
-    if _logger is None:
-        _logger = _get_logger("EtherMain", log_level=log_level)
+    def shutdown(self):
+        self.cleanup()
+        self.save()
+        _ether.shutdown()
  
 
 # Export public interface

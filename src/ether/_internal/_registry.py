@@ -326,7 +326,7 @@ class EtherSubMetadata:
 
 
 
-def ether_pub(topic: Optional[str] = None):
+def _ether_pub(topic: Optional[str] = None):
     """Decorator for methods that should publish messages."""
     def decorator(func):
         # Get return type hint if it exists
@@ -384,7 +384,7 @@ def ether_pub(topic: Optional[str] = None):
         return wrapper
     return decorator
 
-def ether_sub(topic: Optional[str] = None, subtopic: Optional[str] = None):
+def _ether_sub(topic: Optional[str] = None, subtopic: Optional[str] = None):
     """Decorator for methods that should receive messages."""
     def decorator(func):
         

@@ -73,7 +73,7 @@ class _Ether:
             return
         
         self._initialized = True
-        self._logger = _get_logger("EtherDaemon", log_level=logging.INFO)
+        self._logger = _get_logger("Ether", log_level=logging.INFO)
         self._redis_process = None
         self._redis_port = 6379
         self._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
@@ -101,7 +101,7 @@ class _Ether:
             topic: Topic to publish to
         """
         if not self._started:
-            raise RuntimeError("Cannot publish: Ether system not started")
+            self._logger.warning("Cannot publish: Ether system not started")
             
         if self._pub_socket is None:
             self._setup_publisher()
@@ -239,9 +239,22 @@ class _Ether:
         # Wait for instances to be ready
         time.sleep(1.0)
 
+    # def save(self):
+    #     if self._pub_socket:
+    #         self._pub_socket.send_multipart([
+    #             "Ether.save",
+    #             "{}".encode()
+    #         ])
+
+    # def cleanup(self):
+    #     if self._pub_socket:
+    #         self._pub_socket.send([
+    #             "Ether.cleanup",
+    #             "{}".encode()
+    #         ])
 
     def shutdown(self):
-        """Shutdown all services"""
+        """Shutdown all services"""        
         try:
             # stop all instances
             if self._instance_manager:

@@ -272,8 +272,8 @@ def main():
     # Benchmark parameters
     message_sizes = [10, 1000]
     message_counts = [10000]
-    subscriber_counts = [2, 4, 8]
-    publisher_counts = [2, 4, 8]
+    subscriber_counts = [2, 4]
+    publisher_counts = [2, 4]
     
     print("\nRunning Ether Benchmark...")
     print("Pubs/Subs | Msg Size | Msg Count | Messages/sec | Latency (ms) | Loss % | Sent/Expected | Received/Expected | Memory (MB)")
