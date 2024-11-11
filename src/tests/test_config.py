@@ -3,7 +3,7 @@ import time
 import multiprocessing
 from ether import ether
 from ether._internal._config import EtherConfig
-from ether._internal._instances._liaison import EtherInstanceLiaison
+from ether.liaison import EtherInstanceLiaison
 
 def run_mixed_autorun_test():
     """Test mixed autorun configuration"""

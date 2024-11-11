@@ -5,7 +5,7 @@ import logging
 import uuid
 from ether import ether
 from ether._internal._config import EtherConfig
-from ether._internal._instances._liaison import EtherInstanceLiaison
+from ether.liaison import EtherInstanceLiaison
 from examples.simple_data_processing import DataGenerator
 
 def run_manual_generator_test():

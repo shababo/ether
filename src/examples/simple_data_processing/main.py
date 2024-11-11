@@ -24,7 +24,7 @@ def main(config_name):
     python main.py --config-name {dual_processors} 
 
 
-    Expected output:
+    Expected output (ordering of processor and generator outputs may be different):
     INFO - EtherMain: - Ether system initialized
     INFO - DataGenerator:generator_within_process - Generating data: 42
     INFO - DataProcessor:processor2x - Processing generator_within_process with data 42

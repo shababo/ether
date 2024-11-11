@@ -1,11 +1,10 @@
 from typing import Dict, Union
-import time
 from multiprocessing import Process
 import logging
 
-from .._utils import _get_logger
-from .._config import EtherConfig
-from ._liaison import EtherInstanceLiaison
+from ._utils import _get_logger
+from ._config import EtherConfig
+from ether.liaison import EtherInstanceLiaison
 
 
 class _EtherInstanceManager:

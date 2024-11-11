@@ -15,8 +15,8 @@ import signal
 
 from ._utils import _ETHER_PUB_PORT, _get_logger
 from ._pubsub import _EtherPubSubProxy
-from ._instances._liaison import EtherInstanceLiaison 
-from ._instances._manager import _EtherInstanceManager
+from ether.liaison import EtherInstanceLiaison 
+from ._manager import _EtherInstanceManager
 from ._config import EtherConfig
 from ._registry import EtherRegistry
 

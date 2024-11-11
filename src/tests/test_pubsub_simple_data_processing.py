@@ -3,7 +3,7 @@ import time
 import logging
 from ether import ether
 from examples.simple_data_processing import DataGenerator, DataProcessor, DataCollector
-from ether._internal._instances._liaison import EtherInstanceLiaison
+from ether.liaison import EtherInstanceLiaison
 
 @pytest.fixture
 def setup_logging():

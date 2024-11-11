@@ -6,7 +6,7 @@ from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 from pydantic import BaseModel
 from ether import ether, ether_pub, ether_sub, ether_save
-from ether._internal._instances._liaison import EtherInstanceLiaison
+from ether.liaison import EtherInstanceLiaison
 from ether._internal._utils import _get_logger
 from pprint import pprint
 
@@ -93,11 +93,6 @@ class DataVerificationSubscriber:
         self.received_data.list_data = root
         self._update_received_data()
 
-    # @ether_save()
-    # def save_data(self):
-    #     # save data to redis
-    #     liaison = EtherInstanceLiaison()
-    #     liaison.re
 
 def verify_received_data(received: ReceivedData):
     """Verify that all received data matches expected values"""
