@@ -1,6 +1,6 @@
 # Ether
 
-Ether is a Python library that helps scientists and engineers integrate existing code into distributed systems with minimal changes. It's designed to transform standalone classes into components of a larger system without requiring significant refactoring.
+Ether dynamically facilitates local and remote function calling between Python instances and processes while remaining nearly invisible. The primary focus is to help scientists and engineers integrate existing code into flexible data acquisition and analysis systems with minimal overhead.
 
 ## Motivation
 
