@@ -25,17 +25,17 @@ def main(config_name):
 
 
     Expected output (ordering of processor and generator outputs may be different):
-    INFO - EtherMain: - Ether system initialized
+    Ether system initialized
     INFO - DataGenerator:generator_within_process - Generating data: 42
-    INFO - DataProcessor:processor2x - Processing generator_within_process with data 42
     INFO - DataProcessor:processor4x - Processing generator_within_process with data 42
-    INFO - DataCollector:collector1 - Collected result: generator_within_process = 84
-    INFO - DataCollector:collector1 - Collected result: generator_within_process = 168
+    INFO - DataProcessor:processor2x - Processing generator_within_process with data 42
+    INFO - DataCollector:collector1 - Collected result: generator_within_process_4x = 168
+    INFO - DataCollector:collector1 - Collected result: generator_within_process_2x = 84
     INFO - DataGenerator:generator_interprocess - Generating data: 44
-    INFO - DataProcessor:processor2x - Processing generator_interprocess with data 44
     INFO - DataProcessor:processor4x - Processing generator_interprocess with data 44
-    INFO - DataCollector:collector1 - Collected result: generator_interprocess = 88
-    INFO - DataCollector:collector1 - Collected result: generator_interprocess = 176
+    INFO - DataProcessor:processor2x - Processing generator_interprocess with data 44
+    INFO - DataCollector:collector1 - Collected result: generator_interprocess_4x = 176
+    INFO - DataCollector:collector1 - Collected result: generator_interprocess_2x = 88
     """
 
     # init ether

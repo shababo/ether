@@ -61,6 +61,10 @@ class Ether:
         _ether.shutdown()
  
 
-# Export public interface
+## Export public interface
+# instantiate singleton for API
 ether = Ether()
-__all__ = ['ether', 'ether_pub', 'ether_sub', 'ether_init', 'ether_save', 'ether_cleanup']
+# export decorators
+decorators = ['ether_pub', 'ether_sub', 'ether_init', 'ether_save', 'ether_cleanup']
+__all__ = ['ether'] + decorators
+

@@ -11,6 +11,6 @@ class DataProcessor:
         self._logger.info(f"Processing {name} with data {data}")
         processed_data = data * self.multiplier
         return {
-            "result_name": name,
+            "result_name": name + f"_{self.multiplier}x",
             "value": processed_data
         }
