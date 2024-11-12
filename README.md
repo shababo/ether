@@ -11,7 +11,7 @@ Scientists and engineers often have existing code that works well for individual
 - An engineer needs to add remote monitoring to existing industrial control systems
 - A developer wants to turn a Gymnasium environment into an interactive game with joystick control and real-time display
 
-Ether makes these integrations simple by providing a messaging layer that connects components with minimal code changes.
+Ether makes these integrations simple by providing a lightweight, decorator and config based interface which enables an invisible communication layer that enables function calling, fast message passing, and optimized data sharing.
 
 ## Features
 
