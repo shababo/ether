@@ -11,7 +11,7 @@ Scientists and engineers often have existing code that works well for individual
 - An operations engineer needs to add remote monitoring to existing industrial control systems
 - A behavioral scientist wants to turn a Gymnasium environment into an interactive game with joystick control and real-time display
 
-Ether makes these integrations simple by providing a lightweight, decorator and config based interface which enables an invisible communication layer that enables function calling, fast message passing, and optimized data sharing.
+Ether makes these integrations simple by providing a lightweight, decorator and configuration based interface which enables function calling, fast message passing, and optimized data sharing between Python instances running within the same process, in different processes, or even on different machines.
 
 ## Features
 
