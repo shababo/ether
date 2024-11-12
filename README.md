@@ -6,10 +6,10 @@ Ether dynamically facilitates local and remote function calling between Python i
 
 Scientists and engineers often have existing code that works well for individual tasks but becomes challenging to integrate into larger systems. For example:
 
-- A scientist has code that operates lab equipment and runs analysis, and wants to integrate it into an automated data acquisition pipeline
-- A researcher wants to combine multiple machine learning models into a real-time processing pipeline
-- An engineer needs to add remote monitoring to existing industrial control systems
-- A developer wants to turn a Gymnasium environment into an interactive game with joystick control and real-time display
+- A computational biologist has code that operates lab equipment and runs analysis, and wants to integrate it into an automated data acquisition pipeline
+- An AI engineer wants to combine multiple machine learning models into a real-time processing pipeline
+- An operations engineer needs to add remote monitoring to existing industrial control systems
+- A behavioral scientist wants to turn a Gymnasium environment into an interactive game with joystick control and real-time display
 
 Ether makes these integrations simple by providing a lightweight, decorator and config based interface which enables an invisible communication layer that enables function calling, fast message passing, and optimized data sharing.
 
