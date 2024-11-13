@@ -50,8 +50,8 @@ class _EtherInstanceManager:
             if redis_id:
                 self._logger.debug(f"Deregistering instance {instance_id} (Redis ID: {redis_id})")
                 self._liaison.deregister_instance(redis_id)
-            else:
-                self._logger.warning(f"Could not find Redis ID for instance {instance_id}")
+            # else:
+            #     self._logger.warning(f"Could not find Redis ID for instance {instance_id}")
                 
             del self._instance_processes[instance_id]
 
