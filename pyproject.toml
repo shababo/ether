@@ -12,11 +12,18 @@ dependencies = [
     "redis>=5.2.0",
     "pyyaml>=6.0.2",
     "click>=8.1.7",
+    
 ]
 
 [project.optional-dependencies]
-test = [
-    "pytest",
+integrations = [
+    "pyserial>=3.5",
+    "open-ephys-python-tools>=0.1.12",
+]
+
+[dependency-groups]
+dev = [
+  "pytest"
 ]
 
 [build-system]
