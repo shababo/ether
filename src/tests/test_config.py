@@ -46,10 +46,6 @@ def run_mixed_autorun_test():
     assert "test_generator" in instance_names
     assert "test_processor" in instance_names
 
-def test_mixed_autorun():
+def test_mixed_autorun(process_runner):
     """Test configuration with mixed autorun settings"""
-    ctx = multiprocessing.get_context('spawn')
-    process = ctx.Process(target=run_mixed_autorun_test)
-    process.start()
-    process.join()
-    assert process.exitcode == 0
+    process_runner(run_mixed_autorun_test, timeout=20)
