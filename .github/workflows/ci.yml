@@ -9,9 +9,11 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 1
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
+      fail-fast: false
 
     services:
       redis:
@@ -40,12 +42,24 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest pytest-cov
+        pip install pytest pytest-cov pytest-timeout
         pip install -e .
+        
+    - name: Clean up existing Redis and ZMQ resources
+      run: |
+        sudo service redis-server stop
+        sudo rm -f /var/run/redis/redis-server.pid
+        sudo redis-server --daemonize yes
+        # Kill any existing ZMQ processes
+        pkill -f zmq || true
+        sleep 2
         
     - name: Run tests with coverage
       run: |
-        pytest --cov=ether --cov-report=xml
+        # Run tests with timeout and cleanup between tests
+        pytest --cov=ether --cov-report=xml --timeout=30 -v
+      env:
+        PYTHONUNBUFFERED: 1
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -56,6 +70,7 @@ jobs:
   benchmark:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     
     services:
       redis:
