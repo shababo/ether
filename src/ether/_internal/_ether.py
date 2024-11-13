@@ -101,7 +101,7 @@ class _Ether:
             topic: Topic to publish to
         """
         if not self._started:
-            self._logger.warning("Cannot publish: Ether system not started")
+            self._logger.warning(f"Cannot publish {data} to {topic}: Ether system not started")
             
         if self._pub_socket is None:
             self._setup_publisher()
