@@ -4,7 +4,7 @@ from ether import ether_init, ether_sub, ether_pub, ether_cleanup
 
 class SimpleSerial:
 
-    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 1.0):
+    def __init__(self, port: str, baudrate: int = 9600, timeout: float = 1.0):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
