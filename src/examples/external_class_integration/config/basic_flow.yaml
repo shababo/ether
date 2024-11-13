@@ -1,0 +1,42 @@
+registry:
+  examples.external_class_integration.DataGenerator:
+    methods:
+      generate_data:
+        ether_sub: {}  # Empty dict for default settings
+        ether_pub:
+          topic: "data"  # Publish to 'data' topic
+  
+  examples.external_class_integration.DataProcessor:
+    methods:
+      process_data:
+        ether_sub:
+          topic: "data"  # Subscribe to 'data' topic
+        ether_pub:
+          topic: "processed_data"  # Publish to 'processed_data' topic
+  
+  examples.external_class_integration.DataCollector:
+    methods:
+      collect_result:
+        ether_sub:
+          topic: "processed_data"  # Subscribe to 'processed_data' topic
+
+instances:
+  generator1:
+    class_path: examples.external_class_integration.DataGenerator
+    kwargs:
+      process_id: 1
+  
+  processor2x:
+    class_path: examples.external_class_integration.DataProcessor
+    kwargs:
+      process_id: 1
+      multiplier: 2
+  
+  processor4x:
+    class_path: examples.external_class_integration.DataProcessor
+    kwargs:
+      process_id: 2
+      multiplier: 4
+  
+  collector1:
+    class_path: examples.external_class_integration.DataCollector 

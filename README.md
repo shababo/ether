@@ -108,6 +108,86 @@ ether.init(config="config.yaml")
 ether.pub({"data": 42}, topic="DataGenerator.generate_data")
 ```
 
+## Using Ether with External Classes
+
+Sometimes you may want to use Ether with classes that you can't or don't want to modify directly. Ether provides a way to apply pub/sub decorators through configuration instead of modifying source code.
+
+### Registry Configuration
+
+The registry configuration allows you to specify which methods should be decorated with `ether_pub` and `ether_sub`. Here's an example:
+```yaml
+registry:
+  examples.external_class_integration.DataGenerator:
+    methods:
+      generate_data:
+        ether_sub: {} # Empty dict for default settings
+        ether_pub:
+          topic: "data" # Publish to 'data' topic
+  examples.external_class_integration.DataProcessor:
+    methods:
+      process_data:
+        ether_sub:
+          topic: "data" # Subscribe to 'data' topic
+        ether_pub:
+          topic: "processed_data" # Publish to 'processed_data' topic
+  examples.external_class_integration.DataCollector:
+    methods:
+      collect_result:
+        ether_sub:
+          topic: "processed_data" # Subscribe to 'processed_data' topic
+instances:
+  generator1:
+    class_path: examples.external_class_integration.DataGenerator
+    kwargs:
+      process_id: 1
+  processor2x:
+    class_path: examples.external_class_integration.DataProcessor
+    kwargs:
+      multiplier: 2
+```
+
+### How It Works
+
+1. The registry configuration specifies:
+   - Which classes to modify via the keys in `registry`
+   - Which methods to decorate via the keys in `methods`
+   - What decorators to apply (e.g. `ether_pub`, `ether_sub`. etc.)
+   - The `kwargs` to pass to each decorator
+
+2. When Ether initializes:
+   ```python
+   from ether import ether
+   
+   # Load config from file
+   ether.init(config="path/to/config.yaml")
+   
+   # Or use dict configuration
+   config = {
+       "registry": {
+           "my.module.MyClass": {
+               "methods": {
+                   "my_method": {
+                       "ether_pub": {"topic": "my_topic"}
+                   }
+               }
+           }
+       }
+   }
+   ether.init(config=config)
+   ```
+
+3. The specified decorators are applied to the classes, and Ether functionality is added
+4. The classes can then be used normally, either:
+   - Created manually: `instance = MyClass()`
+   - Launched automatically via the `instances` configuration
+
+### Benefits
+
+- No modification of source code required
+- Works with third-party classes
+- Configuration can be changed without code changes
+- Same functionality as manual decoration
+
 ## Real-World Example: Automated Lab Equipment
 
 Here's how you might use Ether to automate a lab experiment:

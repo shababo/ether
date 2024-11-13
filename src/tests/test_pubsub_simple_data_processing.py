@@ -1,27 +1,13 @@
 import pytest
 import time
 import logging
+import multiprocessing
 from ether import ether
 from examples.simple_data_processing import DataGenerator, DataProcessor, DataCollector
 from ether.liaison import EtherInstanceLiaison
 
-@pytest.fixture
-def setup_logging():
-    logging.basicConfig(level=logging.INFO)
-    yield
-
-@pytest.fixture
-def clean_redis():
-    """Clean up Redis before and after each test"""
-    tracker = EtherInstanceLiaison()
-    tracker.deregister_all()
-    yield tracker
-    tracker.deregister_all()
-
-def test_instance_tracking(setup_logging, clean_redis):
-    """Test that instances are properly tracked in Redis"""
-    tracker = clean_redis  # Use the cleaned tracker
-    
+def run_instance_tracking_test():
+    """Run instance tracking test in a separate process"""
     # Initialize Ether system with force_reinit
     ether.init(restart=True)
     time.sleep(1)  # Wait for services to start
@@ -32,6 +18,7 @@ def test_instance_tracking(setup_logging, clean_redis):
     collector = DataCollector()
     
     # Check that instances are registered
+    tracker = EtherInstanceLiaison()
     instances = tracker.get_active_instances()
     assert len(instances) == 3
     
@@ -68,10 +55,8 @@ def test_instance_tracking(setup_logging, clean_redis):
     instances = tracker.get_active_instances()
     assert len(instances) == 0
 
-def test_instance_ttl(setup_logging, clean_redis):
-    """Test that instances are properly expired"""
-    tracker = clean_redis  # Use the cleaned tracker
-    
+def run_instance_ttl_test():
+    """Run TTL test in a separate process"""
     # Initialize with force_reinit
     ether.init(restart=True)
     
@@ -79,6 +64,7 @@ def test_instance_ttl(setup_logging, clean_redis):
     generator = DataGenerator(process_id=1)
     
     # Verify registration
+    tracker = EtherInstanceLiaison()
     instances = tracker.get_active_instances()
     assert len(instances) == 1
     
@@ -89,3 +75,19 @@ def test_instance_ttl(setup_logging, clean_redis):
     # Verify instance is expired
     instances = tracker.get_active_instances()
     assert len(instances) == 0
+
+def test_instance_tracking():
+    """Test that instances are properly tracked in Redis"""
+    ctx = multiprocessing.get_context('spawn')
+    process = ctx.Process(target=run_instance_tracking_test)
+    process.start()
+    process.join()
+    assert process.exitcode == 0
+
+def test_instance_ttl():
+    """Test that instances are properly expired"""
+    ctx = multiprocessing.get_context('spawn')
+    process = ctx.Process(target=run_instance_ttl_test)
+    process.start()
+    process.join()
+    assert process.exitcode == 0

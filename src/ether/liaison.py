@@ -5,6 +5,8 @@ import time
 import os
 import logging
 
+from ether._internal._utils import _get_logger
+
 
 class EtherInstanceLiaison:
     """An interface for (de)registrations and process tracking for instances"""
@@ -21,7 +23,7 @@ class EtherInstanceLiaison:
         self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
         self.instance_key_prefix = "ether:instance:"
         self._ttl = 60  # seconds until instance considered dead
-        self._logger = logging.getLogger("InstanceLiaison")
+        self._logger = _get_logger(__name__, log_level=logging.DEBUG)
     
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         # __new__ handles initialization
@@ -83,6 +85,7 @@ class EtherInstanceLiaison:
     
     def deregister_all(self):
         """Remove all tracked instances"""
+        self._logger.info("Deleting all instances")
         pattern = f"{self.instance_key_prefix}*"
         keys = self.redis.keys(pattern)
         if keys:
@@ -112,4 +115,16 @@ class EtherInstanceLiaison:
                 removed += 1
                 
         return removed
+    
+    def store_registry_config(self, config: dict):
+        """Store registry configuration in Redis"""
+        self._logger.info(f"Current registry config: {self.get_registry_config()}")
+        self._logger.debug(f"Storing registry config: {config}")
+        self.redis.set("ether:registry_config", json.dumps(config))
+        self._logger.info(f"Updated registry config: {self.get_registry_config()}")
+    
+    def get_registry_config(self) -> dict:
+        """Get registry configuration from Redis"""
+        config = self.redis.get("ether:registry_config")
+        return json.loads(config) if config else {}
 

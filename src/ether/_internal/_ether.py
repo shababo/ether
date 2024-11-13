@@ -41,7 +41,7 @@ def _run_pubsub():
 
 def _run_monitor():
     """Standalone function to run instance monitoring"""
-    logger = _get_logger("EtherMonitor", log_level=logging.INFO)
+    logger = _get_logger("EtherMonitor", log_level=logging.DEBUG)
     liaison = EtherInstanceLiaison()
     
     while True:
@@ -101,7 +101,7 @@ class _Ether:
             topic: Topic to publish to
         """
         if not self._started:
-            self._logger.warning("Cannot publish: Ether system not started")
+            self._logger.warning(f"Cannot publish {data} to {topic}: Ether system not started")
             
         if self._pub_socket is None:
             self._setup_publisher()
@@ -123,17 +123,13 @@ class _Ether:
     
     def start(self, config = None, restart: bool = False):
         """Start all daemon services"""
-
         if self._started:
             if restart:
                 self.shutdown()
             else:
                 return
         
-        # Process any pending classes
-        EtherRegistry.process_pending_classes()
-        
-        # Start Redis
+        # Start Redis first
         if not self._ensure_redis_running():
             raise RuntimeError("Redis server failed to start")
         
@@ -141,12 +137,39 @@ class _Ether:
         if not self._ensure_pubsub_running():
             raise RuntimeError("PubSub proxy failed to start")
         
-        # Start instance process monitoring (DO WE NEED THIS?)
+        # Start instance process monitoring
         self._monitor_process = Process(target=_run_monitor)
-        self._monitor_process.daemon = True
+        # self._monitor_process.daemon = True
         self._monitor_process.start()
-
+        
+        # Clean Redis state
+        liaison = EtherInstanceLiaison()
+        liaison.deregister_all()
+        liaison.store_registry_config({})
+        
         if config:
+            # Process registry configuration if present
+            if isinstance(config, (str, dict)):
+                config = EtherConfig.from_yaml(config) if isinstance(config, str) else EtherConfig.model_validate(config)
+            
+            # Store registry config in Redis if present
+            if config.registry:
+                # Convert the entire registry config to a dict
+                registry_dict = {
+                    class_path: class_config.model_dump()
+                    for class_path, class_config in config.registry.items()
+                }
+                liaison.store_registry_config(registry_dict)
+                EtherRegistry.process_registry_config(config.registry)
+        
+        # Process any pending classes
+        EtherRegistry.process_pending_classes()
+        
+        
+        
+        
+
+        if config and config.instances:
             self._start_instances(config)
 
         self._setup_publisher()

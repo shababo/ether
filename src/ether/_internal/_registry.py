@@ -1,7 +1,7 @@
 from functools import wraps
 from multiprocessing import Event, Process
 import inspect
-from typing import Any, Set, Type, Optional
+from typing import Any, Set, Type, Optional, Dict
 import uuid
 import zmq
 from pydantic import BaseModel, ValidationError, create_model, RootModel
@@ -10,52 +10,113 @@ import time
 import json
 import os
 import sys
+import importlib
 
 from ._utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
 from ether.liaison import EtherInstanceLiaison
+from ._config import EtherConfig, EtherClassConfig
 
 class EtherRegistry:
     """Registry to track and process classes with Ether methods"""
     _pending_classes: dict[str, str] = {}  # qualname -> module_name
     _processed_classes: Set[str] = set()
+    _logger = _get_logger("EtherRegistry", log_level=logging.DEBUG)
     
     @classmethod
     def mark_for_processing(cls, class_qualname: str, module_name: str):
         cls._pending_classes[class_qualname] = module_name
     
     @classmethod
-    def process_pending_classes(cls):
-        logger = _get_logger("EtherRegistry", log_level=logging.INFO)
-        logger.debug("Processing pending classes...")
+    def process_registry_config(cls, config: Dict[str, EtherClassConfig]):
+        """Process registry configuration and apply decorators
         
-        for qualname, module_name in cls._pending_classes.items():
+        Args:
+            config: Dictionary mapping class paths to their configurations
+        """
+        cls._logger.debug("Processing registry configuration...")
+        
+        for class_path, class_config in config.items():
+            # Import the class
+            module_path, class_name = class_path.rsplit('.', 1)
+            try:
+                module = importlib.import_module(module_path)
+                target_class = getattr(module, class_name)
+            except (ImportError, AttributeError) as e:
+                cls._logger.error(f"Failed to import {class_path}: {e}")
+                continue
+            
+            cls._logger.debug(f"Processing class {class_path}")
+            
+            # Process each method
+            for method_name, method_config in class_config.methods.items():
+                if not hasattr(target_class, method_name):
+                    cls._logger.warning(f"Method {method_name} not found in {class_path}")
+                    continue
+                
+                # Get the original method
+                original_method = getattr(target_class, method_name)
+                
+                # Apply decorators in the correct order (sub then pub)
+                decorated_method = original_method
+
+                if method_config.ether_pub:
+                    from ..decorators import ether_pub
+                    kwargs = {}
+                    if method_config.ether_pub.topic:
+                        kwargs['topic'] = method_config.ether_pub.topic
+                    decorated_method = ether_pub(**kwargs)(decorated_method)
+                
+                if method_config.ether_sub:
+                    from ..decorators import ether_sub
+                    kwargs = {}
+                    if method_config.ether_sub.topic:
+                        kwargs['topic'] = method_config.ether_sub.topic
+                    decorated_method = ether_sub(**kwargs)(decorated_method)
+                
+                
+                
+                # Replace the original method with the decorated version
+                setattr(target_class, method_name, decorated_method)
+                cls._logger.debug(f"Applied decorators to {class_path}.{method_name}")
+            
+            # Mark class for Ether functionality
+            cls.mark_for_processing(class_name, module_path)
+    
+    @classmethod
+    def process_pending_classes(cls):
+        cls._logger.info("Processing pending classes...")
+        cls._logger.debug(f"Pending classes: {cls._pending_classes}")
+        cls._logger.debug(f"Processed classes: {cls._processed_classes}")
+        
+        for qualname, module_name in list(cls._pending_classes.items()):  # Create a copy of items to modify dict
             if qualname in cls._processed_classes:
-                logger.debug(f"Class {qualname} already processed, skipping")
+                cls._logger.debug(f"Class {qualname} already processed, skipping")
                 continue
                 
             # Import the module that contains the class
             module = sys.modules.get(module_name)
             if module and hasattr(module, qualname):
                 class_obj = getattr(module, qualname)
-                logger.debug(f"Adding Ether functionality to {qualname}")
+                cls._logger.debug(f"Adding Ether functionality to {qualname}")
                 add_ether_functionality(class_obj)
                 cls._processed_classes.add(qualname)
-                logger.debug(f"Successfully processed {qualname}")
+                cls._logger.debug(f"Successfully processed {qualname}")
             else:
-                logger.warning(f"Could not find class {qualname} in module {module_name}")
+                cls._logger.warning(f"Could not find class {qualname} in module {module_name}")
 
 def add_ether_functionality(cls):
     """Adds Ether functionality directly to a class"""
+    # If class already has Ether functionality, return it
+    if hasattr(cls, '_ether_methods_info'):
+        return cls
+        
     # Collect Ether methods
     ether_methods = {
         name: method for name, method in cls.__dict__.items()
         if hasattr(method, '_pub_metadata') or hasattr(method, '_sub_metadata')
     }
     
-    if not ether_methods:
-        return cls
-    
-    # Store Ether method information
+    # Store Ether method information (even if empty)
     cls._ether_methods_info = ether_methods
     
     # Add core attributes
@@ -92,7 +153,7 @@ def add_ether_functionality(cls):
         self._instance_tracker = EtherInstanceLiaison()
         self._instance_tracker.register_instance(self.id, {
             'name': self.name,
-            'process_name': name,
+            'process_name': name or self.id,  # Use ID if no name provided
             'class': self.__class__.__name__,
             'pub_topics': [m._pub_metadata.topic for m in self._ether_methods_info.values() 
                           if hasattr(m, '_pub_metadata')],
@@ -269,16 +330,18 @@ def add_ether_functionality(cls):
     cls.run = run
     cls.cleanup = cleanup
     cls.receive_single_message = receive_single_message
-
     
     # Modify __init__ to initialize attributes
     original_init = cls.__init__
     def new_init(self, *args, **kwargs):
+        # Initialize Ether functionality first
         self.init_ether(
             name=kwargs.pop('name', None),
             log_level=kwargs.pop('log_level', logging.INFO),
         )
+        # Call original init with remaining args
         original_init(self, *args, **kwargs)
+        # Setup sockets after initialization
         self.setup_sockets()
     cls.__init__ = new_init
     
