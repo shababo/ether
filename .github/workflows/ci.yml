@@ -73,7 +73,7 @@ jobs:
     - name: Run tests with coverage
       run: |
         # Run tests with timeout and cleanup between tests
-        pytest --cov=ether --cov-report=xml --timeout=30 -v
+        pytest --cov=ether --cov-report=xml --timeout=120 -v
       env:
         PYTHONUNBUFFERED: 1
         

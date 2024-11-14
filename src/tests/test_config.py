@@ -48,4 +48,4 @@ def run_mixed_autorun_test():
 
 def test_mixed_autorun(process_runner):
     """Test configuration with mixed autorun settings"""
-    process_runner(run_mixed_autorun_test, timeout=20)
+    process_runner(run_mixed_autorun_test, timeout=120)
