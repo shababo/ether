@@ -6,9 +6,13 @@ import time
 from ether import ether
 import multiprocessing
 import logging
+import subprocess
+import tempfile
+from pathlib import Path
 
 # Configure logging for tests
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def wait_for_process(process, timeout=10):
     """Wait for a process to complete with timeout"""
@@ -18,6 +22,53 @@ def wait_for_process(process, timeout=10):
             return True
         time.sleep(0.1)
     return False
+
+def ensure_redis_running():
+    """Ensure Redis server is running, handling various edge cases"""
+    try:
+        # Create user-accessible directory for Redis files
+        redis_dir = Path(tempfile.gettempdir()) / "ether_test_redis"
+        redis_dir.mkdir(exist_ok=True)
+        
+        # Kill any existing Redis server
+        os.system("pkill -f redis-server")
+        time.sleep(1)
+        
+        # Clean up any existing Redis files
+        for file in redis_dir.glob("*"):
+            file.unlink()
+            
+        # Create Redis config
+        redis_config = {
+            'port': 6379,
+            'daemonize': 'yes',
+            'dir': str(redis_dir),
+            'logfile': str(redis_dir / 'redis.log'),
+            'pidfile': str(redis_dir / 'redis.pid'),
+            'bind': '127.0.0.1',
+            'loglevel': 'warning'
+        }
+        
+        config_path = redis_dir / 'redis.conf'
+        with open(config_path, 'w') as f:
+            for key, value in redis_config.items():
+                f.write(f"{key} {value}\n")
+        
+        # Start Redis with our config
+        subprocess.run(['redis-server', str(config_path)], 
+                     stderr=subprocess.DEVNULL, 
+                     stdout=subprocess.DEVNULL)
+        time.sleep(1)
+        
+        # Test connection
+        r = redis.Redis()
+        r.ping()
+        r.close()
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to start Redis: {e}")
+        return False
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_env():
@@ -32,6 +83,10 @@ def setup_test_env():
         time.sleep(1)
     except:
         pass
+    
+    # Ensure Redis is running
+    if not ensure_redis_running():
+        pytest.fail("Failed to start Redis server")
 
 @pytest.fixture(autouse=True)
 def cleanup_between_tests():
@@ -56,7 +111,7 @@ def cleanup_between_tests():
         time.sleep(0.5)
         
     except Exception as e:
-        print(f"Cleanup error: {e}")
+        logger.error(f"Cleanup error: {e}")
 
 @pytest.fixture
 def process_runner():
@@ -100,7 +155,21 @@ def pytest_sessionfinish(session, exitstatus):
         r.flushall()
         r.close()
         
-        # Kill any remaining ZMQ processes
+        # Kill any remaining processes
         os.system("pkill -f zmq")
+        os.system("pkill -f redis-server")
+        
+        # Clean up Redis directory
+        redis_dir = Path(tempfile.gettempdir()) / "ether_test_redis"
+        if redis_dir.exists():
+            for file in redis_dir.glob("*"):
+                try:
+                    file.unlink()
+                except:
+                    pass
+            try:
+                redis_dir.rmdir()
+            except:
+                pass
     except:
         pass

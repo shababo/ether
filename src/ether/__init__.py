@@ -56,8 +56,7 @@ class Ether:
             atexit.register(self.shutdown)
 
     def shutdown(self):
-        self.cleanup()
-        self.save()
+        """Shutdown the Ether messaging system"""
         _ether.shutdown()
  
 

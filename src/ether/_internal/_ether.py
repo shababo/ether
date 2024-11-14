@@ -101,7 +101,9 @@ class _Ether:
             topic: Topic to publish to
         """
         if not self._started:
+            # self._logger.debug(f"Did not publish {data} to {topic}: Ether system not started")
             self._logger.warning(f"Cannot publish {data} to {topic}: Ether system not started")
+            return
             
         if self._pub_socket is None:
             self._setup_publisher()
@@ -279,66 +281,95 @@ class _Ether:
     def shutdown(self):
         """Shutdown all services"""        
         try:
+            # send cleanup and save messages
+            try:
+                if self._started:
+                    self.publish({}, "Ether.cleanup")
+                    time.sleep(1.0)
+                    self.publish({}, "Ether.save") 
+                    time.sleep(1.0)
+            except Exception as e:
+                self._logger.error(f"Error sending cleanup/save messages: {e}")
+            
             # stop all instances
-            if self._instance_manager:
-                self._instance_manager.stop_all_instances()
+            try:
+                if self._instance_manager:
+                    self._instance_manager.stop_all_instances()
+            except Exception as e:
+                self._logger.error(f"Error stopping instances: {e}")
             
             # close publishing socket and context
-            if self._pub_socket:
-                self._pub_socket.close()
-                self._pub_socket = None 
-            if self._zmq_context:
-                self._zmq_context.term()
-                self._zmq_context = None
+            try:
+                if self._pub_socket:
+                    self._pub_socket.close()
+                    self._pub_socket = None
+                if self._zmq_context:
+                    self._zmq_context.term()
+                    self._zmq_context = None
+            except Exception as e:
+                self._logger.error(f"Error closing ZMQ connections: {e}")
                 
             # Terminate pubsub proxy process
-            if self._pubsub_process:
-                self._logger.debug("Shutting down PubSub proxy")
-                self._pubsub_process.terminate()  # This will trigger SIGTERM
-                self._pubsub_process.join(timeout=2)
-                if self._pubsub_process.is_alive():
-                    self._logger.warning("PubSub proxy didn't stop gracefully, killing")
-                    self._pubsub_process.kill()
-                    self._pubsub_process.join(timeout=1)
-                self._pubsub_process = None
+            try:
+                if self._pubsub_process:
+                    self._logger.debug("Shutting down PubSub proxy")
+                    self._pubsub_process.terminate()
+                    self._pubsub_process.join(timeout=2)
+                    if self._pubsub_process.is_alive():
+                        self._logger.warning("PubSub proxy didn't stop gracefully, killing")
+                        self._pubsub_process.kill()
+                        self._pubsub_process.join(timeout=1)
+                    self._pubsub_process = None
+            except Exception as e:
+                self._logger.error(f"Error terminating PubSub proxy: {e}")
                 
             # Terminate instance monitoring process
-            if self._monitor_process:
-                self._logger.debug("Shutting down monitor")
-                self._monitor_process.terminate()
-                self._monitor_process.join(timeout=2)
-                if self._monitor_process.is_alive():
-                    self._monitor_process.kill()
-                    self._monitor_process.join(timeout=1)
-                self._monitor_process = None
+            try:
+                if self._monitor_process:
+                    self._logger.debug("Shutting down monitor")
+                    self._monitor_process.terminate()
+                    self._monitor_process.join(timeout=2)
+                    if self._monitor_process.is_alive():
+                        self._monitor_process.kill()
+                        self._monitor_process.join(timeout=1)
+                    self._monitor_process = None
+            except Exception as e:
+                self._logger.error(f"Error terminating monitor process: {e}")
                 
             # Terminate Redis server
-            if self._redis_process:
-                self._logger.debug("Shutting down Redis server")
-                self._redis_process.terminate()
-                self._redis_process.wait(timeout=5)
-                if self._redis_process.is_alive():
-                    self._redis_process.kill()
-                    self._redis_process.wait(timeout=1)
-                if self._redis_pidfile.exists():
-                    self._redis_pidfile.unlink()
-                self._redis_process = None
+            try:
+                if self._redis_process:
+                    self._logger.debug("Shutting down Redis server")
+                    try:
+                        if self._redis_process.poll() is None:
+                            self._redis_process.terminate()
+                            self._redis_process.wait(timeout=5)
+                            if self._redis_process.poll() is None:
+                                self._redis_process.kill()
+                                self._redis_process.wait(timeout=1)
+                    except Exception as e:
+                        self._logger.warning(f"Error terminating Redis process: {e}")
+                    finally:
+                        self._redis_process = None
+                        
+                    if hasattr(self, '_redis_pidfile') and self._redis_pidfile.exists():
+                        self._redis_pidfile.unlink()
+            except Exception as e:
+                self._logger.error(f"Error cleaning up Redis: {e}")
                 
             self._started = False
             
         except Exception as e:
-            self._logger.error(f"Error shutting down services: {e}")
+            self._logger.error(f"Critical error in shutdown sequence: {e}")
         finally:
             # Clean up logger
-            if hasattr(self, '_logger'):
-                for handler in self._logger.handlers[:]:
-                    handler.close()
-                    self._logger.removeHandler(handler)
+            try:
+                if hasattr(self, '_logger'):
+                    for handler in self._logger.handlers[:]:
+                        handler.close()
+                        self._logger.removeHandler(handler)
+            except Exception as e:
+                print(f"Error cleaning up logger: {e}")
 
 # Create singleton instance but don't start it
 _ether = _Ether()
-
-# # Register cleanup
-# @atexit.register
-# def _cleanup_daemon():
-#     daemon_manager.shutdown()
