@@ -136,14 +136,16 @@ registry:
         ether_sub:
           topic: "processed_data" # Subscribe to 'processed_data' topic
 instances:
-  generator1:
-    class_path: examples.external_class_integration.DataGenerator
+  generator:
+    class_path: third_party_module.DataGenerator
     kwargs:
       process_id: 1
   processor2x:
-    class_path: examples.external_class_integration.DataProcessor
+    class_path: third_party_module.DataProcessor
     kwargs:
       multiplier: 2
+  collector:
+    class_path: third_party_module.DataCollector
 ```
 
 ### How It Works
