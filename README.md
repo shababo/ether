@@ -8,24 +8,23 @@ Ether provides an ultra-lightweight interface for scientists and engineers to or
 ### Developer perspective
 Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions.
 
-## Motivation
-
-Scientists and engineers often have existing code that works well for individual tasks but becomes challenging to integrate into larger systems. For example:
+## Example Use Cases
 
 - A computational biologist has code that operates lab equipment and runs analysis, and wants to integrate it into an automated data acquisition pipeline
 - An AI engineer wants to combine multiple machine learning models into a real-time processing pipeline
 - An operations engineer needs to add remote monitoring to existing industrial control systems
 - A behavioral scientist wants to turn a Gymnasium environment into an interactive game with joystick control and real-time display
 
-Ether makes these integrations simple by providing a lightweight, decorator and configuration based interface which enables function calling, fast message passing, and optimized data sharing between Python instances running within the same process, in different processes, or even on different machines.
 
 ## Features
 
-- Transform existing classes into distributed system components with just decorators
-- Automatic process management and monitoring
+- Transform existing classes into distributed system components with via decorators or yaml configuration
+- Automatic process lifecycle management and monitoring
 - Configuration-based instance launching
-- Built-in process recovery and cleanup
+- Built-in initialization and cleanup
 - Type validation for messages using Pydantic
+- System-wide logging of events and execution
+- Automatic guarantees on data saving and annotation/metadata
 
 ## Quick Start
 
