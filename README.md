@@ -1,6 +1,12 @@
 # Ether
 
-Ether dynamically facilitates local and remote function calling between Python instances and processes while remaining nearly invisible. The primary focus is to help scientists and engineers integrate existing code into flexible data acquisition and analysis systems with minimal overhead.
+## What is Ether?
+
+### User perspective
+Ether provides an ultra-lightweight interface for scientists and engineers to orchestrate hardware and software resources for complex data acquisition and analysis goals. It's designed to be useful at every phase of a project; but in particular, the early phases, when resources and designs can change rapidly and are often discovered through a process of exploration and trial-and-error rather than immutable, a priori decisions.
+
+### Developer perspective
+Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions.
 
 ## Motivation
 
