@@ -35,6 +35,7 @@ from ether import ether_pub, ether_sub
 
 # Original class - just add decorators to connect it
 class DataGenerator:
+    @ether_sub()
     @ether_pub(topic="DataProcessor.process_data")
     def generate_data(self, data: int = 42) -> dict:
         print(f"Generating data: {data}")
