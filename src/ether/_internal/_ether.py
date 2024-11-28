@@ -1,4 +1,5 @@
 # Modify existing _proxy.py to include daemon functionality
+import atexit
 import subprocess
 import time
 from pathlib import Path
@@ -21,7 +22,7 @@ from ._config import EtherConfig
 from ._registry import EtherRegistry
 
 # Constants
-CULL_INTERVAL = 10  # seconds between culling checks
+CULL_INTERVAL = 5  # seconds between culling checks
 
 def _run_pubsub():
     """Standalone function to run PubSub proxy"""
@@ -41,7 +42,7 @@ def _run_pubsub():
 
 def _run_monitor():
     """Standalone function to run instance monitoring"""
-    logger = _get_logger("EtherMonitor", log_level=logging.DEBUG)
+    logger = _get_logger("EtherMonitor", log_level=logging.INFO)
     liaison = EtherInstanceLiaison()
     
     while True:
@@ -73,7 +74,7 @@ class _Ether:
             return
         
         self._initialized = True
-        self._logger = _get_logger("Ether", log_level=logging.INFO)
+        self._logger = _get_logger("Ether", log_level=logging.DEBUG)
         self._redis_process = None
         self._redis_port = 6379
         self._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
@@ -180,13 +181,16 @@ class _Ether:
     
     def _ensure_redis_running(self) -> bool:
         """Ensure Redis server is running, start if not"""
+        self._logger.debug(f"current pidfile: {self._redis_pidfile}")
         if self._redis_pidfile.exists():
+            self._logger.debug(f"pidfile exists, checking pid")
             with open(self._redis_pidfile) as f:
                 pid = int(f.read().strip())
             try:
                 os.kill(pid, 0)
                 return self._test_redis_connection()
             except (OSError, redis.ConnectionError):
+                self._logger.debug(f"pid {pid} not running, removing pidfile")
                 self._redis_pidfile.unlink()
         
         self._start_redis_server()
@@ -229,11 +233,14 @@ class _Ether:
     
     def _start_redis_server(self):
         """Start Redis server process"""
+        self._logger.debug("Starting Redis server")
         self._redis_process = subprocess.Popen(
             [
                 'redis-server',
                 '--port', str(self._redis_port),
-                '--dir', tempfile.gettempdir()  # Use temp dir for dump.rdb
+                '--dir', tempfile.gettempdir(),  # Use temp dir for dump.rdb
+                '--save', "", 
+                '--appendonly', 'no'
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
@@ -243,12 +250,18 @@ class _Ether:
             f.write(str(self._redis_process.pid))
         
         # Wait for Redis to be ready
+        time.sleep(0.5)
         max_attempts = 10
         for _ in range(max_attempts):
             try:
-                self._test_redis_connection()
-                break
-            except redis.ConnectionError:
+                if self._test_redis_connection():
+                    self._logger.debug("Redis server ready")
+                    break
+                else:
+                    self._logger.debug("Redis server not ready, waiting")
+                    time.sleep(0.5)
+            except:
+                self._logger.debug("Redis server not ready, waiting")
                 time.sleep(0.5)
         else:
             raise RuntimeError("Redis server failed to start")
@@ -313,7 +326,8 @@ class _Ether:
             try:
                 if self._pubsub_process:
                     self._logger.debug("Shutting down PubSub proxy")
-                    self._pubsub_process.terminate()
+                    # Send SIGTERM to trigger graceful shutdown
+                    os.kill(self._pubsub_process.pid, signal.SIGTERM)
                     self._pubsub_process.join(timeout=2)
                     if self._pubsub_process.is_alive():
                         self._logger.warning("PubSub proxy didn't stop gracefully, killing")
@@ -337,14 +351,18 @@ class _Ether:
                 self._logger.error(f"Error terminating monitor process: {e}")
                 
             # Terminate Redis server
+            self._logger.debug("About to shut down Redis server")
+            self._logger.debug(f"Redis Process: {self._redis_process}")
             try:
                 if self._redis_process:
                     self._logger.debug("Shutting down Redis server")
                     try:
                         if self._redis_process.poll() is None:
+                            self._logger.debug(" poll started at none")
                             self._redis_process.terminate()
                             self._redis_process.wait(timeout=5)
                             if self._redis_process.poll() is None:
+                                self._logger.debug(" poll still none, killing")
                                 self._redis_process.kill()
                                 self._redis_process.wait(timeout=1)
                     except Exception as e:
@@ -371,5 +389,9 @@ class _Ether:
             except Exception as e:
                 print(f"Error cleaning up logger: {e}")
 
+    # def __del__(self):
+    #     self.shutdown()
+
 # Create singleton instance but don't start it
 _ether = _Ether()
+# atexit.register(_ether.shutdown)

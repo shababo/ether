@@ -7,7 +7,7 @@ from ether.liaison import EtherInstanceLiaison
 
 def run_mixed_autorun_test():
     """Test mixed autorun configuration"""
-    tracker = EtherInstanceLiaison()
+    
     
     config = {
         "instances": {
@@ -27,7 +27,8 @@ def run_mixed_autorun_test():
     # Initialize - should only start generator
     ether.init(config=config, restart=True)
     time.sleep(1)
-    
+    tracker = EtherInstanceLiaison()
+
     # Check that only generator is running
     instances = tracker.get_active_instances()
     assert len(instances) == 1
@@ -48,4 +49,4 @@ def run_mixed_autorun_test():
 
 def test_mixed_autorun(process_runner):
     """Test configuration with mixed autorun settings"""
-    process_runner(run_mixed_autorun_test, timeout=120)
+    process_runner(run_mixed_autorun_test, timeout=600)

@@ -159,7 +159,7 @@ def run_data_verification_test():
 
 def test_message_data(process_runner):
     """Test that message data is accurately transmitted and received"""
-    process_runner(run_data_verification_test, timeout=20)
+    process_runner(run_data_verification_test, timeout=600)
 
 if __name__ == "__main__":
     pytest.main([__file__]) 

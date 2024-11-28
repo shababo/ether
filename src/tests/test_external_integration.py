@@ -96,5 +96,3 @@ def test_external_integration():
     collector_content = read_new_lines("DataCollector")
     assert "Received message: topic=test_processed, data={'result_name': 'generator_1_2x', 'value': 84}" in collector_content, "Collector didn't receive result"
 
-    # Cleanup
-    ether.shutdown() 
