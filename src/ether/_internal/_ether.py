@@ -1,4 +1,5 @@
 # Modify existing _proxy.py to include daemon functionality
+import atexit
 import subprocess
 import time
 from pathlib import Path
@@ -21,7 +22,7 @@ from ._config import EtherConfig
 from ._registry import EtherRegistry
 
 # Constants
-CULL_INTERVAL = 10  # seconds between culling checks
+CULL_INTERVAL = 5  # seconds between culling checks
 
 def _run_pubsub():
     """Standalone function to run PubSub proxy"""
@@ -41,7 +42,7 @@ def _run_pubsub():
 
 def _run_monitor():
     """Standalone function to run instance monitoring"""
-    logger = _get_logger("EtherMonitor", log_level=logging.DEBUG)
+    logger = _get_logger("EtherMonitor", log_level=logging.INFO)
     liaison = EtherInstanceLiaison()
     
     while True:
@@ -73,7 +74,7 @@ class _Ether:
             return
         
         self._initialized = True
-        self._logger = _get_logger("Ether", log_level=logging.INFO)
+        self._logger = _get_logger("Ether", log_level=logging.DEBUG)
         self._redis_process = None
         self._redis_port = 6379
         self._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
@@ -101,7 +102,9 @@ class _Ether:
             topic: Topic to publish to
         """
         if not self._started:
+            # self._logger.debug(f"Did not publish {data} to {topic}: Ether system not started")
             self._logger.warning(f"Cannot publish {data} to {topic}: Ether system not started")
+            return
             
         if self._pub_socket is None:
             self._setup_publisher()
@@ -178,13 +181,16 @@ class _Ether:
     
     def _ensure_redis_running(self) -> bool:
         """Ensure Redis server is running, start if not"""
+        self._logger.debug(f"current pidfile: {self._redis_pidfile}")
         if self._redis_pidfile.exists():
+            self._logger.debug(f"pidfile exists, checking pid")
             with open(self._redis_pidfile) as f:
                 pid = int(f.read().strip())
             try:
                 os.kill(pid, 0)
                 return self._test_redis_connection()
             except (OSError, redis.ConnectionError):
+                self._logger.debug(f"pid {pid} not running, removing pidfile")
                 self._redis_pidfile.unlink()
         
         self._start_redis_server()
@@ -227,11 +233,14 @@ class _Ether:
     
     def _start_redis_server(self):
         """Start Redis server process"""
+        self._logger.debug("Starting Redis server")
         self._redis_process = subprocess.Popen(
             [
                 'redis-server',
                 '--port', str(self._redis_port),
-                '--dir', tempfile.gettempdir()  # Use temp dir for dump.rdb
+                '--dir', tempfile.gettempdir(),  # Use temp dir for dump.rdb
+                '--save', "", 
+                '--appendonly', 'no'
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
@@ -241,12 +250,18 @@ class _Ether:
             f.write(str(self._redis_process.pid))
         
         # Wait for Redis to be ready
+        time.sleep(0.5)
         max_attempts = 10
         for _ in range(max_attempts):
             try:
-                self._test_redis_connection()
-                break
-            except redis.ConnectionError:
+                if self._test_redis_connection():
+                    self._logger.debug("Redis server ready")
+                    break
+                else:
+                    self._logger.debug("Redis server not ready, waiting")
+                    time.sleep(0.5)
+            except:
+                self._logger.debug("Redis server not ready, waiting")
                 time.sleep(0.5)
         else:
             raise RuntimeError("Redis server failed to start")
@@ -279,66 +294,104 @@ class _Ether:
     def shutdown(self):
         """Shutdown all services"""        
         try:
+            # send cleanup and save messages
+            try:
+                if self._started:
+                    self.publish({}, "Ether.cleanup")
+                    time.sleep(1.0)
+                    self.publish({}, "Ether.save") 
+                    time.sleep(1.0)
+            except Exception as e:
+                self._logger.error(f"Error sending cleanup/save messages: {e}")
+            
             # stop all instances
-            if self._instance_manager:
-                self._instance_manager.stop_all_instances()
+            try:
+                if self._instance_manager:
+                    self._instance_manager.stop_all_instances()
+            except Exception as e:
+                self._logger.error(f"Error stopping instances: {e}")
             
             # close publishing socket and context
-            if self._pub_socket:
-                self._pub_socket.close()
-                self._pub_socket = None 
-            if self._zmq_context:
-                self._zmq_context.term()
-                self._zmq_context = None
+            try:
+                if self._pub_socket:
+                    self._pub_socket.close()
+                    self._pub_socket = None
+                if self._zmq_context:
+                    self._zmq_context.term()
+                    self._zmq_context = None
+            except Exception as e:
+                self._logger.error(f"Error closing ZMQ connections: {e}")
                 
             # Terminate pubsub proxy process
-            if self._pubsub_process:
-                self._logger.debug("Shutting down PubSub proxy")
-                self._pubsub_process.terminate()  # This will trigger SIGTERM
-                self._pubsub_process.join(timeout=2)
-                if self._pubsub_process.is_alive():
-                    self._logger.warning("PubSub proxy didn't stop gracefully, killing")
-                    self._pubsub_process.kill()
-                    self._pubsub_process.join(timeout=1)
-                self._pubsub_process = None
+            try:
+                if self._pubsub_process:
+                    self._logger.debug("Shutting down PubSub proxy")
+                    # Send SIGTERM to trigger graceful shutdown
+                    os.kill(self._pubsub_process.pid, signal.SIGTERM)
+                    self._pubsub_process.join(timeout=2)
+                    if self._pubsub_process.is_alive():
+                        self._logger.warning("PubSub proxy didn't stop gracefully, killing")
+                        self._pubsub_process.kill()
+                        self._pubsub_process.join(timeout=1)
+                    self._pubsub_process = None
+            except Exception as e:
+                self._logger.error(f"Error terminating PubSub proxy: {e}")
                 
             # Terminate instance monitoring process
-            if self._monitor_process:
-                self._logger.debug("Shutting down monitor")
-                self._monitor_process.terminate()
-                self._monitor_process.join(timeout=2)
-                if self._monitor_process.is_alive():
-                    self._monitor_process.kill()
-                    self._monitor_process.join(timeout=1)
-                self._monitor_process = None
+            try:
+                if self._monitor_process:
+                    self._logger.debug("Shutting down monitor")
+                    self._monitor_process.terminate()
+                    self._monitor_process.join(timeout=2)
+                    if self._monitor_process.is_alive():
+                        self._monitor_process.kill()
+                        self._monitor_process.join(timeout=1)
+                    self._monitor_process = None
+            except Exception as e:
+                self._logger.error(f"Error terminating monitor process: {e}")
                 
             # Terminate Redis server
-            if self._redis_process:
-                self._logger.debug("Shutting down Redis server")
-                self._redis_process.terminate()
-                self._redis_process.wait(timeout=5)
-                if self._redis_process.is_alive():
-                    self._redis_process.kill()
-                    self._redis_process.wait(timeout=1)
-                if self._redis_pidfile.exists():
-                    self._redis_pidfile.unlink()
-                self._redis_process = None
+            self._logger.debug("About to shut down Redis server")
+            self._logger.debug(f"Redis Process: {self._redis_process}")
+            try:
+                if self._redis_process:
+                    self._logger.debug("Shutting down Redis server")
+                    try:
+                        if self._redis_process.poll() is None:
+                            self._logger.debug(" poll started at none")
+                            self._redis_process.terminate()
+                            self._redis_process.wait(timeout=5)
+                            if self._redis_process.poll() is None:
+                                self._logger.debug(" poll still none, killing")
+                                self._redis_process.kill()
+                                self._redis_process.wait(timeout=1)
+                    except Exception as e:
+                        self._logger.warning(f"Error terminating Redis process: {e}")
+                    finally:
+                        self._redis_process = None
+                        
+                    if hasattr(self, '_redis_pidfile') and self._redis_pidfile.exists():
+                        self._redis_pidfile.unlink()
+            except Exception as e:
+                self._logger.error(f"Error cleaning up Redis: {e}")
                 
             self._started = False
             
         except Exception as e:
-            self._logger.error(f"Error shutting down services: {e}")
+            self._logger.error(f"Critical error in shutdown sequence: {e}")
         finally:
             # Clean up logger
-            if hasattr(self, '_logger'):
-                for handler in self._logger.handlers[:]:
-                    handler.close()
-                    self._logger.removeHandler(handler)
+            try:
+                if hasattr(self, '_logger'):
+                    for handler in self._logger.handlers[:]:
+                        handler.close()
+                        self._logger.removeHandler(handler)
+            except Exception as e:
+                print(f"Error cleaning up logger: {e}")
+
+    # def __del__(self):
+    #     self.shutdown()
 
 # Create singleton instance but don't start it
 _ether = _Ether()
-
-# # Register cleanup
-# @atexit.register
-# def _cleanup_daemon():
-#     daemon_manager.shutdown()
+# atexit.register(_ether.shutdown)

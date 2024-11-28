@@ -1,4 +1,5 @@
 import pytest
+from ether import ether
 from ether._internal._config import EtherConfig
 from ether._internal._registry import EtherRegistry
 from examples.external_class_integration import DataGenerator, DataProcessor
@@ -20,10 +21,7 @@ def test_registry_decorator_application():
         }
     }
     
-    config = EtherConfig.model_validate(config_dict)
-    
-    # Process the registry configuration
-    EtherRegistry.process_registry_config(config.registry)
+    ether.init(config=config_dict, restart=True)
     
     # Verify decorator was applied
     generator = DataGenerator()
@@ -53,8 +51,7 @@ def test_registry_multiple_decorators():
         }
     }
     
-    config = EtherConfig.model_validate(config_dict)
-    EtherRegistry.process_registry_config(config.registry)
+    ether.init(config=config_dict, restart=True)
     
     # Verify both decorators were applied
     processor = DataProcessor()

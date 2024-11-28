@@ -24,7 +24,6 @@ class Ether:
     pub = staticmethod(_pub)
     save = staticmethod(functools.partial(_pub, {}, topic="Ether.save"))
     cleanup = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
-    shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
     _initialized = False
     _instance = None
     
@@ -40,7 +39,7 @@ class Ether:
         if self._initialized and restart:
             # Clean up existing system
             print("Force reinitializing Ether system...")
-            self.shutdown()
+            _ether.shutdown()
             self._initialized = False
             
         if not self._initialized:
@@ -52,18 +51,23 @@ class Ether:
             self._initialized = True
             print("Ether system initialized")
             
+
             # Register single cleanup handler
             atexit.register(self.shutdown)
+            
 
     def shutdown(self):
-        self.cleanup()
-        self.save()
+        """Shutdown the Ether messaging system"""
         _ether.shutdown()
+
+
  
 
 ## Export public interface
 # instantiate singleton for API
 ether = Ether()
+
+
 # export decorators
 decorators = ['ether_pub', 'ether_sub', 'ether_init', 'ether_save', 'ether_cleanup']
 __all__ = ['ether'] + decorators

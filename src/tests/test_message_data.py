@@ -157,13 +157,9 @@ def run_data_verification_test():
         print(f"Error in data verification test: {e}")
         raise
 
-def test_message_data():
+def test_message_data(process_runner):
     """Test that message data is accurately transmitted and received"""
-    ctx = multiprocessing.get_context('spawn')
-    process = ctx.Process(target=run_data_verification_test)
-    process.start()
-    process.join()
-    assert process.exitcode == 0
+    process_runner(run_data_verification_test, timeout=600)
 
 if __name__ == "__main__":
     pytest.main([__file__]) 

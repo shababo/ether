@@ -1,0 +1,232 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+        
+    - name: Install Redis
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y redis-server
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov pytest-timeout
+        pip install -e .
+        
+    - name: Setup Redis working directory
+      run: |
+        # Create user-accessible directory for Redis
+        mkdir -p /tmp/ether_test_redis
+        
+        # Create Redis config
+        cat > /tmp/ether_test_redis/redis.conf << EOF
+        port 6379
+        daemonize yes
+        dir /tmp/ether_test_redis
+        logfile /tmp/ether_test_redis/redis.log
+        pidfile /tmp/ether_test_redis/redis.pid
+        bind 127.0.0.1
+        loglevel warning
+        EOF
+        
+        # Kill any existing Redis server
+        pkill -f redis-server || true
+        sleep 1
+        
+        # Start Redis with our config
+        redis-server /tmp/ether_test_redis/redis.conf
+        sleep 2
+        
+        # Test connection
+        redis-cli ping
+        
+    - name: Run tests with coverage
+      run: |
+        # Run tests with timeout and cleanup between tests
+        pytest --cov=ether --cov-report=xml --timeout=120 -v
+      env:
+        PYTHONUNBUFFERED: 1
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: true
+
+  benchmark:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 2  # Needed to get previous commit
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+        
+    - name: Install Redis
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y redis-server
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        
+    - name: Setup Redis working directory
+      run: |
+        # Create user-accessible directory for Redis
+        mkdir -p /tmp/ether_test_redis
+        
+        # Create Redis config
+        cat > /tmp/ether_test_redis/redis.conf << EOF
+        port 6379
+        daemonize yes
+        dir /tmp/ether_test_redis
+        logfile /tmp/ether_test_redis/redis.log
+        pidfile /tmp/ether_test_redis/redis.pid
+        bind 127.0.0.1
+        loglevel warning
+        EOF
+        
+        # Kill any existing Redis server
+        pkill -f redis-server || true
+        sleep 1
+        
+        # Start Redis with our config
+        redis-server /tmp/ether_test_redis/redis.conf
+        sleep 2
+        
+        # Test connection
+        redis-cli ping
+        
+    - name: Download previous benchmark results
+      uses: actions/download-artifact@v3
+      continue-on-error: true
+      with:
+        name: benchmark-results
+        path: previous_benchmark
+        
+    - name: Run benchmark
+      run: |
+        python src/scripts/benchmark.py
+        
+    - name: Compare benchmarks
+      id: benchmark-compare
+      run: |
+        python - <<EOF
+        import json
+        import os
+        from pathlib import Path
+        import sys
+        
+        def load_results(path):
+            try:
+                with open(path) as f:
+                    return json.load(f)
+            except:
+                return None
+        
+        current = load_results('benchmark_results/results.json')
+        previous = load_results('previous_benchmark/benchmark_results/results.json')
+        
+        if not current:
+            print("::error::No current benchmark results found")
+            sys.exit(1)
+            
+        if not previous:
+            print("No previous benchmark results to compare against")
+            sys.exit(0)
+            
+        # Compare results
+        regression_threshold = 0.10  # 10% regression threshold
+        regressions = []
+        
+        for curr, prev in zip(current['results'], previous['results']):
+            for metric, value in curr['metrics'].items():
+                prev_value = prev['metrics'][metric]
+                if metric in ['messages_per_second', 'latency_ms']:
+                    change = (value - prev_value) / prev_value
+                    if change < -regression_threshold:
+                        regressions.append({
+                            'metric': metric,
+                            'config': curr['config'],
+                            'previous': prev_value,
+                            'current': value,
+                            'change': change * 100
+                        })
+        
+        if regressions:
+            message = "Performance regressions detected:\n"
+            for reg in regressions:
+                message += f"\n{reg['metric']}:\n"
+                message += f"  Config: {reg['config']}\n"
+                message += f"  Previous: {reg['previous']:.2f}\n"
+                message += f"  Current: {reg['current']:.2f}\n"
+                message += f"  Change: {reg['change']:.1f}%\n"
+            
+            print(f"::warning::Performance Regression::{message}")
+            
+            # Create GitHub step output
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                f.write(f"has_regression=true\n")
+                f.write(f"regression_details<<EOF\n{message}\nEOF\n")
+        EOF
+        
+    - name: Store benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: benchmark_results/
+        
+    - name: Send notification
+      if: steps.benchmark-compare.outputs.has_regression == 'true'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const details = process.env.REGRESSION_DETAILS;
+          
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '🚨 Performance Regression Detected',
+            body: details,
+            labels: ['performance', 'regression']
+          });
+      env:
+        REGRESSION_DETAILS: ${{ steps.benchmark-compare.outputs.regression_details }}

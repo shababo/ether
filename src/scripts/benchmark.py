@@ -13,6 +13,7 @@ from ether import (
 import logging
 import tempfile
 import uuid
+from pathlib import Path
 
 @dataclass
 class BenchmarkResult:
@@ -138,6 +139,9 @@ class BenchmarkSubscriber:
 
 def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, num_publishers: int) -> BenchmarkResult:
     """Run a single benchmark configuration"""
+    # Add artificial delay
+    time.sleep(0.1)  # This will cause a performance regression
+    
     with tempfile.TemporaryDirectory() as temp_dir:
         # Create configuration for subscribers
         config = {
@@ -279,12 +283,34 @@ def main():
     print("Pubs/Subs | Msg Size | Msg Count | Messages/sec | Latency (ms) | Loss % | Sent/Expected | Received/Expected | Memory (MB)")
     print("-" * 120)
     
+    results = []
+    
     for pub_count in publisher_counts:
         for sub_count in subscriber_counts:
             for size in message_sizes:
                 for num_messages in message_counts:
                     print(f"Testing {pub_count}p/{sub_count}s with {size} bytes, {num_messages} msgs... ", end='', flush=True)
                     result = run_benchmark(size, num_messages, sub_count, pub_count)
+                    
+                    # Store result data
+                    result_data = {
+                        "config": {
+                            "publishers": pub_count,
+                            "subscribers": sub_count,
+                            "message_size": size,
+                            "message_count": num_messages
+                        },
+                        "metrics": {
+                            "messages_per_second": result.messages_per_second,
+                            "latency_ms": result.latency_ms,
+                            "message_loss_percent": result.message_loss_percent,
+                            "cpu_percent": result.cpu_percent,
+                            "memory_mb": result.memory_mb
+                        }
+                    }
+                    results.append(result_data)
+                    
+                    # Print results as before
                     print("\r", end='')
                     print(f"{pub_count}p/{sub_count:2d}s | {size:8d} | {num_messages:9d} | {result.messages_per_second:11.2f} | "
                           f"{result.latency_ms:11.2f} | {result.message_loss_percent:6.2f} | "
@@ -292,6 +318,17 @@ def main():
                           f"{result.messages_received:6d}/{result.expected_received:<6d} | "
                           f"{result.memory_mb:10.1f}")
                     time.sleep(0.1)
+    
+    # Save results to JSON file
+    results_dir = Path("benchmark_results")
+    results_dir.mkdir(exist_ok=True)
+    
+    results_file = results_dir / "results.json"
+    with open(results_file, 'w') as f:
+        json.dump({
+            "timestamp": time.time(),
+            "results": results
+        }, f, indent=2)
 
 if __name__ == "__main__":
     main()
