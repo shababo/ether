@@ -347,16 +347,27 @@ class _Ether:
                 self._monitor_process = None
                 
             # Terminate Redis server
-            if self._redis_process:
-                self._logger.debug("Shutting down Redis server")
-                self._redis_process.terminate()
-                self._redis_process.wait(timeout=5)
-                if self._redis_process.is_alive():
-                    self._redis_process.kill()
-                    self._redis_process.wait(timeout=1)
-                if self._redis_pidfile.exists():
-                    self._redis_pidfile.unlink()
-                self._redis_process = None
+            try:
+                if self._redis_process:
+                    self._logger.debug("Shutting down Redis server")
+                    try:
+                        if self._redis_process.poll() is None:
+
+                            self._redis_process.terminate()
+                            self._redis_process.wait(timeout=5)
+                            if self._redis_process.poll() is None:
+                                self._redis_process.kill()
+                                self._redis_process.wait(timeout=1)
+                    except Exception as e:
+                        self._logger.warning(f"Error terminating Redis process: {e}")
+                    finally:
+                        self._redis_process = None
+                        
+                    if hasattr(self, '_redis_pidfile') and self._redis_pidfile.exists():
+                        self._redis_pidfile.unlink()
+            except Exception as e:
+                self._logger.error(f"Error cleaning up Redis: {e}")
+                
                 
             self._started = False
             self._logger.info("Ether system shutdown complete")
