@@ -33,34 +33,38 @@ class EtherRegistry:
         
     @classmethod
     def process_registry_config(cls, config: Dict[str, EtherClassConfig]):
-        cls._logger.info("Processing registry configuration...")
+        """Process registry configuration and apply decorators
+        
+        Args:
+            config: Dictionary mapping class paths to their configurations
+        """
+        cls._logger.debug("Processing registry configuration...")
         
         for class_path, class_config in config.items():
-            cls._logger.debug(f"Processing configuration for {class_path}")
-            
             # Import the class
             module_path, class_name = class_path.rsplit('.', 1)
             try:
-                cls._logger.debug(f"Importing {module_path}.{class_name}")
                 module = importlib.import_module(module_path)
                 target_class = getattr(module, class_name)
             except (ImportError, AttributeError) as e:
                 cls._logger.error(f"Failed to import {class_path}: {e}")
                 continue
             
+            cls._logger.debug(f"Processing class {class_path}")
+            
             # Process each method
             for method_name, method_config in class_config.methods.items():
-                cls._logger.debug(f"Processing method {method_name} in {class_path}")
-                
                 if not hasattr(target_class, method_name):
                     cls._logger.warning(f"Method {method_name} not found in {class_path}")
                     continue
                 
-                # Apply decorators
-                decorated_method = getattr(target_class, method_name)
+                # Get the original method
+                original_method = getattr(target_class, method_name)
                 
+                # Apply decorators in the correct order (sub then pub)
+                decorated_method = original_method
+
                 if method_config.ether_pub:
-                    cls._logger.debug(f"Applying pub decorator to {method_name}")
                     from ..decorators import ether_pub
                     kwargs = {}
                     if method_config.ether_pub.topic:
@@ -68,15 +72,19 @@ class EtherRegistry:
                     decorated_method = ether_pub(**kwargs)(decorated_method)
                 
                 if method_config.ether_sub:
-                    cls._logger.debug(f"Applying sub decorator to {method_name}")
                     from ..decorators import ether_sub
                     kwargs = {}
                     if method_config.ether_sub.topic:
                         kwargs['topic'] = method_config.ether_sub.topic
                     decorated_method = ether_sub(**kwargs)(decorated_method)
                 
-                cls._logger.debug(f"Successfully decorated {class_path}.{method_name}")
+                
+                
+                # Replace the original method with the decorated version
+                setattr(target_class, method_name, decorated_method)
+                cls._logger.debug(f"Applied decorators to {class_path}.{method_name}")
             
+            # Mark class for Ether functionality
             cls.mark_for_processing(class_name, module_path)
     
     @classmethod

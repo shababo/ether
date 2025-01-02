@@ -44,7 +44,7 @@ def _get_logger(process_name: str, instance_name: str = None, log_level=logging.
     logger.addHandler(console_handler)
     
     # Create file handler
-    class_name = process_name.split('.')[-1]  # Get last part of process name
+    class_name = process_name.split('.')[-1] + "Logs"  # Get last part of process name
     class_dir = _LOG_DIR / class_name
     _ensure_log_dir(class_dir)
     
@@ -60,8 +60,5 @@ def _get_logger(process_name: str, instance_name: str = None, log_level=logging.
     file_handler = logging.FileHandler(log_file, mode='a' if not instance_name else 'w')
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-    
-    # Log the file location for reference
-    logger.debug(f"Logging to file: {log_file}")
     
     return logger
