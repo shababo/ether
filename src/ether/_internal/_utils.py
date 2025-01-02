@@ -55,7 +55,7 @@ def _get_logger(process_name: str, instance_name: str = None, log_level=logging.
         log_file = class_dir / f"{instance_name}_{timestamp}_{instance_id}.log"
     else:
         # Class-level log file (persistent across runs)
-        log_file = class_dir / "class.log"
+        log_file = class_dir / f"_{class_name}_class.log"
     
     file_handler = logging.FileHandler(log_file, mode='a' if not instance_name else 'w')
     file_handler.setFormatter(formatter)
