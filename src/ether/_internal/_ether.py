@@ -66,14 +66,17 @@ class _Ether:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(_Ether, cls).__new__(cls)
+            cls._instance._logger = _get_logger("Ether", log_level=logging.DEBUG)
+            cls._instance._logger.debug("Creating new Ether instance")
         return cls._instance
     
     def __init__(self):
         if hasattr(self, '_initialized'):
+            self._logger.debug("Skipping re-initialization of Ether instance")
             return
         
+        self._logger.debug("Initializing Ether instance")
         self._initialized = True
-        self._logger = _get_logger("Ether", log_level=logging.INFO)
         self._redis_process = None
         self._redis_port = 6379
         self._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
@@ -88,10 +91,12 @@ class _Ether:
     
     def _setup_publisher(self):
         """Set up the ZMQ publisher socket"""
+        self._logger.debug("Setting up publisher socket")
         if self._pub_socket is None:
             self._zmq_context = zmq.Context()
             self._pub_socket = self._zmq_context.socket(zmq.PUB)
             self._pub_socket.connect(f"tcp://localhost:{_ETHER_PUB_PORT}")
+            self._logger.debug("Publisher socket connected")
     
     def publish(self, data: Union[Dict, BaseModel], topic: str) -> None:
         """Publish data to a topic
@@ -100,10 +105,14 @@ class _Ether:
             data: Data to publish (dict or Pydantic model)
             topic: Topic to publish to
         """
+        self._logger.debug(f"Publishing request received - Topic: {topic}")
+        
         if not self._started:
             self._logger.warning(f"Cannot publish {data} to {topic}: Ether system not started")
+            return
             
         if self._pub_socket is None:
+            self._logger.debug("Publisher socket not initialized, setting up...")
             self._setup_publisher()
             
         # Convert data to JSON
@@ -123,31 +132,41 @@ class _Ether:
     
     def start(self, config = None, restart: bool = False):
         """Start all daemon services"""
+        self._logger.debug(f"Start called with config={config}, restart={restart}")
+        
         if self._started:
             if restart:
+                self._logger.info("Restarting Ether system...")
                 self.shutdown()
             else:
+                self._logger.debug("Ether system already started, skipping start")
                 return
         
-        # Start Redis first
+        self._logger.info("Starting Ether system components...")
+        
+        # Start Redis
+        self._logger.debug("Starting Redis server...")
         if not self._ensure_redis_running():
             raise RuntimeError("Redis server failed to start")
         
         # Start Messaging
+        self._logger.debug("Starting PubSub proxy...")
         if not self._ensure_pubsub_running():
             raise RuntimeError("PubSub proxy failed to start")
         
-        # Start instance process monitoring
+        # Start monitoring
+        self._logger.debug("Starting instance monitor...")
         self._monitor_process = Process(target=_run_monitor)
-        # self._monitor_process.daemon = True
         self._monitor_process.start()
         
         # Clean Redis state
+        self._logger.debug("Cleaning Redis state...")
         liaison = EtherInstanceLiaison()
         liaison.deregister_all()
         liaison.store_registry_config({})
         
         if config:
+            self._logger.debug("Processing configuration...")
             # Process registry configuration if present
             if isinstance(config, (str, dict)):
                 config = EtherConfig.from_yaml(config) if isinstance(config, str) else EtherConfig.model_validate(config)
@@ -172,9 +191,11 @@ class _Ether:
         if config and config.instances:
             self._start_instances(config)
 
+        self._logger.debug("Setting up publisher...")
         self._setup_publisher()
         
         self._started = True
+        self._logger.info("Ether system started successfully")
     
     def _ensure_redis_running(self) -> bool:
         """Ensure Redis server is running, start if not"""
@@ -227,11 +248,14 @@ class _Ether:
     
     def _start_redis_server(self):
         """Start Redis server process"""
+        self._logger.debug("Starting Redis server")
         self._redis_process = subprocess.Popen(
             [
                 'redis-server',
                 '--port', str(self._redis_port),
-                '--dir', tempfile.gettempdir()  # Use temp dir for dump.rdb
+                '--dir', tempfile.gettempdir(),  # Use temp dir for dump.rdb
+                '--save', "", 
+                '--appendonly', 'no'
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
@@ -241,12 +265,18 @@ class _Ether:
             f.write(str(self._redis_process.pid))
         
         # Wait for Redis to be ready
+        time.sleep(0.5)
         max_attempts = 10
         for _ in range(max_attempts):
             try:
-                self._test_redis_connection()
-                break
-            except redis.ConnectionError:
+                if self._test_redis_connection():
+                    self._logger.debug("Redis server ready")
+                    break
+                else:
+                    self._logger.debug("Redis server not ready, waiting")
+                    time.sleep(0.5)
+            except:
+                self._logger.debug("Redis server not ready, waiting")
                 time.sleep(0.5)
         else:
             raise RuntimeError("Redis server failed to start")
@@ -278,13 +308,17 @@ class _Ether:
 
     def shutdown(self):
         """Shutdown all services"""        
+        self._logger.info("Shutting down Ether system...")
+        
         try:
             # stop all instances
             if self._instance_manager:
+                self._logger.debug("Stopping all instances...")
                 self._instance_manager.stop_all_instances()
             
             # close publishing socket and context
             if self._pub_socket:
+                self._logger.debug("Closing publisher socket...")
                 self._pub_socket.close()
                 self._pub_socket = None 
             if self._zmq_context:
@@ -325,9 +359,10 @@ class _Ether:
                 self._redis_process = None
                 
             self._started = False
+            self._logger.info("Ether system shutdown complete")
             
         except Exception as e:
-            self._logger.error(f"Error shutting down services: {e}")
+            self._logger.error(f"Error during shutdown: {e}")
         finally:
             # Clean up logger
             if hasattr(self, '_logger'):

@@ -33,18 +33,17 @@ class Ether:
             cls._instance = super(Ether, cls).__new__(cls)
         return cls._instance
 
-    def init(self,config: Optional[Union[str, dict, EtherConfig]] = None, restart: bool = False):
+    def init(self, config: Optional[Union[str, dict, EtherConfig]] = None, restart: bool = False):
         """Initialize the Ether messaging system."""
-        # global _ether_initialized
+        # Only set root logger level without adding a handler
+        logging.getLogger().setLevel(logging.DEBUG)
         
         if self._initialized and restart:
-            # Clean up existing system
             print("Force reinitializing Ether system...")
             self.shutdown()
             self._initialized = False
             
         if not self._initialized:
-
             # Start ether
             _ether.start(config=config, restart=restart)
         

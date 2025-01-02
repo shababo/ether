@@ -24,42 +24,43 @@ class EtherRegistry:
     
     @classmethod
     def mark_for_processing(cls, class_qualname: str, module_name: str):
-        cls._pending_classes[class_qualname] = module_name
-    
+        
+        if class_qualname not in cls._pending_classes:
+            cls._logger.info(f"Marking class for processing: {class_qualname} from {module_name}")
+            cls._pending_classes[class_qualname] = module_name
+        else:
+            cls._logger.debug(f"Class {class_qualname} already marked for processing, skipping")
+        
     @classmethod
     def process_registry_config(cls, config: Dict[str, EtherClassConfig]):
-        """Process registry configuration and apply decorators
-        
-        Args:
-            config: Dictionary mapping class paths to their configurations
-        """
-        cls._logger.debug("Processing registry configuration...")
+        cls._logger.info("Processing registry configuration...")
         
         for class_path, class_config in config.items():
+            cls._logger.debug(f"Processing configuration for {class_path}")
+            
             # Import the class
             module_path, class_name = class_path.rsplit('.', 1)
             try:
+                cls._logger.debug(f"Importing {module_path}.{class_name}")
                 module = importlib.import_module(module_path)
                 target_class = getattr(module, class_name)
             except (ImportError, AttributeError) as e:
                 cls._logger.error(f"Failed to import {class_path}: {e}")
                 continue
             
-            cls._logger.debug(f"Processing class {class_path}")
-            
             # Process each method
             for method_name, method_config in class_config.methods.items():
+                cls._logger.debug(f"Processing method {method_name} in {class_path}")
+                
                 if not hasattr(target_class, method_name):
                     cls._logger.warning(f"Method {method_name} not found in {class_path}")
                     continue
                 
-                # Get the original method
-                original_method = getattr(target_class, method_name)
+                # Apply decorators
+                decorated_method = getattr(target_class, method_name)
                 
-                # Apply decorators in the correct order (sub then pub)
-                decorated_method = original_method
-
                 if method_config.ether_pub:
+                    cls._logger.debug(f"Applying pub decorator to {method_name}")
                     from ..decorators import ether_pub
                     kwargs = {}
                     if method_config.ether_pub.topic:
@@ -67,19 +68,15 @@ class EtherRegistry:
                     decorated_method = ether_pub(**kwargs)(decorated_method)
                 
                 if method_config.ether_sub:
+                    cls._logger.debug(f"Applying sub decorator to {method_name}")
                     from ..decorators import ether_sub
                     kwargs = {}
                     if method_config.ether_sub.topic:
                         kwargs['topic'] = method_config.ether_sub.topic
                     decorated_method = ether_sub(**kwargs)(decorated_method)
                 
-                
-                
-                # Replace the original method with the decorated version
-                setattr(target_class, method_name, decorated_method)
-                cls._logger.debug(f"Applied decorators to {class_path}.{method_name}")
+                cls._logger.debug(f"Successfully decorated {class_path}.{method_name}")
             
-            # Mark class for Ether functionality
             cls.mark_for_processing(class_name, module_path)
     
     @classmethod
@@ -106,15 +103,21 @@ class EtherRegistry:
 
 def add_ether_functionality(cls):
     """Adds Ether functionality directly to a class"""
-    # If class already has Ether functionality, return it
+    # Use the class name for logging
+    logger = _get_logger(cls.__name__, log_level=logging.DEBUG)
+    logger.debug(f"Adding Ether functionality to class: {cls.__name__}")
+    
+    # Check if already processed
     if hasattr(cls, '_ether_methods_info'):
+        logger.debug(f"Class {cls.__name__} already has Ether functionality")
         return cls
-        
+    
     # Collect Ether methods
     ether_methods = {
         name: method for name, method in cls.__dict__.items()
         if hasattr(method, '_pub_metadata') or hasattr(method, '_sub_metadata')
     }
+    logger.debug(f"Found {len(ether_methods)} Ether methods in {cls.__name__}")
     
     # Store Ether method information (even if empty)
     cls._ether_methods_info = ether_methods
