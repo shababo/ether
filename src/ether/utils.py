@@ -1,8 +1,8 @@
+
 import logging
 from pathlib import Path
-import os
-import uuid
 from datetime import datetime
+
 
 # Standard ports for Ether communication
 _ETHER_SUB_PORT = 5555  # subscribe to this port
@@ -15,18 +15,19 @@ def _ensure_log_dir(path: Path):
     """Ensure log directory exists"""
     path.mkdir(parents=True, exist_ok=True)
 
-def _get_logger(process_name: str, instance_name: str = None, log_level=logging.INFO) -> logging.Logger:
-    """Get or create a logger with file and console handlers
-    
-    Args:
-        process_name: Name of the process/class (e.g., "DataGenerator", "Ether")
-        instance_name: Optional instance name (e.g., "generator1", "processor2x")
-        log_level: Logging level
-    """
+def _get_logger(
+    process_name: str, 
+    run_id: str = None,
+    instance_name: str = None, 
+    console_level=logging.DEBUG,
+    file_level=logging.DEBUG
+) -> logging.Logger:
+    """Get or create a logger with file and console handlers"""
+
     # Create logger with hierarchical name
     logger_name = f"{process_name}:{instance_name}" if instance_name else process_name
     logger = logging.getLogger(logger_name)
-    logger.setLevel(log_level)
+    logger.setLevel(min(console_level, file_level))
     
     # Don't add handlers if they already exist
     if logger.handlers:
@@ -41,24 +42,38 @@ def _get_logger(process_name: str, instance_name: str = None, log_level=logging.
     # Create console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
+    console_handler.setLevel(console_level)
     logger.addHandler(console_handler)
     
+    # Get the current run directory from context
+    run_log_dir = _LOG_DIR
+    
     # Create file handler
-    class_name = process_name.split('.')[-1] + "Logs"  # Get last part of process name
-    class_dir = _LOG_DIR / class_name
-    _ensure_log_dir(class_dir)
+    class_name = process_name.split('.')[-1]  # Get last part of process name
+    
+    # Determine log directory structure within run directory
+    if class_name.startswith('Ether'):
+        # All Ether classes go in Ether directory
+        log_dir = run_log_dir / "Ether" / class_name
+    else:
+        # Other classes get their own directory
+        log_dir = run_log_dir / class_name
+    
+    _ensure_log_dir(log_dir)
     
     if instance_name:
-        # Instance-specific log file with timestamp and UUID
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        instance_id = str(uuid.uuid4())[:8]
-        log_file = class_dir / f"{instance_name}_{timestamp}_{instance_id}.log"
+        # Instance-specific log file
+        log_file = log_dir / f"{instance_name}.log"
     else:
-        # Class-level log file (persistent across runs)
-        log_file = class_dir / f"_{class_name}_class.log"
+        # Class-level log file
+        log_file = log_dir / "class.log"
     
     file_handler = logging.FileHandler(log_file, mode='a' if not instance_name else 'w')
     file_handler.setFormatter(formatter)
+    file_handler.setLevel(file_level)
     logger.addHandler(file_handler)
+    
+    # Log the file location for reference
+    logger.debug(f"Logging to file: {log_file}")
     
     return logger

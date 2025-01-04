@@ -8,7 +8,7 @@ import tempfile
 import atexit
 import time
 
-from ._utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, _get_logger
+from ..utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, _get_logger
 
 class _EtherPubSubProxy:
     """Proxy that uses XPUB/XSUB sockets for efficient message distribution.
@@ -19,7 +19,7 @@ class _EtherPubSubProxy:
     def __init__(self):
         self.id = uuid.uuid4()
         self.name = f"EtherPubSubProxy_{self.id}"
-        self._logger = _get_logger("EtherPubSubProxy", log_level=logging.DEBUG)
+        self._logger = _get_logger("EtherPubSubProxy")
         self._logger.info("Initializing PubSub proxy")
         
         self.capture_socket = None

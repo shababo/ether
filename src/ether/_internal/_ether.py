@@ -12,13 +12,16 @@ from typing import Union, Dict
 from pydantic import BaseModel
 import json
 import signal
+import uuid
+from datetime import datetime
 
-from ._utils import _ETHER_PUB_PORT, _get_logger
+from ..utils import _ETHER_PUB_PORT, _get_logger
 from ._pubsub import _EtherPubSubProxy
-from ether.liaison import EtherInstanceLiaison 
+from ..liaison import EtherInstanceLiaison 
 from ._manager import _EtherInstanceManager
 from ._config import EtherConfig
 from ._registry import EtherRegistry
+
 
 # Constants
 CULL_INTERVAL = 10  # seconds between culling checks
@@ -41,7 +44,7 @@ def _run_pubsub():
 
 def _run_monitor():
     """Standalone function to run instance monitoring"""
-    logger = _get_logger("EtherMonitor", log_level=logging.DEBUG)
+    logger = _get_logger("EtherMonitor")
     liaison = EtherInstanceLiaison()
     
     while True:
@@ -66,28 +69,24 @@ class _Ether:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(_Ether, cls).__new__(cls)
-            cls._instance._logger = _get_logger("Ether", log_level=logging.DEBUG)
+            cls._instance._logger = _get_logger("Ether")
             cls._instance._logger.debug("Creating new Ether instance")
+
+            cls._instance._logger.debug("Initializing Ether instance")
+            cls._instance._redis_process = None
+            cls._instance._redis_port = 6379
+            cls._instance._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
+            cls._instance._pubsub_process = None
+            cls._instance._monitor_process = None
+            cls._instance._instance_manager = None
+            cls._instance._started = False
+            
+            # Add ZMQ publishing setup
+            cls._instance._pub_socket = None
+            cls._instance._zmq_context = None
+
         return cls._instance
-    
-    def __init__(self):
-        if hasattr(self, '_initialized'):
-            self._logger.debug("Skipping re-initialization of Ether instance")
-            return
         
-        self._logger.debug("Initializing Ether instance")
-        self._initialized = True
-        self._redis_process = None
-        self._redis_port = 6379
-        self._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
-        self._pubsub_process = None
-        self._monitor_process = None
-        self._instance_manager = None
-        self._started = False
-        
-        # Add ZMQ publishing setup
-        self._pub_socket = None
-        self._zmq_context = None
     
     def _setup_publisher(self):
         """Set up the ZMQ publisher socket"""
@@ -179,10 +178,10 @@ class _Ether:
                     for class_path, class_config in config.registry.items()
                 }
                 liaison.store_registry_config(registry_dict)
-                EtherRegistry.process_registry_config(config.registry)
+                EtherRegistry().process_registry_config(config.registry)
         
         # Process any pending classes
-        EtherRegistry.process_pending_classes()
+        EtherRegistry().process_pending_classes()
         
         
         

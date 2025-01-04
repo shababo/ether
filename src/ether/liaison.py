@@ -5,7 +5,7 @@ import time
 import os
 import logging
 
-from ether._internal._utils import _get_logger
+from ether.utils import _get_logger
 
 
 class EtherInstanceLiaison:
@@ -23,7 +23,7 @@ class EtherInstanceLiaison:
         self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
         self.instance_key_prefix = "ether:instance:"
         self._ttl = 60  # seconds until instance considered dead
-        self._logger = _get_logger("EtherInstanceLiaison", log_level=logging.DEBUG)
+        self._logger = _get_logger("EtherInstanceLiaison")
     
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         # __new__ handles initialization
@@ -85,7 +85,7 @@ class EtherInstanceLiaison:
     
     def deregister_all(self):
         """Remove all tracked instances"""
-        self._logger.info("Deleting all instances")
+        self._logger.debug("Deleting all instances")
         pattern = f"{self.instance_key_prefix}*"
         keys = self.redis.keys(pattern)
         if keys:
@@ -110,7 +110,7 @@ class EtherInstanceLiaison:
                 os.kill(pid, 0)
             except OSError:
                 # Process doesn't exist
-                self._logger.info(f"Culling dead instance {instance_id} (PID {pid})")
+                self._logger.debug(f"Culling dead instance {instance_id} (PID {pid})")
                 self.deregister_instance(instance_id)
                 removed += 1
                 
@@ -118,7 +118,7 @@ class EtherInstanceLiaison:
     
     def store_registry_config(self, config: dict):
         """Store registry configuration in Redis"""
-        self._logger.info(f"Current registry config: {self.get_registry_config()}")
+        self._logger.debug(f"Current registry config: {self.get_registry_config()}")
         self._logger.debug(f"Storing registry config: {config}")
         self.redis.set("ether:registry_config", json.dumps(config))
         self._logger.info(f"Updated registry config: {self.get_registry_config()}")

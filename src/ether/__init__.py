@@ -3,11 +3,11 @@ import logging
 from typing import Optional, Union, Dict
 from pydantic import BaseModel
 from .decorators import ether_pub, ether_sub, ether_init, ether_save, ether_cleanup
-from ._internal._utils import _get_logger
+from .utils import _get_logger
 from ._internal._ether import _ether
 from ._internal._config import EtherConfig
 import atexit
-
+import time
 
 def _pub(data: Union[Dict, BaseModel], topic: str):
     """Publish data to a topic
@@ -53,6 +53,8 @@ class Ether:
             
             # Register single cleanup handler
             atexit.register(self.shutdown)
+
+        time.sleep(0.002)
 
     def shutdown(self):
         self.cleanup()

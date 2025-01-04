@@ -12,33 +12,35 @@ import os
 import sys
 import importlib
 
-from ._utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
+from ..utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
 from ether.liaison import EtherInstanceLiaison
 from ._config import EtherConfig, EtherClassConfig
 
 class EtherRegistry:
     """Registry to track and process classes with Ether methods"""
-    _pending_classes: dict[str, str] = {}  # qualname -> module_name
-    _processed_classes: Set[str] = set()
-    _logger = _get_logger("EtherRegistry", log_level=logging.DEBUG)
+    _instance = None
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(EtherRegistry, cls).__new__(cls)
+            cls._instance._pending_classes: dict[str, str] = {}  # qualname -> module_name
+            cls._instance._processed_classes: Set[str] = set()
+            cls._instance._logger = _get_logger("EtherRegistry")  # Will use default levels
+        return cls._instance
     
-    @classmethod
-    def mark_for_processing(cls, class_qualname: str, module_name: str):
+    def mark_for_processing(self, class_qualname: str, module_name: str):
         
-        if class_qualname not in cls._pending_classes:
-            cls._logger.info(f"Marking class for processing: {class_qualname} from {module_name}")
-            cls._pending_classes[class_qualname] = module_name
-        else:
-            cls._logger.debug(f"Class {class_qualname} already marked for processing, skipping")
+        if class_qualname not in self._pending_classes:
+            self._logger.info(f"Marking class for processing: {class_qualname} from {module_name}")
+            self._pending_classes[class_qualname] = module_name
+
         
-    @classmethod
-    def process_registry_config(cls, config: Dict[str, EtherClassConfig]):
+    def process_registry_config(self, config: Dict[str, EtherClassConfig]):
         """Process registry configuration and apply decorators
         
         Args:
             config: Dictionary mapping class paths to their configurations
         """
-        cls._logger.debug("Processing registry configuration...")
+        self._logger.debug("Processing registry configuration...")
         
         for class_path, class_config in config.items():
             # Import the class
@@ -47,15 +49,15 @@ class EtherRegistry:
                 module = importlib.import_module(module_path)
                 target_class = getattr(module, class_name)
             except (ImportError, AttributeError) as e:
-                cls._logger.error(f"Failed to import {class_path}: {e}")
+                self._logger.error(f"Failed to import {class_path}: {e}")
                 continue
             
-            cls._logger.debug(f"Processing class {class_path}")
+            self._logger.debug(f"Processing class {class_path}")
             
             # Process each method
             for method_name, method_config in class_config.methods.items():
                 if not hasattr(target_class, method_name):
-                    cls._logger.warning(f"Method {method_name} not found in {class_path}")
+                    self._logger.warning(f"Method {method_name} not found in {class_path}")
                     continue
                 
                 # Get the original method
@@ -82,37 +84,36 @@ class EtherRegistry:
                 
                 # Replace the original method with the decorated version
                 setattr(target_class, method_name, decorated_method)
-                cls._logger.debug(f"Applied decorators to {class_path}.{method_name}")
+                self._logger.debug(f"Applied decorators to {class_path}.{method_name}")
             
             # Mark class for Ether functionality
-            cls.mark_for_processing(class_name, module_path)
+            self.mark_for_processing(class_name, module_path)
     
-    @classmethod
-    def process_pending_classes(cls):
-        cls._logger.info("Processing pending classes...")
-        cls._logger.debug(f"Pending classes: {cls._pending_classes}")
-        cls._logger.debug(f"Processed classes: {cls._processed_classes}")
+    def process_pending_classes(self):
+        self._logger.info("Processing pending classes...")
+        self._logger.debug(f"Pending classes: {self._pending_classes}")
+        self._logger.debug(f"Processed classes: {self._processed_classes}")
         
-        for qualname, module_name in list(cls._pending_classes.items()):  # Create a copy of items to modify dict
-            if qualname in cls._processed_classes:
-                cls._logger.debug(f"Class {qualname} already processed, skipping")
+        for qualname, module_name in list(self._pending_classes.items()):  # Create a copy of items to modify dict
+            if qualname in self._processed_classes:
+                self._logger.debug(f"Class {qualname} already processed, skipping")
                 continue
                 
             # Import the module that contains the class
             module = sys.modules.get(module_name)
             if module and hasattr(module, qualname):
                 class_obj = getattr(module, qualname)
-                cls._logger.debug(f"Adding Ether functionality to {qualname}")
+                self._logger.debug(f"Adding Ether functionality to {qualname}")
                 add_ether_functionality(class_obj)
-                cls._processed_classes.add(qualname)
-                cls._logger.debug(f"Successfully processed {qualname}")
+                self._processed_classes.add(qualname)
+                self._logger.debug(f"Successfully processed {qualname}")
             else:
-                cls._logger.warning(f"Could not find class {qualname} in module {module_name}")
+                self._logger.warning(f"Could not find class {qualname} in module {module_name}")
 
 def add_ether_functionality(cls):
     """Adds Ether functionality directly to a class"""
     # Use the class name for logging
-    logger = _get_logger(cls.__name__, log_level=logging.DEBUG)
+    logger = _get_logger(cls.__name__)  # Will use default levels
     logger.debug(f"Adding Ether functionality to class: {cls.__name__}")
     
     # Check if already processed
@@ -134,10 +135,12 @@ def add_ether_functionality(cls):
     def init_ether_vars(self, name=None, log_level=logging.INFO):
         self.id = str(uuid.uuid4())
         self.name = name or self.id
+        # Pass log_level as both console and file level if specified
         self._logger = _get_logger(
             process_name=self.__class__.__name__,
             instance_name=self.name,
-            log_level=log_level
+            console_level=log_level,
+            file_level=log_level
         )
         self._logger.debug(f"Initializing {self.name}")
         self._sub_address = f"tcp://localhost:{_ETHER_SUB_PORT}"
@@ -448,7 +451,7 @@ def _ether_pub(topic: Optional[str] = None):
         while frame:
             locals_dict = frame.f_locals
             if '__module__' in locals_dict and '__qualname__' in locals_dict:
-                EtherRegistry.mark_for_processing(
+                EtherRegistry().mark_for_processing(
                     locals_dict['__qualname__'],
                     locals_dict['__module__']
                 )
@@ -480,7 +483,7 @@ def _ether_sub(topic: Optional[str] = None, subtopic: Optional[str] = None):
         while frame:
             locals_dict = frame.f_locals
             if '__module__' in locals_dict and '__qualname__' in locals_dict:
-                EtherRegistry.mark_for_processing(
+                EtherRegistry().mark_for_processing(
                     locals_dict['__qualname__'],
                     locals_dict['__module__']
                 )
