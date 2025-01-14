@@ -2,6 +2,7 @@
 import logging
 from pathlib import Path
 from datetime import datetime
+import os
 
 
 # Standard ports for Ether communication
@@ -26,6 +27,7 @@ def _get_logger(
 
     # Create logger with hierarchical name
     logger_name = f"{process_name}:{instance_name}" if instance_name else process_name
+    logger_name = f"{logger_name}:{os.getpid()}"
     logger = logging.getLogger(logger_name)
     logger.setLevel(min(console_level, file_level))
     

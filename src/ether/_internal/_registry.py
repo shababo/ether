@@ -15,6 +15,7 @@ import importlib
 from ..utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
 from ether.liaison import EtherInstanceLiaison
 from ._config import EtherConfig, EtherClassConfig
+from ._session import EtherSession
 
 class EtherRegistry:
     """Registry to track and process classes with Ether methods"""
@@ -351,7 +352,7 @@ def add_ether_functionality(cls):
         # Initialize Ether functionality first
         self.init_ether(
             name=kwargs.pop('name', None),
-            log_level=kwargs.pop('log_level', logging.INFO),
+            log_level=kwargs.pop('log_level', logging.DEBUG), # TODO: use ether global log level
         )
         # Call original init with remaining args
         original_init(self, *args, **kwargs)
@@ -406,6 +407,7 @@ class EtherSubMetadata:
 def _ether_pub(topic: Optional[str] = None):
     """Decorator for methods that should publish messages."""
     def decorator(func):
+
         # Get return type hint if it exists
         return_type = inspect.signature(func).return_annotation
         if return_type == inspect.Parameter.empty:
@@ -413,31 +415,37 @@ def _ether_pub(topic: Optional[str] = None):
         
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            self._logger.debug(f"Inside pub wrapper for {func.__name__}")
-            if not hasattr(self, '_pub_socket'):
-                raise RuntimeError("Cannot publish: no publisher socket configured")
-            
+
             # Execute the function and get result
             result = func(self, *args, **kwargs)
-            
-            # self._logger.debug(f"Publishing result: {result}")
-            # Validate result against return type
-            if not isinstance(result, return_type) and isinstance(return_type, type) and issubclass(return_type, BaseModel):
-                validated_result = return_type(**result).model_dump_json()
-            else:
-                ResultModel = RootModel[return_type]
-                validated_result = ResultModel(result).model_dump_json()
-            
-            # self._logger.debug(f"Validated result: {validated_result}")
-            # Get topic from metadata
-            actual_topic = topic or f"{func.__qualname__}"
-            # self._logger.debug(f"Publishing to topic: {actual_topic}")
-            self._logger.debug(f"Publishing to topic: {actual_topic}")
-            # Publish the validated result
-            self._pub_socket.send_multipart([
-                actual_topic.encode(),
-                validated_result.encode()
-            ])
+            try:
+                self._logger.debug(f"Inside pub wrapper for {func.__name__}")
+                if not hasattr(self, '_pub_socket'):
+                    raise RuntimeError("Cannot publish: no publisher socket configured")
+                
+                
+                
+                # self._logger.debug(f"Publishing result: {result}")
+                # Validate result against return type
+                if not isinstance(result, return_type) and isinstance(return_type, type) and issubclass(return_type, BaseModel):
+                    validated_result = return_type(**result).model_dump_json()
+                else:
+                    ResultModel = RootModel[return_type]
+                    validated_result = ResultModel(result).model_dump_json()
+                
+                # self._logger.debug(f"Validated result: {validated_result}")
+                # Get topic from metadata
+                actual_topic = topic or f"{func.__qualname__}"
+                # self._logger.debug(f"Publishing to topic: {actual_topic}")
+                self._logger.debug(f"Publishing to topic: {actual_topic}")
+                # Publish the validated result
+                self._pub_socket.send_multipart([
+                    actual_topic.encode(),
+                    validated_result.encode()
+                ])
+            except Exception as e:
+                # we never want to crash basic operation of the underlying user code
+                pass
             
             # self._logger.debug(f"Published result: {result}")
             return result
