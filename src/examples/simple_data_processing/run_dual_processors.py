@@ -43,11 +43,11 @@ def main(config_name):
     ether.init(config=config_path)
 
     # use the DataGenerator class normally to generate some data
-    generator = DataGenerator(name="generator_within_process")
-    generator.generate_data(data=42)
-    time.sleep(0.002)
+    # generator = DataGenerator(name="generator_within_process")
+    # generator.generate_data(data=42)
+    # time.sleep(0.002)
     # # delete the instance
-    del generator
+    # del generator
 
     # use the pub function to trigger DataGenerator.generate_data
     # via the automatically launched DataGenerator instance in the config
