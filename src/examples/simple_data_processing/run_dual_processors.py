@@ -51,14 +51,14 @@ def main(config_name):
 
     # use the pub function to trigger DataGenerator.generate_data
     # via the automatically launched DataGenerator instance in the config
-    ether.pub({"data": 44}, topic="DataGenerator.generate_data")
+    ether.pub({"data": 42}, topic="DataGenerator.generate_data")
     time.sleep(1.002)
 
     generator = DataGenerator(name="generator_within_process")
     processor2x = DataProcessor(process_id=2, multiplier=2)
     processor4x = DataProcessor(process_id=4, multiplier=4)
     collector = DataCollector()
-    generated_data = generator.generate_data(data=42)
+    generated_data = generator.generate_data(data=4242)
     processed2x_result = processor2x.process_data(**generated_data)
     processed4x_result = processor4x.process_data(**generated_data)
     collector.collect_result(**processed2x_result)

@@ -67,6 +67,17 @@ class _Ether:
     """Singleton to manage Ether services behind the scenes."""
     _instance = None
     _ether_id = None
+    _logger = None
+    _redis_port = None
+    _redis_pidfile = None
+    _pubsub_process = None
+    _monitor_process = None
+    _instance_manager = None
+    _ether_session_process = None
+    _started = False
+    _is_main_session = False
+    _pub_socket = None
+    _zmq_context = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -75,19 +86,9 @@ class _Ether:
             cls._instance._logger.debug("Creating new Ether instance")
 
             cls._instance._logger.debug("Initializing Ether instance")
-            cls._instance._redis_process = None
             cls._instance._redis_port = 6379
             cls._instance._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
-            cls._instance._pubsub_process = None
-            cls._instance._monitor_process = None
-            cls._instance._instance_manager = None
-            cls._instance._ether_session_process = None
-            cls._instance._is_main_session = False
-            cls._instance._started = False
-            
-            # Add ZMQ publishing setup
-            cls._instance._pub_socket = None
-            cls._instance._zmq_context = None
+
 
         return cls._instance
         

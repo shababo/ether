@@ -20,11 +20,13 @@ from ._session import EtherSession
 class EtherRegistry:
     """Registry to track and process classes with Ether methods"""
     _instance = None
+    _pending_classes: dict[str, str] = {}  # qualname -> module_name
+    _processed_classes: Set[str] = set()
+    _logger = None
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(EtherRegistry, cls).__new__(cls)
-            cls._instance._pending_classes: dict[str, str] = {}  # qualname -> module_name
-            cls._instance._processed_classes: Set[str] = set()
             cls._instance._logger = _get_logger("EtherRegistry")  # Will use default levels
         return cls._instance
     
