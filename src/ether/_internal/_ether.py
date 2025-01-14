@@ -5,15 +5,12 @@ from pathlib import Path
 import tempfile
 import redis
 import os
-import logging
 from multiprocessing import Process
 import zmq
 from typing import Union, Dict
 from pydantic import BaseModel
 import json
 import signal
-import uuid
-from datetime import datetime
 
 from ..utils import _ETHER_PUB_PORT, _get_logger
 from ._session import EtherSession, session_process_launcher

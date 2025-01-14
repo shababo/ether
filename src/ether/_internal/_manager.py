@@ -1,6 +1,5 @@
-from typing import Dict, Union
+from typing import Union
 from multiprocessing import Process
-import logging
 
 from ..utils import _get_logger
 from ._config import EtherConfig
@@ -14,7 +13,7 @@ class _EtherInstanceManager:
             config: Union[EtherConfig, str, dict] = None, 
             autolaunch: bool = True
         ):
-        self._instance_processes: Dict[str, Process] = {}
+        self._instance_processes: dict[str, Process] = {}
         self._logger = _get_logger("EtherInstanceManager")
         self._logger.debug("Initializing EtherInstanceManager")
         self._liaison = EtherInstanceLiaison()
@@ -61,7 +60,7 @@ class _EtherInstanceManager:
     def launch_instances(
             self, 
             config: Union[EtherConfig, str, dict] = None
-        ) -> Dict[str, Process]:
+        ) -> dict[str, Process]:
         self._logger.debug("Launching instances from config")
         
         processes = {}
@@ -120,7 +119,7 @@ class _EtherInstanceManager:
         """Add a running instance to be managed"""
         self._instance_processes[instance_id] = process
 
-    def get_instance_processes(self) -> Dict[str, Process]:
+    def get_instance_processes(self) -> dict[str, Process]:
         """Get all managed instance processes"""
         return self._instance_processes.copy()
 

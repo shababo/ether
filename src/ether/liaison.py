@@ -3,7 +3,6 @@ from typing import Dict, Any
 import json
 import time
 import os
-import logging
 
 from ether.utils import _get_logger
 

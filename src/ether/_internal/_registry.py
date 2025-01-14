@@ -1,5 +1,4 @@
 from functools import wraps
-from multiprocessing import Event, Process
 import inspect
 from typing import Any, Set, Type, Optional, Dict
 import uuid
@@ -8,14 +7,12 @@ from pydantic import BaseModel, ValidationError, create_model, RootModel
 import logging
 import time
 import json
-import os
 import sys
 import importlib
 
 from ..utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
 from ether.liaison import EtherInstanceLiaison
-from ._config import EtherConfig, EtherClassConfig
-from ._session import EtherSession
+from ._config import EtherClassConfig
 
 class EtherRegistry:
     """Registry to track and process classes with Ether methods"""

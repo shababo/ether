@@ -1,12 +1,5 @@
 import zmq
-import logging
-import signal
 import uuid
-from multiprocessing import Process
-import os
-import tempfile
-import atexit
-import time
 
 from ..utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, _get_logger
 
