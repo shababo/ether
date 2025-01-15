@@ -5,7 +5,7 @@ import logging
 from typing import List, Dict, Optional
 from pydantic import BaseModel
 from ether import ether, ether_pub, ether_sub
-from ether._internal._utils import _get_logger
+from ether.utils import _get_logger
 
 # Test Models
 class ValidMessage(BaseModel):
@@ -21,7 +21,7 @@ class NestedMessage(BaseModel):
 class PublisherBase:
     def __init__(self, name=None):
         self.name = name or self.__class__.__name__
-        self._logger = _get_logger(self.__class__.__name__, name, log_level=logging.INFO)
+        self._logger = _get_logger(self.__class__.__name__, instance_name=name)
 
 # Test Classes
 class ValidPublisher:

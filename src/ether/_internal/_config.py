@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 import yaml
 import importlib
@@ -47,7 +47,7 @@ class EtherInstanceConfig(BaseModel):
             from ._registry import EtherRegistry
             from ._config import EtherClassConfig
             class_config = EtherClassConfig.model_validate(registry_config[self.class_path])
-            EtherRegistry.process_registry_config({self.class_path: class_config})
+            EtherRegistry().process_registry_config({self.class_path: class_config})
         
         # Always add Ether functionality
         from ._registry import add_ether_functionality

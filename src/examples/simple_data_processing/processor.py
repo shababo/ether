@@ -8,7 +8,7 @@ class DataProcessor:
     @ether_sub()
     @ether_pub(topic="DataCollector.collect_result")
     def process_data(self, name: str, data: int = 0) -> dict:
-        self._logger.info(f"Processing {name} with data {data}")
+        print(f"Processing {name} with data {data}")
         processed_data = data * self.multiplier
         return {
             "result_name": name + f"_{self.multiplier}x",

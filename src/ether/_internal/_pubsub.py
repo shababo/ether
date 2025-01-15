@@ -1,14 +1,7 @@
 import zmq
-import logging
-import signal
 import uuid
-from multiprocessing import Process
-import os
-import tempfile
-import atexit
-import time
 
-from ._utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, _get_logger
+from ..utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, _get_logger
 
 class _EtherPubSubProxy:
     """Proxy that uses XPUB/XSUB sockets for efficient message distribution.
@@ -17,6 +10,11 @@ class _EtherPubSubProxy:
     as messages, allowing for proper subscription forwarding.
     """
     def __init__(self):
+        self.id = uuid.uuid4()
+        self.name = f"EtherPubSubProxy_{self.id}"
+        self._logger = _get_logger("EtherPubSubProxy")
+        self._logger.info("Initializing PubSub proxy")
+        
         self.capture_socket = None
         self.broadcast_socket = None
         self._running = False
@@ -24,18 +22,19 @@ class _EtherPubSubProxy:
 
     def setup_sockets(self):
         """Setup XPUB/XSUB sockets with optimized settings"""
-        self.id = uuid.uuid4()
-        self.name = f"EtherPubSubProxy_{self.id}"
-        self._logger = _get_logger("Proxy", log_level=logging.INFO)
-
+        self._logger.debug("Setting up ZMQ sockets")
+        
         self._zmq_context = zmq.Context()
         
-        # Use standard ports
+        # Setup capture (XSUB) socket
+        self._logger.debug(f"Setting up XSUB socket on port {_ETHER_PUB_PORT}")
         self.capture_socket = self._zmq_context.socket(zmq.XSUB)
         self.capture_socket.bind(f"tcp://*:{_ETHER_PUB_PORT}")
         self.capture_socket.setsockopt(zmq.RCVHWM, 1000000)
         self.capture_socket.setsockopt(zmq.RCVBUF, 65536)
         
+        # Setup broadcast (XPUB) socket
+        self._logger.debug(f"Setting up XPUB socket on port {_ETHER_SUB_PORT}")
         self.broadcast_socket = self._zmq_context.socket(zmq.XPUB)
         self.broadcast_socket.bind(f"tcp://*:{_ETHER_SUB_PORT}")
         self.broadcast_socket.setsockopt(zmq.SNDHWM, 1000000)
@@ -43,20 +42,23 @@ class _EtherPubSubProxy:
         self.broadcast_socket.setsockopt(zmq.XPUB_VERBOSE, 1)
         
         # Set TCP keepalive options
+        self._logger.debug("Configuring socket keepalive options")
         for socket in [self.capture_socket, self.broadcast_socket]:
             socket.setsockopt(zmq.LINGER, 0)
             socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
             socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 300)
 
-        # Create poller to monitor both sockets
+        # Create poller
+        self._logger.debug("Setting up ZMQ poller")
         self._poller = zmq.Poller()
         self._poller.register(self.capture_socket, zmq.POLLIN)
         self._poller.register(self.broadcast_socket, zmq.POLLIN)
         
-        self._logger.debug(f"Starting proxy with {self.capture_socket} and {self.broadcast_socket}")
+        self._logger.info("PubSub proxy sockets initialized")
     
     def run(self):
         """Run the proxy with graceful shutdown support"""
+        self._logger.info("Starting PubSub proxy event loop")
         try:
             self._running = True
             
@@ -66,14 +68,19 @@ class _EtherPubSubProxy:
                     
                     if self.capture_socket in events:
                         message = self.capture_socket.recv_multipart()
-                        self._logger.debug(f"Proxy forwarding from capture_socket: {len(message)} parts")
-                        self._logger.debug(f"Topic: {message[0]}")
+                        topic = message[0].decode()
+                        self._logger.debug(f"Forwarding from publisher: Topic={topic}")
                         self.broadcast_socket.send_multipart(message)
                     
                     if self.broadcast_socket in events:
                         message = self.broadcast_socket.recv_multipart()
-                        self._logger.debug(f"Proxy forwarding from broadcast_socket: {len(message)} parts")
-                        self._logger.debug(f"Topic: {message[0]}")
+                        # First byte indicates subscription: 1=subscribe, 0=unsubscribe
+                        is_subscribe = message[0][0] == 1
+                        topic = message[0][1:].decode()  # Topic follows the first byte
+                        self._logger.debug(
+                            f"{'Subscription' if is_subscribe else 'Unsubscription'} "
+                            f"received for topic: {topic}"
+                        )
                         self.capture_socket.send_multipart(message)
                         
                 except zmq.ZMQError as e:
@@ -84,18 +91,27 @@ class _EtherPubSubProxy:
                         raise
                         
         except Exception as e:
-            self._logger.error(f"Error in proxy: {e}")
+            self._logger.error(f"Error in proxy event loop: {e}")
         finally:
             self.cleanup()
 
     def cleanup(self):
+        self._logger.info("Cleaning up PubSub proxy")
         self._running = False
+        
         if self.capture_socket:
+            self._logger.debug("Closing capture socket")
             self.capture_socket.close()
+            
         if self.broadcast_socket:
+            self._logger.debug("Closing broadcast socket")
             self.broadcast_socket.close()
+            
         if self._zmq_context:
+            self._logger.debug("Terminating ZMQ context")
             self._zmq_context.term()
+            
+        self._logger.info("PubSub proxy cleanup complete")
 
     def __del__(self):
         self.cleanup()

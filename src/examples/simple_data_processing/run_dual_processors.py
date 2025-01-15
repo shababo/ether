@@ -1,9 +1,9 @@
 import os
 import time
 import click
-
-from examples.simple_data_processing import DataGenerator
 from ether import ether
+from examples.simple_data_processing import DataGenerator, DataProcessor, DataCollector
+
 
 def _get_config_path(config_name: str) -> str:
     return os.path.join(os.path.dirname(__file__), "config", f"{config_name}.yaml")
@@ -43,16 +43,26 @@ def main(config_name):
     ether.init(config=config_path)
 
     # use the DataGenerator class normally to generate some data
-    generator = DataGenerator(name="generator_within_process")
-    generator.generate_data(data=42)
-    time.sleep(0.002)
-    # delete the instance
-    del generator
+    # generator = DataGenerator(name="generator_within_process")
+    # generator.generate_data(data=42)
+    # time.sleep(0.002)
+    # # delete the instance
+    # del generator
 
     # use the pub function to trigger DataGenerator.generate_data
     # via the automatically launched DataGenerator instance in the config
-    ether.pub({"data": 44}, topic="DataGenerator.generate_data")
-    time.sleep(0.002)
+    ether.pub({"data": 42}, topic="DataGenerator.generate_data")
+    time.sleep(1.002)
+
+    generator = DataGenerator(name="generator_within_process")
+    processor2x = DataProcessor(process_id=2, multiplier=2)
+    processor4x = DataProcessor(process_id=4, multiplier=4)
+    collector = DataCollector()
+    generated_data = generator.generate_data(data=4242)
+    processed2x_result = processor2x.process_data(**generated_data)
+    processed4x_result = processor4x.process_data(**generated_data)
+    collector.collect_result(**processed2x_result)
+    collector.collect_result(**processed4x_result)
 
 if __name__ == "__main__":
     main()

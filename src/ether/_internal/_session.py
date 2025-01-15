@@ -1,0 +1,240 @@
+import zmq
+import uuid
+import time
+import threading
+import os
+from typing import Optional, Dict, Any
+import atexit
+import multiprocessing
+import errno
+from time import sleep
+
+class EtherSession: 
+    DISCOVERY_PUB_PORT = 301309
+    QUERY_PORT = 301310
+
+    def __init__(self, ether_id: str = "default"):
+        self.session_id = str(uuid.uuid4())
+        self.ether_id = ether_id
+        self.context = zmq.Context()
+        self.is_discovery_service = False
+        self.running = False
+        
+        self.metadata = {
+            "session_id": self.session_id,
+            "ether_id": ether_id,
+            "start_time": time.time(),
+            "pid": os.getpid()
+        }
+        
+        try:
+            if not self._connect_to_discovery():
+                print(f"Process {os.getpid()}: No existing service found, attempting to start one...")
+                self._start_discovery_service()
+        except Exception as e:
+            self.cleanup()
+            raise e
+
+        atexit.register(self.cleanup)
+
+    def _start_discovery_service(self):
+        try:
+            self.pub_socket = self.context.socket(zmq.PUB)
+            self.pub_socket.bind(f"tcp://*:{self.DISCOVERY_PUB_PORT}")
+            
+            self.rep_socket = self.context.socket(zmq.REP)
+            self.rep_socket.bind(f"tcp://*:{self.QUERY_PORT}")
+            
+            self.is_discovery_service = True
+            self.running = True
+            
+            self.service_thread = threading.Thread(target=self._run_discovery_service)
+            self.service_thread.daemon = True
+            self.service_thread.start()
+            
+            print(f"Process {os.getpid()}: Successfully started discovery service")
+            
+        except zmq.ZMQError as e:
+            if e.errno == errno.EADDRINUSE:
+                print(f"Process {os.getpid()}: Another process just started the discovery service, attempting to connect...")
+                # Clean up our failed binding attempts
+                if hasattr(self, 'pub_socket'):
+                    self.pub_socket.close()
+                if hasattr(self, 'rep_socket'):
+                    self.rep_socket.close()
+                
+                # Give the other process a moment to fully initialize
+                sleep(0.1)
+                
+                # Try to connect again
+                if self._connect_to_discovery():
+                    print(f"Process {os.getpid()}: Successfully connected to existing service")
+                    return
+                else:
+                    raise RuntimeError("Failed to connect to existing service after bind failure")
+            else:
+                print(f"Process {os.getpid()}: Failed to start discovery service: {e}")
+                self.cleanup()
+                raise
+
+    def _run_discovery_service(self):
+        poller = zmq.Poller()
+        poller.register(self.rep_socket, zmq.POLLIN)
+
+        while self.running:
+            try:
+                self.pub_socket.send_json({
+                    "type": "announcement",
+                    "data": self.metadata
+                })
+
+                events = dict(poller.poll(1000))
+                if self.rep_socket in events:
+                    msg = self.rep_socket.recv_json()
+                    if msg.get("type") == "query":
+                        self.rep_socket.send_json({
+                            "type": "response",
+                            "data": self.metadata
+                        })
+            except Exception as e:
+                print(f"Process {os.getpid()}: Service error: {e}")
+                break
+
+    @classmethod
+    def get_current_session(cls, timeout: int = 200) -> Optional[Dict[str, Any]]:  # reduced timeout
+        print(f"Process {os.getpid()}: Attempting to get current session...")
+        context = zmq.Context()
+        req_socket = context.socket(zmq.REQ)
+        
+        try:
+            req_socket.setsockopt(zmq.LINGER, 0)  # Don't wait on close
+            req_socket.connect(f"tcp://localhost:{cls.QUERY_PORT}")
+            print(f"Process {os.getpid()}: Connected to query port")
+            
+            req_socket.send_json({"type": "query"})
+            print(f"Process {os.getpid()}: Sent query")
+            
+            poller = zmq.Poller()
+            poller.register(req_socket, zmq.POLLIN)
+            
+            print(f"Process {os.getpid()}: Waiting for response...")
+            events = dict(poller.poll(timeout))
+            if req_socket in events:
+                response = req_socket.recv_json()
+                print(f"Process {os.getpid()}: Received response")
+                if response.get("type") == "response":
+                    return response["data"]
+            print(f"Process {os.getpid()}: No response received")
+            return None
+            
+        except Exception as e:
+            print(f"Process {os.getpid()}: Error in get_current_session: {e}")
+            return None
+        finally:
+            req_socket.close()
+            context.term()
+
+    def _connect_to_discovery(self) -> bool:
+        print(f"Process {os.getpid()}: Attempting to connect to discovery...")
+        sub_socket = self.context.socket(zmq.SUB)
+        req_socket = self.context.socket(zmq.REQ)
+        
+        try:
+            sub_socket.setsockopt(zmq.LINGER, 0)
+            req_socket.setsockopt(zmq.LINGER, 0)
+            sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
+            
+            sub_socket.connect(f"tcp://localhost:{self.DISCOVERY_PUB_PORT}")
+            req_socket.connect(f"tcp://localhost:{self.QUERY_PORT}")
+
+            poller = zmq.Poller()
+            poller.register(sub_socket, zmq.POLLIN)
+            
+            print(f"Process {os.getpid()}: Checking for announcements...")
+            events = dict(poller.poll(200))  # reduced timeout
+            if sub_socket in events:
+                print(f"Process {os.getpid()}: Found existing service via SUB")
+                return True
+
+            print(f"Process {os.getpid()}: Trying direct query...")
+            req_socket.send_json({"type": "query"})
+            poller = zmq.Poller()
+            poller.register(req_socket, zmq.POLLIN)
+            events = dict(poller.poll(200))  # reduced timeout
+            if req_socket in events:
+                print(f"Process {os.getpid()}: Found existing service via REQ")
+                return True
+
+            print(f"Process {os.getpid()}: No existing service found")
+            return False
+
+        except Exception as e:
+            print(f"Process {os.getpid()}: Error in connect_to_discovery: {e}")
+            return False
+        finally:
+            sub_socket.close()
+            req_socket.close()
+
+    def cleanup(self):
+        self.running = False
+        if hasattr(self, 'service_thread') and self.service_thread.is_alive():
+            self.service_thread.join(timeout=1.0)
+        if hasattr(self, 'pub_socket'):
+            self.pub_socket.close()
+        if hasattr(self, 'rep_socket'):
+            self.rep_socket.close()
+        if hasattr(self, 'context'):
+            self.context.term()
+
+def session_process_launcher(process_id: int):
+    print(f"Process {process_id} (PID {os.getpid()}): Starting up...")
+    
+    try:
+        # First try to find existing session
+        print(f"Process {process_id}: Checking for existing session...")
+        current_session = EtherSession.get_current_session(timeout=200)
+        
+        if current_session is None:
+            print(f"Process {process_id}: No session found, attempting to create new one...")
+            try:
+                session_mgr = EtherSession(f"{process_id}")
+                print(f"Process {process_id}: Successfully created new session {session_mgr.session_id}")
+                while True:
+                    time.sleep(1.0)
+            except zmq.ZMQError as e:
+                if e.errno == errno.EADDRINUSE:
+                    # Someone else created it just before us, try to get their session
+                    print(f"Process {process_id}: Another process created session first, connecting...")
+                    current_session = EtherSession.get_current_session(timeout=200)
+                    if current_session:
+                        print(f"Process {process_id}: Connected to existing session {current_session['session_id']}")
+                    else:
+                        raise RuntimeError("Failed to connect to newly created session")
+                else:
+                    raise
+            
+        else:
+            print(f"Process {process_id}: Found existing session {current_session['session_id']}")
+        
+        # current = EtherSession.get_current_session()
+        # if current:
+        #     print(f"Process {process_id}: Connected to session {current['session_id']}")
+            
+    except Exception as e:
+        print(f"Process {process_id}: Error: {e}")
+    finally:
+        print(f"Process {process_id}: Shutting down")
+
+def main():
+    processes = []
+    for i in range(4):
+        p = multiprocessing.Process(target=session_process_launcher, args=(i,))
+        processes.append(p)
+        p.start()
+        time.sleep(0.1)  # Small delay between launches
+
+    for p in processes:
+        p.join()
+
+if __name__ == "__main__":
+    main()

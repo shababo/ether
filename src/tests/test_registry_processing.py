@@ -23,7 +23,7 @@ def test_registry_decorator_application():
     config = EtherConfig.model_validate(config_dict)
     
     # Process the registry configuration
-    EtherRegistry.process_registry_config(config.registry)
+    EtherRegistry().process_registry_config(config.registry)
     
     # Verify decorator was applied
     generator = DataGenerator()
@@ -54,7 +54,7 @@ def test_registry_multiple_decorators():
     }
     
     config = EtherConfig.model_validate(config_dict)
-    EtherRegistry.process_registry_config(config.registry)
+    EtherRegistry().process_registry_config(config.registry)
     
     # Verify both decorators were applied
     processor = DataProcessor()

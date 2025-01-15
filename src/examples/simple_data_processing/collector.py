@@ -7,5 +7,5 @@ class DataCollector:
     
     @ether_sub()
     def collect_result(self, result_name: str, value: int):
-        self._logger.info(f"Collected result: {result_name} = {value}")
+        print(f"Collected result: {result_name} = {value}")
 
