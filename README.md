@@ -18,7 +18,7 @@ Ether dynamically facilitates direct, local, and remote function calling between
 
 ## Features
 
-- Transform existing classes into distributed system components with via decorators or yaml configuration
+- Transform existing classes into distributed system components via decorators or yaml configuration
 - Automatic process lifecycle management and monitoring
 - Configuration-based instance launching
 - Built-in initialization and cleanup
