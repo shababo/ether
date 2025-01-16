@@ -84,7 +84,7 @@ The example below demonstrates two key features of Ether:
 
 Here's how to run the example in both modes:
 
-#### Distributed Usage with Configuration
+#### Distributed Ether Configuration
 
 Create a YAML configuration file in `config/dual_processors.yaml` to specify how components should be distributed:
 
@@ -104,7 +104,7 @@ instances:
     class_path: examples.simple_data_processing.DataCollector
 ```
 
-Then run your application:
+Below we run our pipeline, first using Ether, and then using instances of the classes directly without Ether:
 
 ```python
 import os
