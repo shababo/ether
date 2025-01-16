@@ -30,7 +30,7 @@ Ether dynamically facilitates direct, local, and remote function calling between
 
 This example shows how you can easily setup your existing code to work with Ether. This particular example is based on a simple data processing pipeline. 
 
-### Decorating your 
+### Decorating Your Existing Code
 
 ```python
 from ether import ether_pub, ether_sub, ether_start
