@@ -1,3 +1,4 @@
+import os
 from ether import ether_sub
 
 class DataCollector:
@@ -5,7 +6,7 @@ class DataCollector:
     def __init__(self):
         pass
     
-    @ether_sub()
+    @ether_sub(topic="result")
     def collect_result(self, result_name: str, value: int):
-        print(f"Collected result: {result_name} = {value}")
+        print(f"(PID: {os.getpid()})::Collected result from {result_name} = {value}")
 

@@ -16,14 +16,15 @@ from ._internal._ether import _ether
 from ._internal._config import EtherConfig
 
 
-def _pub(data: Union[Dict, BaseModel], topic: str):
+def _pub(data: Union[Dict, BaseModel] = None, topic: str = None):
     """Publish data to a topic
     
     Args:
         data: Data to publish (dict or Pydantic model)
         topic: Topic to publish to
     """
-
+    data = data or {}
+    topic = topic or "general"
     _ether.publish(data, topic)
 
 # Public singleton instance of Ether API

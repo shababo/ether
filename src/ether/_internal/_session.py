@@ -9,6 +9,8 @@ import multiprocessing
 import errno
 from time import sleep
 
+from ether.utils import _get_logger
+
 class EtherSession: 
     DISCOVERY_PUB_PORT = 301309
     QUERY_PORT = 301310
@@ -19,6 +21,7 @@ class EtherSession:
         self.context = zmq.Context()
         self.is_discovery_service = False
         self.running = False
+        self._logger = _get_logger(process_name="EtherSession")
         
         self.metadata = {
             "session_id": self.session_id,
@@ -29,7 +32,7 @@ class EtherSession:
         
         try:
             if not self._connect_to_discovery():
-                print(f"Process {os.getpid()}: No existing service found, attempting to start one...")
+                self._logger.debug(f"Process {os.getpid()}: No existing service found, attempting to start one...")
                 self._start_discovery_service()
         except Exception as e:
             self.cleanup()
@@ -52,11 +55,11 @@ class EtherSession:
             self.service_thread.daemon = True
             self.service_thread.start()
             
-            print(f"Process {os.getpid()}: Successfully started discovery service")
+            self._logger.debug(f"Process {os.getpid()}: Successfully started discovery service")
             
         except zmq.ZMQError as e:
             if e.errno == errno.EADDRINUSE:
-                print(f"Process {os.getpid()}: Another process just started the discovery service, attempting to connect...")
+                self._logger.debug(f"Process {os.getpid()}: Another process just started the discovery service, attempting to connect...")
                 # Clean up our failed binding attempts
                 if hasattr(self, 'pub_socket'):
                     self.pub_socket.close()
@@ -68,12 +71,12 @@ class EtherSession:
                 
                 # Try to connect again
                 if self._connect_to_discovery():
-                    print(f"Process {os.getpid()}: Successfully connected to existing service")
+                    self._logger.debug(f"Process {os.getpid()}: Successfully connected to existing service")
                     return
                 else:
                     raise RuntimeError("Failed to connect to existing service after bind failure")
             else:
-                print(f"Process {os.getpid()}: Failed to start discovery service: {e}")
+                self._logger.debug(f"Process {os.getpid()}: Failed to start discovery service: {e}")
                 self.cleanup()
                 raise
 
@@ -97,45 +100,45 @@ class EtherSession:
                             "data": self.metadata
                         })
             except Exception as e:
-                print(f"Process {os.getpid()}: Service error: {e}")
+                self._logger.debug(f"Process {os.getpid()}: Service error: {e}")
                 break
 
     @classmethod
     def get_current_session(cls, timeout: int = 200) -> Optional[Dict[str, Any]]:  # reduced timeout
-        print(f"Process {os.getpid()}: Attempting to get current session...")
+        # print(f"Process {os.getpid()}: Attempting to get current session...")
         context = zmq.Context()
         req_socket = context.socket(zmq.REQ)
         
         try:
             req_socket.setsockopt(zmq.LINGER, 0)  # Don't wait on close
             req_socket.connect(f"tcp://localhost:{cls.QUERY_PORT}")
-            print(f"Process {os.getpid()}: Connected to query port")
+            # print(f"Process {os.getpid()}: Connected to query port")
             
             req_socket.send_json({"type": "query"})
-            print(f"Process {os.getpid()}: Sent query")
+            # print(f"Process {os.getpid()}: Sent query")
             
             poller = zmq.Poller()
             poller.register(req_socket, zmq.POLLIN)
             
-            print(f"Process {os.getpid()}: Waiting for response...")
+            # print(f"Process {os.getpid()}: Waiting for response...")
             events = dict(poller.poll(timeout))
             if req_socket in events:
                 response = req_socket.recv_json()
-                print(f"Process {os.getpid()}: Received response")
+                # print(f"Process {os.getpid()}: Received response")
                 if response.get("type") == "response":
                     return response["data"]
-            print(f"Process {os.getpid()}: No response received")
+            # print(f"Process {os.getpid()}: No response received")
             return None
             
         except Exception as e:
-            print(f"Process {os.getpid()}: Error in get_current_session: {e}")
+            # print(f"Process {os.getpid()}: Error in get_current_session: {e}")
             return None
         finally:
             req_socket.close()
             context.term()
 
     def _connect_to_discovery(self) -> bool:
-        print(f"Process {os.getpid()}: Attempting to connect to discovery...")
+        # print(f"Process {os.getpid()}: Attempting to connect to discovery...")
         sub_socket = self.context.socket(zmq.SUB)
         req_socket = self.context.socket(zmq.REQ)
         
@@ -150,13 +153,13 @@ class EtherSession:
             poller = zmq.Poller()
             poller.register(sub_socket, zmq.POLLIN)
             
-            print(f"Process {os.getpid()}: Checking for announcements...")
+            # print(f"Process {os.getpid()}: Checking for announcements...")
             events = dict(poller.poll(200))  # reduced timeout
             if sub_socket in events:
-                print(f"Process {os.getpid()}: Found existing service via SUB")
+                # print(f"Process {os.getpid()}: Found existing service via SUB")
                 return True
 
-            print(f"Process {os.getpid()}: Trying direct query...")
+            # print(f"Process {os.getpid()}: Trying direct query...")
             req_socket.send_json({"type": "query"})
             poller = zmq.Poller()
             poller.register(req_socket, zmq.POLLIN)
@@ -165,7 +168,7 @@ class EtherSession:
                 print(f"Process {os.getpid()}: Found existing service via REQ")
                 return True
 
-            print(f"Process {os.getpid()}: No existing service found")
+            self._logger.debug(f"Process {os.getpid()}: No existing service found")
             return False
 
         except Exception as e:
@@ -187,43 +190,46 @@ class EtherSession:
             self.context.term()
 
 def session_process_launcher(process_id: int):
-    print(f"Process {process_id} (PID {os.getpid()}): Starting up...")
+    # print(f"Process {process_id} (PID {os.getpid()}): Starting up...")
     
     try:
         # First try to find existing session
-        print(f"Process {process_id}: Checking for existing session...")
+        # print(f"Process {process_id}: Checking for existing session...")
         current_session = EtherSession.get_current_session(timeout=200)
         
         if current_session is None:
-            print(f"Process {process_id}: No session found, attempting to create new one...")
+            # print(f"Process {process_id}: No session found, attempting to create new one...")
             try:
                 session_mgr = EtherSession(f"{process_id}")
-                print(f"Process {process_id}: Successfully created new session {session_mgr.session_id}")
+                # print(f"Process {process_id}: Successfully created new session {session_mgr.session_id}")
                 while True:
                     time.sleep(1.0)
             except zmq.ZMQError as e:
                 if e.errno == errno.EADDRINUSE:
                     # Someone else created it just before us, try to get their session
-                    print(f"Process {process_id}: Another process created session first, connecting...")
+                    # print(f"Process {process_id}: Another process created session first, connecting...")
                     current_session = EtherSession.get_current_session(timeout=200)
-                    if current_session:
-                        print(f"Process {process_id}: Connected to existing session {current_session['session_id']}")
-                    else:
-                        raise RuntimeError("Failed to connect to newly created session")
+                    # if current_session:
+                    #     print(f"Process {process_id}: Connected to existing session {current_session['session_id']}")
+                    # else:
+                    #     raise RuntimeError("Failed to connect to newly created session")
                 else:
                     raise
             
         else:
-            print(f"Process {process_id}: Found existing session {current_session['session_id']}")
+            # print(f"Process {process_id}: Found existing session {current_session['session_id']}")
+            pass
         
         # current = EtherSession.get_current_session()
         # if current:
         #     print(f"Process {process_id}: Connected to session {current['session_id']}")
             
     except Exception as e:
-        print(f"Process {process_id}: Error: {e}")
+        # print(f"Process {process_id}: Error: {e}")
+        pass
     finally:
-        print(f"Process {process_id}: Shutting down")
+        # print(f"Process {process_id}: Shutting down")
+        pass
 
 def main():
     processes = []

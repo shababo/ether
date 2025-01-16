@@ -109,7 +109,7 @@ class _Ether:
         self._logger.debug(f"Publishing request received - Topic: {topic}")
         
         if not self._started:
-            self._logger.warning(f"Cannot publish {data} to {topic}: Ether system not started")
+            self._logger.debug(f"Cannot publish {data} to {topic}: Ether system not started")
             return
             
         if self._pub_socket is None:
@@ -138,7 +138,7 @@ class _Ether:
 
         self._ether_session_process = Process(target=session_process_launcher, args=(self._ether_id,))
         self._ether_session_process.start()
-        time.sleep(5.0)
+        time.sleep(1.0)
 
         if config:
             self._logger.debug("Processing configuration...")
@@ -147,7 +147,7 @@ class _Ether:
                 config = EtherConfig.from_yaml(config) if isinstance(config, str) else EtherConfig.model_validate(config)
         
         session_metadata = EtherSession.get_current_session()
-        print(f"Session metadata: {session_metadata}")
+        self._logger.debug(f"Session metadata: {session_metadata}")
         if session_metadata and session_metadata.get("ether_id") == ether_id:
 
             self._is_main_session = True
@@ -155,13 +155,13 @@ class _Ether:
             # TODO: review restart logic below, not sure we need it, and if we do if it's in the right place
             if self._started:
                 if restart:
-                    self._logger.info("Restarting Ether system...")
+                    self._logger.info("Restarting Ether session...")
                     self.shutdown()
                 else:
-                    self._logger.debug("Ether system already started, skipping start")
+                    self._logger.debug("Ether session already started, skipping start")
                     return
             
-            self._logger.info("Starting Ether system components...")
+            self._logger.info(f"Starting Ether session: {self._ether_id}...")
             
             # Start Redis
             self._logger.debug("Starting Redis server...")
@@ -323,12 +323,12 @@ class _Ether:
 
     def shutdown(self):
         """Shutdown all services"""        
-        self._logger.info(f"Shutting down Ether system {self._ether_id}...")
+        self._logger.info(f"Shutting down Ether session: {self._ether_id}...")
         # session_metadata = EtherSession.get_current_session()
         if not self._is_main_session:
-            self._logger.warning(f"Session metadata does not match ether_id {self._ether_id}, skipping shutdown")
+            self._logger.debug(f"Session metadata does not match ether_id {self._ether_id}, skipping shutdown")
         else:
-            self._logger.info(f"Session metadata matches ether_id {self._ether_id}, shutting down session")
+            self._logger.debug(f"Session metadata matches ether_id {self._ether_id}, shutting down session")
             
             try:
                 # stop all instances

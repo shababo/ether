@@ -111,7 +111,7 @@ class _EtherInstanceManager:
         return processes
 
     def stop_all_instances(self, force: bool = False):
-        self._logger.info(f"Stopping all instances (force={force})")
+        self._logger.debug(f"Stopping all instances (force={force})")
         for instance_id in list(self._instance_processes.keys()):
             self.stop_instance(instance_id, force)
 
