@@ -52,7 +52,7 @@ def main(config_name):
 
     # use the pub function to trigger DataGenerator.generate_data
     # via the automatically launched DataGenerator instance in the config
-    ether.pub(topic="start")
+    ether.start()
     time.sleep(1.002)
 
     ether.shutdown()
