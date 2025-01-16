@@ -12,11 +12,11 @@ def _get_config_path(config_name: str) -> str:
 @click.option('--config-name', default='dual_processors', help='Name of the configuration file')
 def main(config_name):
     """
-    This example demonstrates a system with a generator, two processors, and a collector.
+    This example demonstrates a system with a data generator, two data processors, and a result collector.
     The generator produces data, which is processed by both processors (with different multipliers)
-    and then collected by the collector.
+    and then both results are collected by the collector.
 
-    Config files are located in the config/ directory relative to this file.
+    Config files are located in the config directory relative to this file.
 
     Command line usage:
     # no .yaml suffix needed for config_name
