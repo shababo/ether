@@ -18,7 +18,7 @@ def _get_logger(
     process_name: str, 
     run_id: str = None,
     instance_name: str = None, 
-    console_level=logging.DEBUG,
+    console_level=logging.INFO,
     file_level=logging.DEBUG
 ) -> logging.Logger:
     """Get or create a logger with file and console handlers"""
@@ -68,7 +68,7 @@ def _get_logger(
         # Class-level log file
         log_file = log_dir / "class.log"
     
-    file_handler = logging.FileHandler(log_file, mode='a' if not instance_name else 'w')
+    file_handler = logging.FileHandler(log_file, mode='a')  # Always append
     file_handler.setFormatter(formatter)
     file_handler.setLevel(file_level)
     logger.addHandler(file_handler)

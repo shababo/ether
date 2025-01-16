@@ -30,7 +30,7 @@ class EtherRegistry:
     def mark_for_processing(self, class_qualname: str, module_name: str):
         
         if class_qualname not in self._pending_classes:
-            self._logger.info(f"Marking class for processing: {class_qualname} from {module_name}")
+            self._logger.debug(f"Marking class for processing: {class_qualname} from {module_name}")
             self._pending_classes[class_qualname] = module_name
 
         
@@ -90,7 +90,7 @@ class EtherRegistry:
             self.mark_for_processing(class_name, module_path)
     
     def process_pending_classes(self):
-        self._logger.info("Processing pending classes...")
+        self._logger.debug("Processing pending classes...")
         self._logger.debug(f"Pending classes: {self._pending_classes}")
         self._logger.debug(f"Processed classes: {self._processed_classes}")
         
@@ -139,8 +139,8 @@ def add_ether_functionality(cls):
         self._logger = _get_logger(
             process_name=self.__class__.__name__,
             instance_name=self.name,
-            console_level=log_level,
-            file_level=log_level
+            # console_level=log_level,
+            # file_level=log_level
         )
         self._logger.debug(f"Initializing {self.name}")
         self._sub_address = f"tcp://localhost:{_ETHER_SUB_PORT}"

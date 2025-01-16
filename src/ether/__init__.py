@@ -10,26 +10,28 @@ import uuid
 # first thing we do is figure out if we are the first ether process,
 # and if so, we start the discovery service and later will init pubsub/redis/etc
 
-from .decorators import ether_pub, ether_sub, ether_init, ether_save, ether_cleanup
+from .decorators import ether_pub, ether_sub, ether_init, ether_save, ether_cleanup, ether_start
 from .utils import _get_logger
 from ._internal._ether import _ether
 from ._internal._config import EtherConfig
 
 
-def _pub(data: Union[Dict, BaseModel], topic: str):
+def _pub(data: Union[Dict, BaseModel] = None, topic: str = None):
     """Publish data to a topic
     
     Args:
         data: Data to publish (dict or Pydantic model)
         topic: Topic to publish to
     """
-
+    data = data or {}
+    topic = topic or "general"
     _ether.publish(data, topic)
 
 # Public singleton instance of Ether API
 class Ether:
     pub = staticmethod(_pub)
     save = staticmethod(functools.partial(_pub, {}, topic="Ether.save"))
+    start = staticmethod(functools.partial(_pub, {}, topic="Ether.start"))
     cleanup = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
     shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
     _initialized = False
@@ -57,7 +59,6 @@ class Ether:
         
             # Mark as initialized
             self._initialized = True
-            print("Ether system initialized")
             
             # Register single cleanup handler
             atexit.register(self.shutdown)
@@ -74,6 +75,6 @@ class Ether:
 # instantiate singleton for API
 ether = Ether()
 # export decorators
-decorators = ['ether_pub', 'ether_sub', 'ether_init', 'ether_save', 'ether_cleanup']
+decorators = ['ether_pub', 'ether_sub', 'ether_init', 'ether_save', 'ether_cleanup', 'ether_start']
 __all__ = ['ether'] + decorators
 

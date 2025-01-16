@@ -8,4 +8,5 @@ ether_sub = _ether_sub
 # partials for subscribing to ether-lifecycle topics
 ether_init = functools.partial(ether_sub, topic="Ether.init")
 ether_save = functools.partial(ether_sub, topic="Ether.save")
+ether_start = functools.partial(ether_sub, topic="Ether.start")
 ether_cleanup = functools.partial(ether_sub, topic="Ether.cleanup")

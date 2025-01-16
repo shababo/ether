@@ -120,7 +120,7 @@ class EtherInstanceLiaison:
         self._logger.debug(f"Current registry config: {self.get_registry_config()}")
         self._logger.debug(f"Storing registry config: {config}")
         self.redis.set("ether:registry_config", json.dumps(config))
-        self._logger.info(f"Updated registry config: {self.get_registry_config()}")
+        self._logger.debug(f"Updated registry config: {self.get_registry_config()}")
     
     def get_registry_config(self) -> dict:
         """Get registry configuration from Redis"""

@@ -1,12 +1,10 @@
-from ether import ether_pub, ether_sub
+import os
+from ether import ether_pub, ether_sub, ether_start
 
 class DataGenerator:
-    def __init__(self, name: str = "DataGenerator", process_id: int = 0):
-        self.name = name
-        self.process_id = process_id
     
-    @ether_sub()
-    @ether_pub(topic="DataProcessor.process_data")
+    @ether_start()
+    @ether_pub(topic="data")
     def generate_data(self, data: int = 42) -> dict:
-        print(f"{self.name}: Generating data: {data}")
-        return {"name": self.name, "data": data}
+        print(f"DataGenerator[PID {os.getpid()}]: Generating data - {data}")
+        return {"data": data}
