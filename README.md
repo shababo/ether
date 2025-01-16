@@ -33,9 +33,6 @@ This example shows how you can easily setup your existing code to work with Ethe
 
 In `data_generator.py`:
 ```python
-from ether import ether_pub, ether_sub, ether_start
-import os
-
 # Data Generator - produces initial data
 class DataGenerator:
     @ether_start()
