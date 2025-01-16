@@ -18,13 +18,12 @@ Ether dynamically facilitates direct, local, and remote function calling between
 
 ## Features
 
-- Transform existing classes into distributed system components with via decorators or yaml configuration
-- Automatic process lifecycle management and monitoring
-- Configuration-based instance launching
-- Built-in initialization and cleanup
-- Type validation for messages using Pydantic
+- Transform existing classes into distributed system components via decorators and/or yaml configuration
+- Automatic lifecycle management and monitoring of components
+- Configuration-based integration and launching
 - System-wide logging of events and execution
-- Automatic guarantees on data saving and annotation/metadata
+- Type validation for messages using Pydantic
+- Guarantees on data saving and annotation/metadata
 
 ## Quick Start
 
