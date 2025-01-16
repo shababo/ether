@@ -13,7 +13,7 @@ class _EtherPubSubProxy:
         self.id = uuid.uuid4()
         self.name = f"EtherPubSubProxy_{self.id}"
         self._logger = _get_logger("EtherPubSubProxy")
-        self._logger.info("Initializing PubSub proxy")
+        self._logger.debug("Initializing PubSub proxy")
         
         self.capture_socket = None
         self.broadcast_socket = None
@@ -54,11 +54,11 @@ class _EtherPubSubProxy:
         self._poller.register(self.capture_socket, zmq.POLLIN)
         self._poller.register(self.broadcast_socket, zmq.POLLIN)
         
-        self._logger.info("PubSub proxy sockets initialized")
+        self._logger.debug("PubSub proxy sockets initialized")
     
     def run(self):
         """Run the proxy with graceful shutdown support"""
-        self._logger.info("Starting PubSub proxy event loop")
+        self._logger.debug("Starting PubSub proxy event loop")
         try:
             self._running = True
             
@@ -96,7 +96,7 @@ class _EtherPubSubProxy:
             self.cleanup()
 
     def cleanup(self):
-        self._logger.info("Cleaning up PubSub proxy")
+        self._logger.debug("Cleaning up PubSub proxy")
         self._running = False
         
         if self.capture_socket:
@@ -111,7 +111,7 @@ class _EtherPubSubProxy:
             self._logger.debug("Terminating ZMQ context")
             self._zmq_context.term()
             
-        self._logger.info("PubSub proxy cleanup complete")
+        self._logger.debug("PubSub proxy cleanup complete")
 
     def __del__(self):
         self.cleanup()

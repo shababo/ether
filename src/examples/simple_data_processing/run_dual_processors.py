@@ -21,26 +21,29 @@ def main(config_name):
     Command line usage:
     # no .yaml suffix needed for config_name
     # default config_name is dual_processors
-    python main.py --config-name {dual_processors} 
+    python run_dual_processors.py --config-name {dual_processors} 
 
 
     Expected output (ordering of processor and generator outputs may be different):
 
-    2025-01-16 10:28:30.814 - Ether:47841 - INFO - Starting Ether session: d6322dbb-8d3f-4064-bb4a-645bcb355b06...
-    2025-01-16 10:28:32.371 - Ether:47841 - INFO - Ether system started successfully
-    Ether system initialized
-    (PID: 47857)::DataGenerator: Generating data: 42
-    (PID: 47858)::Processing data value: 42 from DataGenerator
-    (PID: 47859)::Processing data value: 42 from DataGenerator
-    (PID: 47860)::Collected result from DataGenerator_4x = 168
-    (PID: 47860)::Collected result from DataGenerator_2x = 84
-    2025-01-16 10:28:33.382 - Ether:47841 - INFO - Shutting down Ether session: d6322dbb-8d3f-4064-bb4a-645bcb355b06...
-    2025-01-16 10:28:33.488 - Ether:47841 - INFO - Ether system shutdown complete
-    (PID: 47841)::generator_within_process: Generating data: 4242
-    (PID: 47841)::Processing data value: 4242 from generator_within_process
-    (PID: 47841)::Processing data value: 4242 from generator_within_process
-    (PID: 47841)::Collected result from generator_within_process_2x = 8484
-    (PID: 47841)::Collected result from generator_within_process_4x = 16968
+    2025-01-16 11:09:11.150 - Ether:50274 - INFO - Starting Ether session: 2a12ac7d-ad67-44e8-af00-e1214a7461ce...
+    2025-01-16 11:09:12.708 - Ether:50274 - INFO - Ether system started successfully
+    DataGenerator[PID 50284]: Generating data - 42
+    DataProcessor[PID 50285]: Processing input data - 42
+    DataProcessor[PID 50285]: Processed output result - 84
+    DataProcessor[PID 50286]: Processing input data - 42
+    DataProcessor[PID 50286]: Processed output result - 168
+    DataCollector[PID 50287]: Collected result - 84
+    DataCollector[PID 50287]: Collected result - 168
+    2025-01-16 11:09:13.721 - Ether:50274 - INFO - Shutting down Ether session: 2a12ac7d-ad67-44e8-af00-e1214a7461ce...
+    2025-01-16 11:09:13.829 - Ether:50274 - INFO - Ether system shutdown complete
+    DataGenerator[PID 50274]: Generating data - 4242
+    DataProcessor[PID 50274]: Processing input data - 4242
+    DataProcessor[PID 50274]: Processed output result - 8484
+    DataProcessor[PID 50274]: Processing input data - 4242
+    DataProcessor[PID 50274]: Processed output result - 16968
+    DataCollector[PID 50274]: Collected result - 8484
+    DataCollector[PID 50274]: Collected result - 16968
     """
 
     # init ether
@@ -56,9 +59,9 @@ def main(config_name):
 
     # you can still use your code normally when ether is not running
     # in other words, if your code is still used other places, it will still work
-    generator = DataGenerator(name="generator_within_process")
-    processor2x = DataProcessor(process_id=2, multiplier=2)
-    processor4x = DataProcessor(process_id=4, multiplier=4)
+    generator = DataGenerator()
+    processor2x = DataProcessor(multiplier=2)
+    processor4x = DataProcessor(multiplier=4)
     collector = DataCollector()
     generated_data = generator.generate_data(data=4242)
     processed2x_result = processor2x.process_data(**generated_data)

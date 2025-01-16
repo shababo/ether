@@ -58,7 +58,6 @@ class Ether:
         
             # Mark as initialized
             self._initialized = True
-            print("Ether system initialized")
             
             # Register single cleanup handler
             atexit.register(self.shutdown)
