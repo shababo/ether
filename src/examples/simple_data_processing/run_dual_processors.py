@@ -68,7 +68,7 @@ def main(config_name):
     processed4x_result = processor4x.process_data(**generated_data)
     collector.collect_result(**processed2x_result)
     collector.collect_result(**processed4x_result)
-
+    collector.summarize()
     
 
 
