@@ -53,8 +53,8 @@ def main(config_name):
     config_path = _get_config_path(config_name)
     ether.init(config=config_path)
 
-    # use the pub function to trigger DataGenerator.generate_data
-    # via the automatically launched DataGenerator instance in the config
+    # use ether's start method to publish to the "start" topic
+    # this will call any method decorated with @ether_start
     ether.start()
     time.sleep(1.002)
 
