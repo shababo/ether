@@ -31,6 +31,7 @@ This example shows how you can easily setup your existing code to work with Ethe
 
 ### Decorating Your Existing Code
 
+In `data_generator.py`:
 ```python
 from ether import ether_pub, ether_sub, ether_start
 import os
@@ -42,7 +43,9 @@ class DataGenerator:
     def generate_data(self, data: int = 42) -> dict:
         print(f"DataGenerator[PID {os.getpid()}]: Generating data - {data}")
         return {"data": data}
-
+```
+In `data_processor.py`:
+```python
 # Data Processor - can run in multiple instances with different multipliers
 class DataProcessor:
     def __init__(self, multiplier: int = 2):
@@ -55,7 +58,10 @@ class DataProcessor:
         result = data * self.multiplier
         print(f"DataProcessor[PID {os.getpid()}]: Processed output result - {result}")
         return {"result": result}
+```
 
+In `data_collector.py`:
+```python
 # Data Collector - collects and summarizes results
 class DataCollector:
     results = []
