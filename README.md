@@ -155,6 +155,7 @@ DataProcessor[PID 51484]: Processed output result - 84
 DataCollector[PID 51486]: Collected result - 168
 DataCollector[PID 51486]: Collected result - 84
 DataCollector[PID 51486]: Summarizing results - mean: 126.0, max: 168, min: 84
+DataCollector[PID 51486]: Summarizing results - mean: 126.0, max: 168, min: 84
 2025-01-16 11:28:45.346 - Ether:51475 - INFO - Shutting down Ether session: 52a3af6a-3ca2-4b88-811d-256612abc6c3...
 2025-01-16 11:28:45.448 - Ether:51475 - INFO - Ether system shutdown complete
 
