@@ -107,7 +107,7 @@ instances:
     class_path: examples.simple_data_processing.DataCollector
 ```
 
-Below we run our pipeline, first using Ether, and then using instances of the classes directly without Ether:
+Below we run our pipeline, first using Ether:
 
 ```python
 import os
@@ -128,7 +128,10 @@ time.sleep(1.002)  # Let the system run for a bit
 
 # Shut down the distributed system
 ether.shutdown()
+```
 
+Then immediately after we can use the same imported classes to run the pipeline without Ether in the main process:
+```python
 # After shutdown, you can still use components normally in a single process
 generator = DataGenerator()
 processor2x = DataProcessor(multiplier=2)
