@@ -147,7 +147,7 @@ collector.collect_result(**processed4x_result)
 collector.summarize()
 ```
 
-Expected output:
+Expected output (note that the Ether log PID and the manuage usage PIDs are all the same):
 ```
 2025-01-16 11:28:42.765 - Ether:51475 - INFO - Starting Ether session: 52a3af6a-3ca2-4b88-811d-256612abc6c3...
 2025-01-16 11:28:44.331 - Ether:51475 - INFO - Ether system started successfully
