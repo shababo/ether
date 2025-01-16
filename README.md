@@ -83,7 +83,7 @@ The example below demonstrates two key features of Ether:
 
 1. **Distributed Execution**: Using a configuration file, Ether can automatically launch and coordinate multiple processes, each running different instances of your components. The components communicate through Ether's messaging system, allowing for parallel processing and distributed workloads.
 
-2. **Transparent Fallback**: After Ether shuts down, your classes retain their original behavior and can still be used directly - just as if they were normal Python classes. This means your code remains functional even without Ether running and that any non-Ether users of your code will retain their expected functionality.
+2. **Transparent Fallback**: After Ether shuts down, your classes retain their original behavior and can still be used directly - just as if they were normal Python classes. This means your code remains functional even without Ether running and that any non-Ether usage of your code will retain its expected functionality.
 
 Here's how to run the example in both modes:
 
