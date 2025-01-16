@@ -26,24 +26,27 @@ def main(config_name):
 
     Expected output (ordering of processor and generator outputs may be different):
 
-    2025-01-16 11:09:11.150 - Ether:50274 - INFO - Starting Ether session: 2a12ac7d-ad67-44e8-af00-e1214a7461ce...
-    2025-01-16 11:09:12.708 - Ether:50274 - INFO - Ether system started successfully
-    DataGenerator[PID 50284]: Generating data - 42
-    DataProcessor[PID 50285]: Processing input data - 42
-    DataProcessor[PID 50285]: Processed output result - 84
-    DataProcessor[PID 50286]: Processing input data - 42
-    DataProcessor[PID 50286]: Processed output result - 168
-    DataCollector[PID 50287]: Collected result - 84
-    DataCollector[PID 50287]: Collected result - 168
-    2025-01-16 11:09:13.721 - Ether:50274 - INFO - Shutting down Ether session: 2a12ac7d-ad67-44e8-af00-e1214a7461ce...
-    2025-01-16 11:09:13.829 - Ether:50274 - INFO - Ether system shutdown complete
-    DataGenerator[PID 50274]: Generating data - 4242
-    DataProcessor[PID 50274]: Processing input data - 4242
-    DataProcessor[PID 50274]: Processed output result - 8484
-    DataProcessor[PID 50274]: Processing input data - 4242
-    DataProcessor[PID 50274]: Processed output result - 16968
-    DataCollector[PID 50274]: Collected result - 8484
-    DataCollector[PID 50274]: Collected result - 16968
+    2025-01-16 11:28:42.765 - Ether:51475 - INFO - Starting Ether session: 52a3af6a-3ca2-4b88-811d-256612abc6c3...
+    2025-01-16 11:28:44.331 - Ether:51475 - INFO - Ether system started successfully
+    DataGenerator[PID 51483]: Generating data - 42
+    DataProcessor[PID 51485]: Processing input data - 42
+    DataProcessor[PID 51484]: Processing input data - 42
+    DataProcessor[PID 51485]: Processed output result - 168
+    DataProcessor[PID 51484]: Processed output result - 84
+    DataCollector[PID 51486]: Collected result - 168
+    DataCollector[PID 51486]: Collected result - 84
+    DataCollector[PID 51486]: Summarizing results - mean: 126.0, max: 168, min: 84
+    DataCollector[PID 51486]: Summarizing results - mean: 126.0, max: 168, min: 84
+    2025-01-16 11:28:45.346 - Ether:51475 - INFO - Shutting down Ether session: 52a3af6a-3ca2-4b88-811d-256612abc6c3...
+    2025-01-16 11:28:45.448 - Ether:51475 - INFO - Ether system shutdown complete
+    DataGenerator[PID 51475]: Generating data - 4242
+    DataProcessor[PID 51475]: Processing input data - 4242
+    DataProcessor[PID 51475]: Processed output result - 8484
+    DataProcessor[PID 51475]: Processing input data - 4242
+    DataProcessor[PID 51475]: Processed output result - 16968
+    DataCollector[PID 51475]: Collected result - 8484
+    DataCollector[PID 51475]: Collected result - 16968
+    DataCollector[PID 51475]: Summarizing results - mean: 12726.0, max: 16968, min: 8484
     """
 
     # init ether
