@@ -28,7 +28,9 @@ Ether dynamically facilitates direct, local, and remote function calling between
 
 ## Quick Start
 
-Here's an example of how to build a data processing pipeline using Ether. This example shows how three independent classes can work together with minimal modification:
+This example shows how you can easily setup your existing code to work with Ether. This particular example is based on a simple data processing pipeline. 
+
+### Decorating your 
 
 ```python
 from ether import ether_pub, ether_sub, ether_start
