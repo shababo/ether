@@ -63,10 +63,9 @@ class DataCollector:
     
     @ether_sub(topic="result")
     @ether_pub(topic="summarize")
-    def collect_result(self, result: int) -> dict:
+    def collect_result(self, result: int) -> None:
         self.results.append(result)
         print(f"DataCollector[PID {os.getpid()}]: Collected result - {result}")
-        return {}
 
     @ether_sub(topic="summarize")
     def summarize(self) -> None:

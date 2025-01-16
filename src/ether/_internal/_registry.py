@@ -278,8 +278,6 @@ def add_ether_functionality(cls):
 
     def receive_single_message(self, timeout=1000):
         if self._sub_socket and self._sub_socket.poll(timeout=timeout):
-            # try:
-                # Receive multipart message
             message = self._sub_socket.recv_multipart()
             topic = message[0].decode()
             data = json.loads(message[1].decode())
@@ -289,20 +287,26 @@ def add_ether_functionality(cls):
             if topic in self._sub_topics:
                 metadata = self._sub_metadata.get(topic)
                 if metadata:
+                    # Get the method's signature parameters
+                    sig = inspect.signature(metadata.func)
+                    valid_params = sig.parameters.keys()
+                    
+                    # Remove 'self' from valid params if present
+                    if 'self' in valid_params:
+                        valid_params = [p for p in valid_params if p != 'self']
+                    
+                    # If using root model, pass the entire data as 'root'
                     if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
                         args = {'root': metadata.args_model(data).root}
                     else:
+                        # Validate data with the model
                         model_instance = metadata.args_model(**data)
-                        args = model_instance.model_dump()
-                    # try:
+                        validated_data = model_instance.model_dump()
+                        
+                        # Only pass the arguments that exist in the method signature
+                        args = {k: v for k, v in validated_data.items() if k in valid_params}
+                    
                     metadata.func(self, **args)
-                    # except ValidationError as e:
-                    #     validation_err_msg = f"Validation error receiving message: {e}"
-                        # self._logger.error(validation_err_msg)
-                        # assert False, validation_err_msg
-                        #     # raise
-            # except Exception as e:
-            #     self._logger.error(f"Error receiving message: {e}")
 
     
     # Add run method
@@ -385,6 +389,10 @@ def _create_model_from_signature(func) -> Type[BaseModel]:
         
         fields[name] = (annotation, default)
     
+    # If no fields (other than self), create a model with a non-underscore field
+    if not fields:
+        fields = {"data": (dict, {})}
+    
     model_name = f"{func.__name__}Args"
     return create_model(model_name, **fields)
 
@@ -406,15 +414,19 @@ class EtherSubMetadata:
 def _ether_pub(topic: Optional[str] = None):
     """Decorator for methods that should publish messages."""
     def decorator(func):
-
         # Get return type hint if it exists
-        return_type = inspect.signature(func).return_annotation
+        sig = inspect.signature(func)
+        return_type = sig.return_annotation
+        
+        # If no return type specified, use dict as default
         if return_type == inspect.Parameter.empty:
-            raise TypeError(f"Function {func.__name__} must have a return type hint")
+            return_type = dict
+        # Handle None return type (specified as None or type(None))
+        elif return_type in (None, type(None)):
+            return_type = dict
         
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-
             # Execute the function and get result
             result = func(self, *args, **kwargs)
             try:
@@ -422,22 +434,20 @@ def _ether_pub(topic: Optional[str] = None):
                 if not hasattr(self, '_pub_socket'):
                     raise RuntimeError("Cannot publish: no publisher socket configured")
                 
+                # Handle None result
+                if result is None:
+                    result = {}
                 
-                
-                # self._logger.debug(f"Publishing result: {result}")
-                # Validate result against return type
-                if not isinstance(result, return_type) and isinstance(return_type, type) and issubclass(return_type, BaseModel):
+                # Validate and serialize result
+                if isinstance(return_type, type) and issubclass(return_type, BaseModel):
                     validated_result = return_type(**result).model_dump_json()
                 else:
                     ResultModel = RootModel[return_type]
                     validated_result = ResultModel(result).model_dump_json()
                 
-                # self._logger.debug(f"Validated result: {validated_result}")
-                # Get topic from metadata
                 actual_topic = topic or f"{func.__qualname__}"
-                # self._logger.debug(f"Publishing to topic: {actual_topic}")
                 self._logger.debug(f"Publishing to topic: {actual_topic}")
-                # Publish the validated result
+                
                 self._pub_socket.send_multipart([
                     actual_topic.encode(),
                     validated_result.encode()
@@ -446,7 +456,6 @@ def _ether_pub(topic: Optional[str] = None):
                 # we never want to crash basic operation of the underlying user code
                 pass
             
-            # self._logger.debug(f"Published result: {result}")
             return result
         
         # Create and attach the metadata
