@@ -18,13 +18,12 @@ Ether dynamically facilitates direct, local, and remote function calling between
 
 ## Features
 
-- Transform existing classes into distributed system components via decorators or yaml configuration
-- Automatic process lifecycle management and monitoring
-- Configuration-based instance launching
-- Built-in initialization and cleanup
-- Type validation for messages using Pydantic
+- Transform existing classes into distributed system components via decorators and/or yaml configuration
+- Automatic lifecycle management and monitoring of components
+- Configuration-based integration and launching
 - System-wide logging of events and execution
-- Automatic guarantees on data saving and annotation/metadata
+- Type validation for messages using Pydantic
+- Guarantees on data saving and annotation/metadata
 
 ## Quick Start
 
@@ -209,41 +208,6 @@ instances:
     class_path: third_party_module.DataCollector
 ```
 
-### How It Works
-
-1. The registry configuration specifies:
-   - Which classes to modify via the keys in `registry`
-   - Which methods to decorate via the keys in `methods`
-   - What decorators to apply (e.g. `ether_pub`, `ether_sub`. etc.)
-   - The `kwargs` to pass to each decorator
-
-2. When Ether initializes:
-   ```python
-   from ether import ether
-   
-   # Load config from file
-   ether.init(config="path/to/config.yaml")
-   
-   # Or use dict configuration
-   config = {
-       "registry": {
-           "my.module.MyClass": {
-               "methods": {
-                   "my_method": {
-                       "ether_pub": {"topic": "my_topic"}
-                   }
-               }
-           }
-       }
-   }
-   ether.init(config=config)
-   ```
-
-3. The specified decorators are applied to the classes, and Ether functionality is added
-4. The classes can then be used normally, either:
-   - Created manually: `instance = MyClass()`
-   - Launched automatically via the `instances` configuration
-
 ### Benefits
 
 - No modification of source code required
@@ -276,16 +240,4 @@ class ExperimentController:
             self._safety_shutdown()
 ```
 
-## How It Works
-
-#### **Decorators**: 
-- Ether provides decorators that make it easy to publish or subsribe to messaging topics.
-- `@ether_pub` and `@ether_sub` provide general decorators that define message types automatically from method inputs and return types.
-- Ether also provides shortcut subscribe decorators for common steps in data acqusition and analysis systems (e.g. @save, @cleanup, @startup, @log)
-#### **Automatic Process Management**: 
-- Ether handles process creation and monitoring
-#### **Message Flow**: 
-- Messages automatically flow between components based on topics
-#### **Type Safety**: 
-- Messages are validated using Pydantic models
 
