@@ -532,7 +532,7 @@ class _Ether:
 
     def request(self, service_class: str, method_name: str, params=None, request_type="get", timeout=2500):
         """Make a request to a service"""
-        self._logger.debug(f"Request received - Service: {service_class}.{method_name}")
+        self._logger.debug(f"Request received - Service: {service_class}.{method_name}.{request_type}")
         
         if not self._started:
             self._logger.debug("Cannot make request: Ether system not started")
@@ -567,6 +567,7 @@ class _Ether:
             while retries > 0:
                 try:
                     msg = self._request_socket.recv_multipart()
+                    self._logger.debug(f"Reply received: {msg}")
                     break
                 except Exception as e:
                     self._logger.error(f"Error receiving reply: {e}, retries remaining: {retries}")

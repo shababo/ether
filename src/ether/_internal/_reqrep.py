@@ -30,7 +30,7 @@ class Service:
     """Represents a service and its associated workers"""
     def __init__(self, name: str):
         self.name = name
-        self.waiting = []  # Available workers for this service
+        self.workers = []  # Available workers for this service (renamed from waiting)
         self.requests = [] # Pending requests for this service
 
 class Worker:
@@ -62,36 +62,42 @@ class EtherReqRepBroker:
         self._setup_sockets()
 
     def _setup_sockets(self):
-        """Setup ROUTER sockets for both frontend and backend"""
+        """Setup REP/ROUTER sockets with proper options"""
         self._logger.debug("Setting up sockets")
         self.context = zmq.Context()
         
-        # Socket for clients
-        self.frontend = self.context.socket(zmq.ROUTER)
+        # Socket for clients - now using REP/REQ pattern
+        self.frontend = self.context.socket(zmq.REP)
+        self.frontend.setsockopt(zmq.LINGER, 0)
         self.frontend.bind(f"tcp://*:{self.frontend_port}")
         
         # Socket for workers
         self.backend = self.context.socket(zmq.ROUTER)
+        self.backend.setsockopt(zmq.LINGER, 0)
         self.backend.bind(f"tcp://*:{self.backend_port}")
         
         self.poller = zmq.Poller()
         self.poller.register(self.frontend, zmq.POLLIN)
         self.poller.register(self.backend, zmq.POLLIN)
 
-    def _process_client(self, sender: bytes, empty: bytes, msg: list):
-        """Process a client request using MDP"""
-        assert empty == b''
-        assert msg.pop(0) == MDPC_CLIENT  # Protocol header
-        service_name = msg.pop(0).decode()
-        request = msg  # Remaining frames are request
+    def _process_client(self, msg: list):
+        """Process a client request using REP socket"""
+        assert msg[0] == MDPC_CLIENT  # Verify client protocol
+        service_name = msg[1].decode()  # Service name comes after protocol
+        request = msg[2]  # Request data is third frame
         
         service = self.services.get(service_name)
         if not service:
-            self._logger.warning(f"Service {service_name} not found")
-            return
+            service = Service(service_name)
+            self.services[service_name] = service
             
-        # Queue the request
-        service.requests.append((sender, request))
+        # Queue the request with proper MDP framing for worker
+        service.requests.append((self.frontend, [
+            MDPW_WORKER,
+            W_REQUEST,
+            service_name.encode(),
+            request
+        ]))
         self._logger.debug(f"Client request queued for service: {service_name}")
         self._dispatch_requests(service)
 
@@ -102,46 +108,41 @@ class EtherReqRepBroker:
         
         command = msg.pop(0)
         worker_id = sender.hex()
-        service_name = msg.pop(0).decode()
+        full_service_name = msg.pop(0).decode()
         
-        # Get or create the service
-        service = self.services.get(service_name)
+        service = self.services.get(full_service_name)
         if service is None and command == W_READY:
-            # Only create service on worker registration
-            service = Service(service_name)
-            self.services[service_name] = service
-            self._logger.debug(f"Created new service: {service_name}")
+            service = Service(full_service_name)
+            self.services[full_service_name] = service
+            self._logger.debug(f"Created new service: {full_service_name}")
 
         if not service:
-            self._logger.warning(f"Service {service_name} not found")
+            self._logger.warning(f"Service {full_service_name} not found")
             return
 
         if command == W_READY:
-            # Worker registering for first time
-            worker = Worker(worker_id, service_name, sender)
+            worker = Worker(worker_id, full_service_name, sender)
             self.workers[worker_id] = worker
-            service.waiting.append(worker)
-            self._logger.debug(f"Worker registered for service: {service_name}")
+            service.workers.append(worker)
+            self._logger.debug(f"Worker registered for service: {full_service_name}")
 
         elif command == W_REPLY:
             if worker_id in self.workers:
                 worker = self.workers[worker_id]
-                client = msg.pop(0)  # Original client address
-                reply = msg  # Remaining frames are reply
+                client = msg.pop(0)
+                reply = msg
                 
-                # Send reply to client with MDP envelope
+                # Send reply to client with proper MDP framing
                 self.frontend.send_multipart([
-                    client, 
-                    b'', 
-                    MDPC_CLIENT,
-                    service_name.encode(),
-                    *reply
+                    MDPC_CLIENT,           # Protocol
+                    service.name.encode(), # Service name
+                    reply[0]               # Reply data
                 ])
                 
                 # Worker is now available again
                 if worker.use_expiry:
                     worker.expiry = time.time() + 10
-                service.waiting.append(worker)
+                service.workers.append(worker)
                 self._dispatch_requests(service)
 
         elif command == W_HEARTBEAT:
@@ -159,8 +160,8 @@ class EtherReqRepBroker:
             worker = self.workers[worker_id]
             service = self.services.get(worker.service)
             if service:
-                if worker in service.waiting:
-                    service.waiting.remove(worker)
+                if worker in service.workers:  # Changed from waiting to workers
+                    service.workers.remove(worker)
             del self.workers[worker_id]
 
     def _purge_workers(self):
@@ -184,22 +185,29 @@ class EtherReqRepBroker:
             self.heartbeat_at = time.time() + 0.001 * self.HEARTBEAT_INTERVAL
 
     def _dispatch_requests(self, service: Service):
-        """Attempt to dispatch pending requests to available workers"""
-        while service.requests and service.waiting:
-            client, request = service.requests.pop(0)
-            worker = service.waiting.pop(0)
+        """Dispatch requests with improved error handling"""
+        while service.requests and service.workers:
+            client_socket, request = service.requests.pop(0)
+            worker = service.workers.pop(0)
             
-            # Forward request to worker with MDP envelope
-            self.backend.send_multipart([
-                worker.address,
-                b'',
-                MDPW_WORKER,
-                W_REQUEST,
-                client,
-                service.name.encode(),
-                *request
-            ])
-            self._logger.debug(f"Request dispatched to worker for service: {service.name}")
+            try:
+                # Forward request to worker with proper MDP framing
+                self.backend.send_multipart([
+                    worker.address,
+                    b'',
+                    MDPW_WORKER,
+                    W_REQUEST,
+                    client_socket.getsockopt(zmq.IDENTITY),
+                    service.name.encode(),
+                    request[-1]  # The actual request data
+                ])
+                self._logger.debug(f"Request dispatched to worker for service: {service.name}")
+                
+            except zmq.error.Again:
+                # Put request and worker back if send fails
+                service.requests.insert(0, (client_socket, request))
+                service.workers.append(worker)
+                self._logger.warning("Failed to dispatch request, will retry")
 
     def run(self):
         """Run the broker loop"""
@@ -213,7 +221,7 @@ class EtherReqRepBroker:
                 
                 if self.frontend in events:
                     msg = self.frontend.recv_multipart()
-                    self._process_client(msg[0], msg[1], msg[2:])
+                    self._process_client(msg)
                     
                 if self.backend in events:
                     msg = self.backend.recv_multipart()

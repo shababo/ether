@@ -185,6 +185,7 @@ def add_ether_functionality(cls):
         
         # Add reqrep worker socket
         self._worker_socket = None
+        self._request_socket = None
         self._worker_metadata = {}
         
         # Register get methods
@@ -194,9 +195,9 @@ def add_ether_functionality(cls):
                 self._worker_metadata[metadata.service_name] = metadata
     
     def setup_sockets(self):
+        """Set up all required sockets"""
         self._logger.debug(f"Setting up sockets for {self.name}")
-
-
+        
         has_sub_method = False
         has_pub_method = False
         for method in self._ether_methods_info.values():
@@ -267,6 +268,20 @@ def add_ether_functionality(cls):
                     service_name
                 ])
                 self._logger.debug(f"Service registered: {service_name}")
+    
+        # Setup request socket with better connection management
+        if self._request_socket:
+            self._zmq_context.destroy()
+            self._zmq_context = zmq.Context()
+        
+        self._request_socket = self._zmq_context.socket(zmq.REQ)
+        self._request_socket.linger = 0  # Don't wait for unsent messages on close
+        self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)  # 2.5 sec timeout
+        self._request_socket.connect("tcp://localhost:5559")
+        
+        # Add poller for request socket
+        self._request_poller = zmq.Poller()
+        self._request_poller.register(self._request_socket, zmq.POLLIN)
     
     def _handle_subscriber_message(self, timeout=1000):
         """Handle a message from the subscriber socket"""
@@ -586,6 +601,67 @@ def add_ether_functionality(cls):
                 metadata.heartbeat_liveness = 3
                 metadata.last_heartbeat = time.time()
     
+    def _reconnect_request_socket(self):
+        """Reconnect the request socket to the broker"""
+        self._logger.debug("Reconnecting request socket")
+        if self._request_socket:
+            self._request_poller.unregister(self._request_socket)
+            self._request_socket.close()
+        
+        self._request_socket = self._zmq_context.socket(zmq.REQ)
+        self._request_socket.linger = 0
+        self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
+        self._request_socket.connect("tcp://localhost:5559")
+        self._request_poller.register(self._request_socket, zmq.POLLIN)
+
+    def request(self, service_name: str, method: str, params=None, request_type="get", timeout=2500):
+        """Make a request to a service with improved error handling"""
+        if not self._request_socket:
+            self.setup_sockets()
+        
+        # Build full service name: ServiceName.method.get/save
+        service = f"{service_name}.{method}.{request_type}".encode()
+        
+        request_data = {
+            "timestamp": time.time(),
+            "type": request_type,
+            "params": params or {}
+        }
+        
+        retries = 3
+        while retries > 0:
+            try:
+                # Send request with MDP client protocol
+                self._request_socket.send_multipart([
+                    MDPC_CLIENT,  # Protocol identifier
+                    service,      # Service name
+                    json.dumps(request_data).encode()  # Request data
+                ])
+                
+                # Wait for reply with timeout
+                if self._request_poller.poll(timeout):
+                    msg = self._request_socket.recv_multipart()
+                    # Verify protocol and service
+                    assert msg[0] == MDPC_CLIENT
+                    assert msg[1] == service
+                    reply = json.loads(msg[2].decode())
+                    return reply
+                else:
+                    self._logger.warning("No reply, reconnecting...")
+                    self._reconnect_request_socket()
+                    retries -= 1
+                    
+            except zmq.error.Again:
+                self._logger.warning(f"Request timed out, retries left: {retries}")
+                self._reconnect_request_socket()
+                retries -= 1
+            except Exception as e:
+                self._logger.error(f"Request error: {e}")
+                self._reconnect_request_socket()
+                retries -= 1
+                
+        raise TimeoutError("Request failed after all retries")
+    
     return cls
 
 
@@ -747,9 +823,14 @@ def _ether_get(func=None, *, heartbeat: bool = False):
     
     args_model = _create_model_from_signature(func)
     
+    # Build full service name: ClassName.method_name.get
+    class_name = func.__qualname__.split('.')[0]
+    method_name = func.__name__
+    service_name = f"{class_name}.{method_name}.get"
+    
     wrapper._reqrep_metadata = EtherReqRepMetadata(
         func=func,
-        service_name=f"{func.__qualname__}.get",
+        service_name=service_name,
         args_model=args_model,
         heartbeat=heartbeat
     )
@@ -790,9 +871,14 @@ def _ether_save(func=None, *, heartbeat: bool = False):
     
     args_model = _create_model_from_signature(func)
     
+    # Build full service name: ClassName.method_name.save
+    class_name = func.__qualname__.split('.')[0]
+    method_name = func.__name__
+    service_name = f"{class_name}.{method_name}.save"
+    
     wrapper._reqrep_metadata = EtherReqRepMetadata(
         func=wrapper,
-        service_name=f"{func.__qualname__}.save",
+        service_name=service_name,
         args_model=args_model,
         heartbeat=heartbeat
     )
