@@ -17,7 +17,7 @@ from ._reqrep import (
     W_READY, W_REQUEST, W_REPLY, MDPW_WORKER, MDPC_CLIENT,
     REQUEST_WORKER_INDEX, REQUEST_COMMAND_INDEX, REQUEST_CLIENT_ID_INDEX, REQUEST_DATA_INDEX,
     REPLY_CLIENT_INDEX, REPLY_SERVICE_INDEX, REPLY_DATA_INDEX,
-    W_HEARTBEAT
+    W_HEARTBEAT, W_DISCONNECT
 )
 
 class EtherRegistry:
@@ -249,9 +249,12 @@ def add_ether_functionality(cls):
         
         if has_reqrep_method:
             self._logger.debug("Setting up worker socket")
+            self._poller = zmq.Poller()  # Create poller as instance variable
             self._worker_socket = self._zmq_context.socket(zmq.DEALER)
-            self._worker_socket.connect("tcp://localhost:5560")
+            self._worker_socket.linger = 0
             self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
+            self._worker_socket.connect("tcp://localhost:5560")
+            self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
             
             # Register all services
             for metadata in self._worker_metadata.values():
@@ -330,15 +333,19 @@ def add_ether_functionality(cls):
                 self._logger.debug(f"Received worker message: {msg}")
                 
                 if msg[REQUEST_WORKER_INDEX] == MDPW_WORKER:
-                    if msg[REQUEST_COMMAND_INDEX] == W_REQUEST:
-                        # Handle normal request
+                    command = msg[REQUEST_COMMAND_INDEX]
+                    
+                    if command == W_REQUEST:
+                        # Store client address
                         client_id = msg[REQUEST_CLIENT_ID_INDEX]
                         service_name = msg[4].decode()
                         request = json.loads(msg[5].decode())
                         
                         metadata = self._worker_metadata.get(service_name)
                         if metadata:
-                            # Reset liveness on any message
+                            metadata.expect_reply = True
+                            metadata.reply_to = client_id
+                            
                             if metadata.heartbeat:
                                 metadata.heartbeat_liveness = 3
                                 metadata.last_heartbeat = time.time()
@@ -396,26 +403,33 @@ def add_ether_functionality(cls):
                                 json.dumps(reply_data).encode()
                             ])
 
-                elif msg[REQUEST_COMMAND_INDEX] == W_HEARTBEAT:
-                    # Handle heartbeat response
-                    service_name = msg[3].decode()
-                    metadata = self._worker_metadata.get(service_name)
-                    if metadata and metadata.heartbeat:
-                        metadata.heartbeat_liveness = 3
-                        metadata.last_heartbeat = time.time()
+                    elif command == W_HEARTBEAT:
+                        self._logger.debug(f"Received heartbeat msg: {msg}")
+                        # Heartbeat is for all services from this worker
+                        for metadata in self._worker_metadata.values():
+                            if metadata.heartbeat:
+                                metadata.heartbeat_liveness = 3
+                                metadata.last_heartbeat = time.time()
+                    
+                    elif command == W_DISCONNECT:
+                        self._logger.warning("Received disconnect from broker")
+                        self._reconnect_worker_socket()
                         
-            elif needs_heartbeat:
-                # Decrease liveness for methods with heartbeat enabled
-                for method in self._ether_methods_info.values():
-                    if (hasattr(method, '_reqrep_metadata') and 
-                        method._reqrep_metadata.heartbeat):
-                        method._reqrep_metadata.heartbeat_liveness -= 1
-                        
-                        # Reconnect if liveness hits zero
-                        if method._reqrep_metadata.heartbeat_liveness <= 0:
-                            self._logger.warning(f"Lost connection for {method._reqrep_metadata.service_name}, reconnecting...")
-                            self._reconnect_worker_socket()
-                            break
+                    else:
+                        self._logger.error(f"Invalid command received: {command}")
+                    
+                elif needs_heartbeat:
+                    # Decrease liveness for methods with heartbeat enabled
+                    for method in self._ether_methods_info.values():
+                        if (hasattr(method, '_reqrep_metadata') and 
+                            method._reqrep_metadata.heartbeat):
+                            method._reqrep_metadata.heartbeat_liveness -= 1
+                            
+                            # Reconnect if liveness hits zero
+                            if method._reqrep_metadata.heartbeat_liveness <= 0:
+                                self._logger.warning(f"Lost connection for {method._reqrep_metadata.service_name}, reconnecting...")
+                                self._reconnect_worker_socket()
+                                break
 
     # Add message tracking
     def track_message(self, publisher_id: str, sequence: int, timestamp: float):
@@ -544,6 +558,34 @@ def add_ether_functionality(cls):
         self.cleanup()
     cls.__del__ = new_del
     
+    def _reconnect_worker_socket(self):
+        """Reconnect the worker socket to broker"""
+        self._logger.debug("Reconnecting worker socket")
+        
+        if self._worker_socket:
+            self._poller.unregister(self._worker_socket)  # Use instance poller
+            self._worker_socket.close()
+        
+        self._worker_socket = self._zmq_context.socket(zmq.DEALER)
+        self._worker_socket.linger = 0  # Don't wait on close
+        self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
+        self._worker_socket.connect("tcp://localhost:5560")
+        self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
+        
+        # Re-register all services
+        for metadata in self._worker_metadata.values():
+            service_name = metadata.service_name.encode()
+            self._logger.debug(f"Re-registering service: {service_name}")
+            self._worker_socket.send_multipart([
+                b'',
+                MDPW_WORKER,
+                W_READY,
+                service_name
+            ])
+            if metadata.heartbeat:
+                metadata.heartbeat_liveness = 3
+                metadata.last_heartbeat = time.time()
+    
     return cls
 
 
@@ -595,6 +637,8 @@ class EtherReqRepMetadata:
         self.heartbeat_interval = 2500  # ms
         self.heartbeat_liveness = 3
         self.last_heartbeat = 0
+        self.expect_reply = False
+        self.reply_to = None  # Store client address for replies
 
 def _ether_pub(func=None, *, topic: Optional[str] = None):
     """Decorator for methods that should publish messages."""
