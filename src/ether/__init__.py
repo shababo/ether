@@ -40,7 +40,9 @@ def _request(service_class: str, method_name: str, params=None, request_type="ge
 class Ether:
     pub = staticmethod(_pub)
     request = staticmethod(_request)
-    save = staticmethod(functools.partial(_pub, {}, topic="Ether.save"))
+    get = staticmethod(functools.partial(_request, request_type="get"))
+    save = staticmethod(functools.partial(_request, request_type="save"))
+    save_all = staticmethod(functools.partial(_pub, {}, topic="Ether.save_all"))
     start = staticmethod(functools.partial(_pub, {}, topic="Ether.start"))
     cleanup = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
     shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
@@ -77,7 +79,7 @@ class Ether:
 
     def shutdown(self):
         self.cleanup()
-        self.save()
+        self.save_all()
         _ether.shutdown()
  
 
