@@ -58,7 +58,7 @@ def main(config_name):
     ether.start()
     time.sleep(1.002)
 
-    ether.shutdown()
+    # ether.shutdown()
 
     # you can still use your code normally when ether is not running
     # in other words, if your code is still used other places, it will still work
