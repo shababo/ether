@@ -3,7 +3,7 @@ import time
 from typing import List
 from ether import ether
 from ether._internal._config import EtherConfig, EtherInstanceConfig
-from ether._internal._registry import _ether_request, _ether_save, _ether_get
+from ether._internal._registry import _ether_save, _ether_get
 from ether.utils import _get_logger
 
 @pytest.mark.skip(reason="Not a test class")
@@ -48,7 +48,7 @@ def test_ether_save():
         time.sleep(5.0)
         
         # Test saving new item
-        reply = _ether_request(
+        reply = ether.request(
             "DataService", 
             "save_item", 
             params={
@@ -64,14 +64,14 @@ def test_ether_save():
         assert result["name"] == "Test Item"
         
         # Verify item was saved
-        item = _ether_request("DataService", "get_item", params={"id": 1})
+        item = ether.request("DataService", "get_item", params={"id": 1})
         logger.info(f"Get item: {item}")
         assert item["name"] == "Test Item"
         assert item["tags"] == ["test", "new"]
         
         # Test saving duplicate item
 
-        reply =_ether_request(
+        reply = ether.request(
             "DataService", 
             "save_item", 
             params={

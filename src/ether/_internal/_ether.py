@@ -20,7 +20,13 @@ from ..liaison import EtherInstanceLiaison
 from ._manager import _EtherInstanceManager
 from ._config import EtherConfig
 from ._registry import EtherRegistry
-from ._reqrep import EtherReqRepBroker
+from ._reqrep import (
+    EtherReqRepBroker,
+    MDPC_CLIENT,
+    REPLY_CLIENT_INDEX,
+    REPLY_SERVICE_INDEX,
+    REPLY_DATA_INDEX,
+)
 
 
 # Constants
@@ -500,6 +506,56 @@ class _Ether:
                 self._logger.warning("ReqRep broker didn't terminate, killing")
                 self._reqrep_broker_process.kill()
                 self._reqrep_broker_process.join(timeout=1)
+
+    def request(self, service_class: str, method_name: str, params=None, request_type="get", timeout=2500):
+        """Make a request to a service"""
+        service_name = f"{service_class}.{method_name}.{request_type}".encode()
+        self._logger.debug(f"Requesting from service: {service_name}")
+        
+        context = zmq.Context()
+        socket = context.socket(zmq.DEALER)
+        socket.setsockopt(zmq.RCVTIMEO, timeout)
+        socket.connect("tcp://localhost:5559")
+        
+        try:
+            # Send request
+            request_data = {
+                "timestamp": time.time(),
+                "type": request_type,
+                "params": params or {}
+            }
+            socket.send_multipart([
+                b'',
+                MDPC_CLIENT,
+                service_name,
+                json.dumps(request_data).encode()
+            ])
+            
+            # Get reply with retries
+            retries = 5
+            while retries > 0:
+                try:
+                    msg = socket.recv_multipart()
+                    break
+                except Exception as e:
+                    self._logger.error(f"Error receiving reply: {e}, retries remaining: {retries}")
+                    retries -= 1
+                    if retries == 0:
+                        raise
+                    self._logger.debug(f"Request timed out, retrying ({retries} attempts left)")
+            
+            assert msg[REPLY_CLIENT_INDEX] == MDPC_CLIENT
+            assert msg[REPLY_SERVICE_INDEX] == service_name
+            reply = json.loads(msg[REPLY_DATA_INDEX].decode())
+            
+            if reply.get("status") == "success":
+                return reply["result"]
+            else:
+                raise Exception(f"Request failed: {reply.get('error', 'Unknown error')}")
+            
+        finally:
+            socket.close()
+            context.term()
 
 # Create singleton instance but don't start it
 _ether = _Ether()

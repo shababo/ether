@@ -1,7 +1,7 @@
 import pytest
 import time
 from ether import ether
-from ether._internal._registry import _ether_get, _ether_request
+from ether._internal._registry import _ether_get
 from ether.utils import _get_logger
 from typing import Optional, List
 from ether._internal._config import EtherConfig, EtherInstanceConfig
@@ -69,34 +69,34 @@ def test_ether_get_with_params():
         
         # Test get_item with valid ID
         logger.debug("Testing get_item with valid ID")
-        result = _ether_request("DataService", "get_item", params={"id": 1})
+        result = ether.request("DataService", "get_item", params={"id": 1})
         logger.debug(f"get_item result: {result}")
         assert result == {"name": "Item 1", "tags": ["a", "b"]}
         
         # Test get_item with invalid ID
         logger.debug("Testing get_item with invalid ID")
         with pytest.raises(Exception) as exc:
-            _ether_request("DataService", "get_item", params={"id": 999})
+            ether.request("DataService", "get_item", params={"id": 999})
         logger.debug(f"get_item error: {str(exc.value)}")
         assert "Item 999 not found" in str(exc.value)
         
         # Test get_item with invalid parameter type
         logger.debug("Testing get_item with invalid parameter type")
         with pytest.raises(Exception) as exc:
-            _ether_request("DataService", "get_item", params={"id": "not an int"})
+            ether.request("DataService", "get_item", params={"id": "not an int"})
         logger.debug(f"get_item validation error: {str(exc.value)}")
         assert "Invalid parameters" in str(exc.value)
         
         # Test get_items_by_tag with required parameter
         logger.debug("Testing get_items_by_tag with required parameter")
-        result = _ether_request("DataService", "get_items_by_tag", params={"tag": "b"})
+        result = ether.request("DataService", "get_items_by_tag", params={"tag": "b"})
         logger.debug(f"get_items_by_tag result: {result}")
         assert len(result) == 2
         assert all("b" in item["tags"] for item in result)
         
         # Test get_items_by_tag with optional parameter
         logger.debug("Testing get_items_by_tag with optional parameter")
-        result = _ether_request("DataService", "get_items_by_tag", 
+        result = ether.request("DataService", "get_items_by_tag", 
                               params={"tag": "b", "limit": 1})
         logger.debug(f"get_items_by_tag with limit result: {result}")
         assert len(result) == 1
@@ -104,13 +104,13 @@ def test_ether_get_with_params():
         
         # Test get_stats with no parameters
         logger.debug("Testing get_stats with no parameters")
-        result = _ether_request("DataService", "get_stats")
+        result = ether.request("DataService", "get_stats")
         logger.debug(f"get_stats result: {result}")
         assert result == {"total_items": 3, "total_tags": 3}
         
         # Test get_stats with unexpected parameter (should be ignored)
         logger.debug("Testing get_stats with unexpected parameter")
-        result = _ether_request("DataService", "get_stats", params={"unexpected": "param"})
+        result = ether.request("DataService", "get_stats", params={"unexpected": "param"})
         logger.debug(f"get_stats with unexpected param result: {result}")
         assert result == {"total_items": 3, "total_tags": 3}
         

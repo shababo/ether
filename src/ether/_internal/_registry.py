@@ -664,56 +664,6 @@ def _ether_get(func):
     
     return wrapper
 
-def _ether_request(service_class, method_name, params=None, request_type="get", timeout=2500):
-    """Make a request to a service"""
-    service_name = f"{service_class}.{method_name}.{request_type}".encode()
-    logger = _get_logger("EtherRequest")
-    logger.debug(f"Requesting from service: {service_name}")
-    
-    context = zmq.Context()
-    socket = context.socket(zmq.DEALER)
-    socket.setsockopt(zmq.RCVTIMEO, timeout)
-    socket.connect("tcp://localhost:5559")
-    
-    try:
-        # Send request
-        request_data = {
-            "timestamp": time.time(),
-            "type": request_type,
-            "params": params or {}
-        }
-        socket.send_multipart([
-            b'',
-            MDPC_CLIENT,
-            service_name,
-            json.dumps(request_data).encode()
-        ])
-        
-        # Get reply with retries
-        retries = 5
-        while retries > 0:
-            try:
-                msg = socket.recv_multipart()
-                break
-            except Exception as e:
-                logger.error(f"Error receiving reply: {e}, retries remaining: {retries}")
-                retries -= 1
-                if retries == 0:
-                    raise
-                logger.debug(f"Request timed out, retrying ({retries} attempts left)")
-        assert msg[REPLY_CLIENT_INDEX] == MDPC_CLIENT
-        assert msg[REPLY_SERVICE_INDEX] == service_name
-        reply = json.loads(msg[REPLY_DATA_INDEX].decode())
-        
-        if reply.get("status") == "success":
-            return reply["result"]
-        else:
-            raise Exception(f"Request failed: {reply.get('error', 'Unknown error')}")
-            
-    finally:
-        socket.close()
-        context.term()
-
 def _ether_save(func):
     """Decorator for methods that handle save requests"""
     @wraps(func)

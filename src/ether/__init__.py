@@ -4,11 +4,7 @@ from typing import Optional, Union, Dict
 from pydantic import BaseModel
 import atexit
 import time
-import multiprocessing
-import os
 import uuid
-# first thing we do is figure out if we are the first ether process,
-# and if so, we start the discovery service and later will init pubsub/redis/etc
 
 from .decorators import ether_pub, ether_sub, ether_init, ether_save, ether_cleanup, ether_start
 from .utils import _get_logger
@@ -27,9 +23,23 @@ def _pub(data: Union[Dict, BaseModel] = None, topic: str = None):
     topic = topic or "general"
     _ether.publish(data, topic)
 
+def _request(service_class: str, method_name: str, params=None, request_type="get", timeout=2500):
+    """Make a request to a service
+    
+    Args:
+        service_class: Name of the service class
+        method_name: Name of the method to call
+        params: Parameters to pass to the method
+        request_type: Type of request ("get" or "save")
+        timeout: Request timeout in milliseconds
+    """
+    params = params or {}
+    return _ether.request(service_class, method_name, params, request_type, timeout)
+
 # Public singleton instance of Ether API
 class Ether:
     pub = staticmethod(_pub)
+    request = staticmethod(_request)
     save = staticmethod(functools.partial(_pub, {}, topic="Ether.save"))
     start = staticmethod(functools.partial(_pub, {}, topic="Ether.start"))
     cleanup = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
