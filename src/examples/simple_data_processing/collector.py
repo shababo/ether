@@ -7,7 +7,7 @@ class DataCollector:
     max = None
     min = None
 
-    @ether_sub(topic="result")
+    @ether_sub
     @ether_pub(topic="summarize")
     def collect_result(self, result: int) -> None:
         self.results.append(result)

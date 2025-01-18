@@ -75,7 +75,7 @@ class Ether:
             # Register single cleanup handler
             atexit.register(self.shutdown)
 
-        time.sleep(0.002)
+        time.sleep(1.1)
 
     def shutdown(self):
         self.cleanup()

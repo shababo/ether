@@ -11,7 +11,7 @@ class DataService:
     def __init__(self):
         self.data = {}
     
-    @_ether_save
+    @_ether_save(heartbeat=True)
     def save_item(self, id: int, name: str, tags: List[str]) -> dict:
         """Save an item to the data store"""
         if id in self.data:
@@ -45,7 +45,6 @@ def test_ether_save():
     ether.tap(config=config)
     
     try:
-        time.sleep(5.0)
         
         # Test saving new item
         reply = ether.request(

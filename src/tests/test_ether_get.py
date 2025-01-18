@@ -64,8 +64,6 @@ def test_ether_get_with_params():
     ether.tap(config=config)
     
     try:
-        # Allow service to start
-        time.sleep(5.0)
         
         # Test get_item with valid ID
         logger.debug("Testing get_item with valid ID")

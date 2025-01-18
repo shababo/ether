@@ -16,7 +16,8 @@ from ._config import EtherClassConfig
 from ._reqrep import (
     W_READY, W_REQUEST, W_REPLY, MDPW_WORKER, MDPC_CLIENT,
     REQUEST_WORKER_INDEX, REQUEST_COMMAND_INDEX, REQUEST_CLIENT_ID_INDEX, REQUEST_DATA_INDEX,
-    REPLY_CLIENT_INDEX, REPLY_SERVICE_INDEX, REPLY_DATA_INDEX
+    REPLY_CLIENT_INDEX, REPLY_SERVICE_INDEX, REPLY_DATA_INDEX,
+    W_HEARTBEAT
 )
 
 class EtherRegistry:
@@ -297,71 +298,125 @@ def add_ether_functionality(cls):
 
     def _handle_worker_message(self, timeout=1000):
         """Handle a message from the worker socket"""
-        if self._worker_socket and self._worker_socket.poll(timeout=timeout):
-            msg = self._worker_socket.recv_multipart()
-            self._logger.debug(f"Received worker message: {msg}")
-            if msg[REQUEST_WORKER_INDEX] == MDPW_WORKER and msg[REQUEST_COMMAND_INDEX] == W_REQUEST:
-                client_id = msg[REQUEST_CLIENT_ID_INDEX]
-                service_name = msg[4].decode()  # Get service name from message
-                request = json.loads(msg[5].decode())  # Request data now at index 5
+        if self._worker_socket:
+            # Check if any method needs heartbeats
+            needs_heartbeat = any(
+                getattr(m, '_reqrep_metadata', None) and m._reqrep_metadata.heartbeat 
+                for m in self._ether_methods_info.values()
+            )
+            
+            if needs_heartbeat:
+                # Send heartbeat if needed
+                now = time.time()
+                for method in self._ether_methods_info.values():
+                    if (hasattr(method, '_reqrep_metadata') and 
+                        method._reqrep_metadata.heartbeat and
+                        now - method._reqrep_metadata.last_heartbeat > method._reqrep_metadata.heartbeat_interval * 1e-3):
+                        
+                        self._worker_socket.send_multipart([
+                            b'',
+                            MDPW_WORKER,
+                            W_HEARTBEAT,
+                            method._reqrep_metadata.service_name.encode()
+                        ])
+                        method._reqrep_metadata.last_heartbeat = now
+                        
+                        # Reset liveness on successful heartbeat
+                        method._reqrep_metadata.heartbeat_liveness = 3
+            
+            # Handle incoming messages
+            if self._worker_socket.poll(timeout=timeout):
+                msg = self._worker_socket.recv_multipart()
+                self._logger.debug(f"Received worker message: {msg}")
                 
-                self._logger.debug(f"Handling request for service: {service_name}")
-                
-                metadata = self._worker_metadata.get(service_name)
-                if metadata:
-                    try:
-                        # Get the method's signature parameters
-                        sig = inspect.signature(metadata.func)
-                        valid_params = sig.parameters.keys()
+                if msg[REQUEST_WORKER_INDEX] == MDPW_WORKER:
+                    if msg[REQUEST_COMMAND_INDEX] == W_REQUEST:
+                        # Handle normal request
+                        client_id = msg[REQUEST_CLIENT_ID_INDEX]
+                        service_name = msg[4].decode()
+                        request = json.loads(msg[5].decode())
                         
-                        # Remove 'self' from valid params if present
-                        if 'self' in valid_params:
-                            valid_params = [p for p in valid_params if p != 'self']
-                        
-                        self._logger.debug(f"Validating request parameters for {service_name}")
-                        
-                        # Validate request parameters using the model
-                        if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
-                            args = {'root': metadata.args_model(request["params"]).root}
-                        else:
-                            model_instance = metadata.args_model(**request.get("params", {}))
-                            validated_data = model_instance.model_dump()
-                            args = {k: v for k, v in validated_data.items() if k in valid_params}
-                        
-                        self._logger.debug(f"Executing {service_name} with args: {args}")
-                        
-                        # Call function with validated parameters
-                        result = metadata.func(self, **args)
-                        reply_data = {
-                            "result": result,
-                            "status": "success"
-                        }
-                        self._logger.debug(f"Successfully executed {service_name}")
-                        
-                    except ValidationError as e:
-                        self._logger.error(f"Validation error in {service_name}: {str(e)}")
-                        reply_data = {
-                            "error": f"Invalid parameters: {str(e)}",
-                            "status": "error"
-                        }
-                    except Exception as e:
-                        self._logger.error(f"Error executing {service_name}: {str(e)}")
-                        reply_data = {
-                            "error": str(e),
-                            "status": "error"
-                        }
-                        
-                    self._logger.debug(f"Sending reply for {service_name}")
-                    self._worker_socket.send_multipart([
-                        b'',
-                        MDPW_WORKER,
-                        W_REPLY,
-                        service_name.encode(),
-                        client_id,
-                        json.dumps(reply_data).encode()
-                    ])
+                        metadata = self._worker_metadata.get(service_name)
+                        if metadata:
+                            # Reset liveness on any message
+                            if metadata.heartbeat:
+                                metadata.heartbeat_liveness = 3
+                                metadata.last_heartbeat = time.time()
+                                
+                            # Process request
+                            try:
+                                # Get the method's signature parameters
+                                sig = inspect.signature(metadata.func)
+                                valid_params = sig.parameters.keys()
+                                
+                                # Remove 'self' from valid params if present
+                                if 'self' in valid_params:
+                                    valid_params = [p for p in valid_params if p != 'self']
+                                
+                                self._logger.debug(f"Validating request parameters for {service_name}")
+                                
+                                # Validate request parameters using the model
+                                if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
+                                    args = {'root': metadata.args_model(request["params"]).root}
+                                else:
+                                    model_instance = metadata.args_model(**request.get("params", {}))
+                                    validated_data = model_instance.model_dump()
+                                    args = {k: v for k, v in validated_data.items() if k in valid_params}
+                                
+                                self._logger.debug(f"Executing {service_name} with args: {args}")
+                                
+                                # Call function with validated parameters
+                                result = metadata.func(self, **args)
+                                reply_data = {
+                                    "result": result,
+                                    "status": "success"
+                                }
+                                self._logger.debug(f"Successfully executed {service_name}")
+                                
+                            except ValidationError as e:
+                                self._logger.error(f"Validation error in {service_name}: {str(e)}")
+                                reply_data = {
+                                    "error": f"Invalid parameters: {str(e)}",
+                                    "status": "error"
+                                }
+                            except Exception as e:
+                                self._logger.error(f"Error executing {service_name}: {str(e)}")
+                                reply_data = {
+                                    "error": str(e),
+                                    "status": "error"
+                                }
+                                
+                            self._logger.debug(f"Sending reply for {service_name}")
+                            self._worker_socket.send_multipart([
+                                b'',
+                                MDPW_WORKER,
+                                W_REPLY,
+                                service_name.encode(),
+                                client_id,
+                                json.dumps(reply_data).encode()
+                            ])
 
-        
+                elif msg[REQUEST_COMMAND_INDEX] == W_HEARTBEAT:
+                    # Handle heartbeat response
+                    service_name = msg[3].decode()
+                    metadata = self._worker_metadata.get(service_name)
+                    if metadata and metadata.heartbeat:
+                        metadata.heartbeat_liveness = 3
+                        metadata.last_heartbeat = time.time()
+                        
+            elif needs_heartbeat:
+                # Decrease liveness for methods with heartbeat enabled
+                for method in self._ether_methods_info.values():
+                    if (hasattr(method, '_reqrep_metadata') and 
+                        method._reqrep_metadata.heartbeat):
+                        method._reqrep_metadata.heartbeat_liveness -= 1
+                        
+                        # Reconnect if liveness hits zero
+                        if method._reqrep_metadata.heartbeat_liveness <= 0:
+                            self._logger.warning(f"Lost connection for {method._reqrep_metadata.service_name}, reconnecting...")
+                            self._reconnect_worker_socket()
+                            break
+
     # Add message tracking
     def track_message(self, publisher_id: str, sequence: int, timestamp: float):
         now = time.time()
@@ -532,124 +587,64 @@ class EtherSubMetadata:
 
 class EtherReqRepMetadata:
     """Metadata for request-reply methods"""
-    def __init__(self, func, service_name, args_model: Type[BaseModel]):
+    def __init__(self, func, service_name, args_model: Type[BaseModel], heartbeat: bool = False):
         self.func = func
         self.service_name = service_name
         self.args_model = args_model
+        self.heartbeat = heartbeat
+        self.heartbeat_interval = 2500  # ms
+        self.heartbeat_liveness = 3
+        self.last_heartbeat = 0
 
-def _ether_pub(topic: Optional[str] = None):
+def _ether_pub(func=None, *, topic: Optional[str] = None):
     """Decorator for methods that should publish messages."""
-    def decorator(func):
-        # Get return type hint if it exists
-        sig = inspect.signature(func)
-        return_type = sig.return_annotation
-        
-        # If no return type specified, use dict as default
-        if return_type == inspect.Parameter.empty:
-            return_type = dict
-        # Handle None return type (specified as None or type(None))
-        elif return_type in (None, type(None)):
-            return_type = dict
-        
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            # Execute the function and get result
-            result = func(self, *args, **kwargs)
-            try:
-                self._logger.debug(f"Inside pub wrapper for {func.__name__}")
-                if not hasattr(self, '_pub_socket'):
-                    raise RuntimeError("Cannot publish: no publisher socket configured")
-                
-                # Handle None result
-                if result is None:
-                    result = {}
-                
-                # Validate and serialize result
-                if isinstance(return_type, type) and issubclass(return_type, BaseModel):
-                    validated_result = return_type(**result).model_dump_json()
-                else:
-                    ResultModel = RootModel[return_type]
-                    validated_result = ResultModel(result).model_dump_json()
-                
-                actual_topic = topic or f"{func.__qualname__}"
-                self._logger.debug(f"Publishing to topic: {actual_topic}")
-                
-                self._pub_socket.send_multipart([
-                    actual_topic.encode(),
-                    validated_result.encode()
-                ])
-            except Exception as e:
-                # we never want to crash basic operation of the underlying user code
-                pass
-            
-            return result
-        
-        # Create and attach the metadata
-        actual_topic = topic or f"{func.__qualname__}"
-        wrapper._pub_metadata = EtherPubMetadata(func, actual_topic)
-        
-        # Mark the containing class for Ether processing
-        frame = inspect.currentframe().f_back
-        while frame:
-            locals_dict = frame.f_locals
-            if '__module__' in locals_dict and '__qualname__' in locals_dict:
-                EtherRegistry().mark_for_processing(
-                    locals_dict['__qualname__'],
-                    locals_dict['__module__']
-                )
-                break
-            frame = frame.f_back
-        
-        return wrapper
-    return decorator
+    if func is None:
+        return lambda f: _ether_pub(f, topic=topic)
 
-def _ether_sub(topic: Optional[str] = None, subtopic: Optional[str] = None):
-    """Decorator for methods that should receive messages."""
-    def decorator(func):
-        
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-        
-        # Create and attach the metadata
-        args_model = _create_model_from_signature(func)
-        
-        actual_topic = topic or f"{func.__qualname__}"
-        if subtopic:
-            actual_topic = f"{actual_topic.split('.')[0]}.{subtopic}"
-        
-        wrapper._sub_metadata = EtherSubMetadata(func, actual_topic, args_model)
-        
-        # Mark the containing class for Ether processing
-        frame = inspect.currentframe().f_back
-        while frame:
-            locals_dict = frame.f_locals
-            if '__module__' in locals_dict and '__qualname__' in locals_dict:
-                EtherRegistry().mark_for_processing(
-                    locals_dict['__qualname__'],
-                    locals_dict['__module__']
-                )
-                break
-            frame = frame.f_back
-        
-        return wrapper
-    return decorator
-
-def _ether_get(func):
-    """Decorator for methods that should handle get requests"""
+    # Get return type hint if it exists
+    sig = inspect.signature(func)
+    return_type = sig.return_annotation
+    
+    # If no return type specified, use dict as default
+    if return_type == inspect.Parameter.empty:
+        return_type = dict
+    # Handle None return type
+    elif return_type in (None, type(None)):
+        return_type = dict
+    
     @wraps(func)
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs)
+    def wrapper(self, *args, **kwargs):
+        result = func(self, *args, **kwargs)
+        try:
+            self._logger.debug(f"Inside pub wrapper for {func.__name__}")
+            if not hasattr(self, '_pub_socket'):
+                raise RuntimeError("Cannot publish: no publisher socket configured")
+            
+            if result is None:
+                result = {}
+            
+            # Validate and serialize result
+            if isinstance(return_type, type) and issubclass(return_type, BaseModel):
+                validated_result = return_type(**result).model_dump_json()
+            else:
+                ResultModel = RootModel[return_type]
+                validated_result = ResultModel(result).model_dump_json()
+            
+            actual_topic = topic or f"{func.__qualname__}"
+            self._logger.debug(f"Publishing to topic: {actual_topic}")
+            
+            self._pub_socket.send_multipart([
+                actual_topic.encode(),
+                validated_result.encode()
+            ])
+        except Exception as e:
+            pass
+        
+        return result
     
-    # Create model from function signature
-    args_model = _create_model_from_signature(func)
-    
-    # Create and attach metadata
-    wrapper._reqrep_metadata = EtherReqRepMetadata(
-        func=func,
-        service_name=f"{func.__qualname__}.get",
-        args_model=args_model
-    )
+    # Create and attach the metadata
+    actual_topic = topic or f"{func.__qualname__}"
+    wrapper._pub_metadata = EtherPubMetadata(func, actual_topic)
     
     # Mark the containing class for Ether processing
     frame = inspect.currentframe().f_back
@@ -665,8 +660,74 @@ def _ether_get(func):
     
     return wrapper
 
-def _ether_save(func):
+def _ether_sub(func=None, *, topic: Optional[str] = None, subtopic: Optional[str] = None):
+    """Decorator for methods that should receive messages."""
+    if func is None:
+        return lambda f: _ether_sub(f, topic=topic, subtopic=subtopic)
+    
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    
+    # Create and attach the metadata
+    args_model = _create_model_from_signature(func)
+    
+    actual_topic = topic or f"{func.__qualname__}"
+    if subtopic:
+        actual_topic = f"{actual_topic.split('.')[0]}.{subtopic}"
+    
+    wrapper._sub_metadata = EtherSubMetadata(func, actual_topic, args_model)
+    
+    # Mark the containing class for Ether processing
+    frame = inspect.currentframe().f_back
+    while frame:
+        locals_dict = frame.f_locals
+        if '__module__' in locals_dict and '__qualname__' in locals_dict:
+            EtherRegistry().mark_for_processing(
+                locals_dict['__qualname__'],
+                locals_dict['__module__']
+            )
+            break
+        frame = frame.f_back
+    
+    return wrapper
+
+def _ether_get(func=None, *, heartbeat: bool = False):
+    """Decorator for methods that should handle get requests"""
+    if func is None:
+        return lambda f: _ether_get(f, heartbeat=heartbeat)
+        
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    
+    args_model = _create_model_from_signature(func)
+    
+    wrapper._reqrep_metadata = EtherReqRepMetadata(
+        func=func,
+        service_name=f"{func.__qualname__}.get",
+        args_model=args_model,
+        heartbeat=heartbeat
+    )
+    
+    frame = inspect.currentframe().f_back
+    while frame:
+        locals_dict = frame.f_locals
+        if '__module__' in locals_dict and '__qualname__' in locals_dict:
+            EtherRegistry().mark_for_processing(
+                locals_dict['__qualname__'],
+                locals_dict['__module__']
+            )
+            break
+        frame = frame.f_back
+    
+    return wrapper
+
+def _ether_save(func=None, *, heartbeat: bool = False):
     """Decorator for methods that handle save requests"""
+    if func is None:
+        return lambda f: _ether_save(f, heartbeat=heartbeat)
+        
     @wraps(func)
     def wrapper(*args, **kwargs):
         try:
@@ -683,17 +744,15 @@ def _ether_save(func):
                 "message": "Save operation failed"
             }
     
-    # Create model from function signature
     args_model = _create_model_from_signature(func)
     
-    # Create and attach metadata
     wrapper._reqrep_metadata = EtherReqRepMetadata(
         func=wrapper,
         service_name=f"{func.__qualname__}.save",
-        args_model=args_model
+        args_model=args_model,
+        heartbeat=heartbeat
     )
     
-    # Mark the containing class for Ether processing
     frame = inspect.currentframe().f_back
     while frame:
         locals_dict = frame.f_locals
