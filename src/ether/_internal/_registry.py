@@ -530,7 +530,7 @@ class EtherSubMetadata:
         self.topic = topic
         self.args_model = args_model
 
-class EtherGetMetadata:
+class EtherRequestMetadata:
     def __init__(self, func, service_name, args_model: Type[BaseModel]):
         self.func = func
         self.service_name = service_name
@@ -644,7 +644,7 @@ def _ether_get(func):
     args_model = _create_model_from_signature(func)
     
     # Create and attach metadata
-    wrapper._get_metadata = EtherGetMetadata(
+    wrapper._get_metadata = EtherRequestMetadata(
         func=func,
         service_name=f"{func.__qualname__}.get",
         args_model=args_model
@@ -713,6 +713,49 @@ def _ether_request(service_class, method_name, params=None, request_type="get", 
     finally:
         socket.close()
         context.term()
+
+def _ether_save(func):
+    """Decorator for methods that handle save requests"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            # Execute the function and get result
+            result = func(*args, **kwargs)
+            return {
+                "status": "success",
+                "result": result,
+                "message": "Save operation completed successfully"
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "message": "Save operation failed"
+            }
+    
+    # Create model from function signature
+    args_model = _create_model_from_signature(func)
+    
+    # Create and attach metadata
+    wrapper._get_metadata = EtherRequestMetadata(
+        func=wrapper,  # Use wrapper to get error handling
+        service_name=f"{func.__qualname__}.save",  # Use .save suffix
+        args_model=args_model
+    )
+    
+    # Mark the containing class for Ether processing
+    frame = inspect.currentframe().f_back
+    while frame:
+        locals_dict = frame.f_locals
+        if '__module__' in locals_dict and '__qualname__' in locals_dict:
+            EtherRegistry().mark_for_processing(
+                locals_dict['__qualname__'],
+                locals_dict['__module__']
+            )
+            break
+        frame = frame.f_back
+    
+    return wrapper
 
 
 

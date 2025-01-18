@@ -118,9 +118,9 @@ from ether import ether
 def _get_config_path(config_name: str) -> str:
     return os.path.join(os.path.dirname(__file__), "config", f"{config_name}.yaml")
 
-# Initialize with config
+# Tap in to the ether with config
 config_path = _get_config_path("dual_processors")
-ether.init(config=config_path)
+ether.tap(config=config_path)
 
 # Start the distributed system
 ether.start()
