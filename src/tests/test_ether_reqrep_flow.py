@@ -3,7 +3,7 @@ import time
 from typing import List, Optional
 from ether import ether
 from ether._internal._config import EtherConfig, EtherInstanceConfig
-from ether._internal._registry import _ether_get, _ether_save
+from ether import ether_get, ether_save
 from ether.utils import _get_logger
 from ether.liaison import EtherInstanceLiaison
 
@@ -12,7 +12,7 @@ class FlowControlService:
         self.requests = []
         self.replies = []
     
-    @_ether_get(heartbeat=True)
+    @ether_get(heartbeat=True)
     def get_request_history(self) -> List[dict]:
         """Get history of requests and replies"""
         return {
@@ -20,7 +20,7 @@ class FlowControlService:
             "replies": self.replies
         }
     
-    @_ether_save(heartbeat=True)
+    @ether_save(heartbeat=True)
     def process_request(self, data: str) -> dict:
         """Process a request and track message flow"""
         # Store request info
@@ -58,17 +58,16 @@ def test_message_flow_control():
         replies = []
         
         for data in test_data:
-            reply = ether.request(
+            reply = ether.save(
                 "FlowControlService",
                 "process_request",
                 params={"data": data},
-                request_type="save"
             )
             assert reply["status"] == "success"
             replies.append(reply["result"])
         
         # Get request history
-        history = ether.request("FlowControlService", "get_request_history")
+        history = ether.get("FlowControlService", "get_request_history")
         
         # Verify request/reply matching
         assert len(history["requests"]) == len(test_data)
