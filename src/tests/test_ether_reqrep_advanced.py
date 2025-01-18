@@ -6,6 +6,7 @@ from ether._internal._config import EtherConfig, EtherInstanceConfig
 from ether._internal._registry import _ether_get, _ether_save
 from ether.utils import _get_logger
 import zmq
+from ether.liaison import EtherInstanceLiaison
 
 @pytest.mark.skip(reason="Not a test class")
 class HeartbeatService:
@@ -121,6 +122,44 @@ def test_heartbeat_and_reconnect():
         # Verify service still works
         result = ether.request("HeartbeatService", "get_count")
         assert result == 5  # Service should still be working
+        
+        # Test reconnection
+        logger.info("Testing reconnection...")
+        
+        # Force reconnect by closing socket
+        liaison = EtherInstanceLiaison()
+        instances = liaison.get_active_instances()
+        
+        # Find our service instance
+        service_id = None
+        for instance_id, info in instances.items():
+            if info['class'] == 'HeartbeatService':
+                service_id = instance_id
+                break
+                
+        assert service_id is not None, "Could not find HeartbeatService instance"
+        
+        # Send disconnect command to broker
+        logger.info("Sending disconnect command...")
+        try:
+            ether.request(
+                "HeartbeatService",
+                "get_count",
+                timeout=1  # Very short timeout to force disconnect
+            )
+        except zmq.error.Again:
+            logger.info("Got expected timeout, service should reconnect")
+        
+        time.sleep(0.5)  # Allow more time for reconnect
+        
+        # Verify service still works after reconnect
+        result = ether.request("HeartbeatService", "get_count")
+        assert result == 5  # Service should still work
+        
+        # Verify instance is still registered
+        instances = liaison.get_active_instances()
+        assert service_id in instances, "Service instance lost after reconnect"
+        assert instances[service_id]['class'] == 'HeartbeatService'
         
     finally:
         # Restore original method
