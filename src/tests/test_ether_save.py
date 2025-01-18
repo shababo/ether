@@ -1,12 +1,9 @@
-import pytest
-import time
 from typing import List
 from ether import ether
 from ether._internal._config import EtherConfig, EtherInstanceConfig
 from ether._internal._registry import _ether_save, _ether_get
 from ether.utils import _get_logger
 
-@pytest.mark.skip(reason="Not a test class")
 class DataService:
     def __init__(self):
         self.data = {}

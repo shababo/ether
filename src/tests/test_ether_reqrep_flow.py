@@ -7,7 +7,6 @@ from ether._internal._registry import _ether_get, _ether_save
 from ether.utils import _get_logger
 from ether.liaison import EtherInstanceLiaison
 
-@pytest.mark.skip(reason="Not a test class")
 class FlowControlService:
     def __init__(self):
         self.requests = []

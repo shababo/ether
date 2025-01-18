@@ -6,7 +6,6 @@ from ether.utils import _get_logger
 from typing import Optional, List
 from ether._internal._config import EtherConfig, EtherInstanceConfig
 
-@pytest.mark.skip(reason="Not a test class")
 class DataService:
     def __init__(self):
         self.data = {
