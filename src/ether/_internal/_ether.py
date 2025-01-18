@@ -20,7 +20,6 @@ from ..liaison import EtherInstanceLiaison
 from ._manager import _EtherInstanceManager
 from ._config import EtherConfig
 from ._registry import EtherRegistry
-from ._pubsub import EtherPubSubProxy
 from ._reqrep import EtherReqRepBroker
 
 
@@ -65,7 +64,7 @@ def _run_monitor():
 
 def _run_pubsub_proxy(frontend_port: int, backend_port: int):
     """Run the pubsub proxy in a separate process"""
-    proxy = EtherPubSubProxy(frontend_port=frontend_port, backend_port=backend_port)
+    proxy = _EtherPubSubProxy(frontend_port=frontend_port, backend_port=backend_port)
     try:
         proxy.run()
     except KeyboardInterrupt:
@@ -73,7 +72,7 @@ def _run_pubsub_proxy(frontend_port: int, backend_port: int):
     finally:
         proxy.cleanup()
 
-def _run_reqrep_broker(frontend_port: int, backend_port: int):
+def _run_reqrep_broker(frontend_port: int = 5559, backend_port: int = 5560):
     """Run the request-reply broker in a separate process"""
     broker = EtherReqRepBroker(frontend_port=frontend_port, backend_port=backend_port)
     try:
@@ -198,6 +197,11 @@ class _Ether:
             if not self._ensure_pubsub_running():
                 raise RuntimeError("PubSub proxy failed to start")
             
+            # Start ReqRep broker
+            self._logger.debug("Starting ReqRep broker...")
+            if not self._ensure_reqrep_running():
+                raise RuntimeError("ReqRep broker failed to start")
+            
             # Start monitoring
             self._logger.debug("Starting instance monitor...")
             self._monitor_process = Process(target=_run_monitor)
@@ -261,7 +265,19 @@ class _Ether:
             self._pubsub_process.start()
 
         return self._test_pubsub_connection()
+    
+    def _ensure_reqrep_running(self) -> bool:
+        """Ensure ReqRep broker is running"""
+        if self._reqrep_broker_process is None:
+            self._reqrep_broker_process = Process(target=_run_reqrep_broker)
+            self._reqrep_broker_process.daemon = True
+            self._reqrep_broker_process.start()
+        return self._test_reqrep_connection()
 
+    def _test_reqrep_connection(self) -> bool:
+        """Test ReqRep broker connection"""
+        # TODO: Implement actual connection test
+        return True
     
     def _test_redis_connection(self) -> bool:
         """Test Redis connection"""
@@ -380,6 +396,17 @@ class _Ether:
                         self._pubsub_process.kill()
                         self._pubsub_process.join(timeout=1)
                     self._pubsub_process = None
+                    
+                # Terminate ReqRep broker process
+                if self._reqrep_broker_process:
+                    self._logger.debug("Shutting down ReqRep broker")
+                    self._reqrep_broker_process.terminate()
+                    self._reqrep_broker_process.join(timeout=2)
+                    if self._reqrep_broker_process.is_alive():
+                        self._logger.warning("ReqRep broker didn't stop gracefully, killing")
+                        self._reqrep_broker_process.kill()
+                        self._reqrep_broker_process.join(timeout=1)
+                    self._reqrep_broker_process = None
                     
                 # Terminate instance monitoring process
                 if self._monitor_process:
