@@ -127,7 +127,7 @@ def run_data_verification_test():
     
     try:
         # Initialize system
-        ether.init(config=config, restart=True)
+        ether.tap(config=config, restart=True)
         time.sleep(1.0)  # Allow time for setup
         
         # Create publisher and send messages

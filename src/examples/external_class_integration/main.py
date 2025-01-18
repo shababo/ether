@@ -30,7 +30,7 @@ def main(config_name):
     """
     # Initialize Ether with our configuration
     config_path = _get_config_path(config_name)
-    ether.init(config=config_path)
+    ether.tap(config=config_path)
 
     # Use the DataGenerator class directly
     from examples.external_class_integration import DataGenerator

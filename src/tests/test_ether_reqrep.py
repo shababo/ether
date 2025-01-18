@@ -140,7 +140,7 @@ def test_ether_request_reply():
     logger.debug("Starting Ether request-reply test")
     
     # Initialize Ether (this starts the broker)
-    ether.init()
+    ether.tap()
 
     time.sleep(5)
     

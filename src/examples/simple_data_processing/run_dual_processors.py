@@ -51,7 +51,7 @@ def main(config_name):
 
     # init ether
     config_path = _get_config_path(config_name)
-    ether.init(config=config_path)
+    ether.tap(config=config_path)
 
     # use ether's start method to publish to the "start" topic
     # this will call any method decorated with @ether_start

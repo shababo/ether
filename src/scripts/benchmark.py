@@ -155,7 +155,7 @@ def run_benchmark(message_size: int, num_messages: int, num_subscribers: int, nu
         }
         
         # Initialize Ether system with configuration
-        ether.init(
+        ether.tap(
             config=config, 
             # quiet=True,
             restart=True
