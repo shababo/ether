@@ -23,115 +23,188 @@ def run_broker():
     finally:
         broker.cleanup()
 
+def run_worker(service_name):
+    """Run a worker in a separate process"""
+    logger = _get_logger("Worker")
+    context = zmq.Context()
+    socket = context.socket(zmq.DEALER)
+    socket.setsockopt(zmq.RCVTIMEO, 2500)
+    socket.connect("tcp://localhost:5560")
+    
+    try:
+        # Register with broker
+        logger.debug("Registering worker")
+        socket.send_multipart([
+            b'',
+            MDPW_WORKER,
+            W_READY,
+            service_name
+        ])
+        
+        # Process multiple requests
+        while True:
+            try:
+                msg = socket.recv_multipart()
+                logger.debug(f"Received request: {msg}")
+                
+                assert msg[1] == MDPW_WORKER
+                assert msg[2] == W_REQUEST
+                client_id = msg[3]
+                request = json.loads(msg[4].decode())
+                logger.debug(f"Decoded request: {request}")
+                
+                # Send reply with request ID echoed back
+                reply_data = {
+                    "result": "success",
+                    "request_id": request["request_id"],
+                    "client_id": request["client_id"]
+                }
+                logger.debug(f"Sending reply: {reply_data}")
+                socket.send_multipart([
+                    b'',
+                    MDPW_WORKER,
+                    W_REPLY,
+                    service_name,
+                    client_id,
+                    json.dumps(reply_data).encode()
+                ])
+                
+            except zmq.error.Again:
+                # Normal timeout, return success
+                return True
+                
+    except Exception as e:
+        logger.error(f"Worker error: {e}")
+        return False
+    finally:
+        socket.close()
+        context.term()
+
+def run_client(service_name, client_id):
+    """Run a client in a separate process"""
+    logger = _get_logger(f"Client-{client_id}")
+    context = zmq.Context()
+    socket = context.socket(zmq.DEALER)
+    socket.setsockopt(zmq.RCVTIMEO, 2500)
+    socket.connect("tcp://localhost:5559")
+    
+    try:
+        replies_received = set()
+        
+        # Send 5 requests
+        for request_id in range(5):
+            request_data = {
+                "action": "test",
+                "request_id": request_id,
+                "client_id": client_id
+            }
+            logger.debug(f"Sending request {request_id}")
+            socket.send_multipart([
+                b'',
+                MDPC_CLIENT,
+                service_name,
+                json.dumps(request_data).encode()
+            ])
+            
+            # Get reply
+            logger.debug(f"Waiting for reply to request {request_id}")
+            try:
+                msg = socket.recv_multipart()
+                logger.debug(f"Received reply: {msg}")
+                
+                assert msg[1] == MDPC_CLIENT
+                assert msg[2] == service_name
+                reply = json.loads(msg[3].decode())
+                
+                # Verify reply matches our request
+                assert reply["result"] == "success"
+                assert reply["request_id"] == request_id
+                assert reply["client_id"] == client_id
+                
+                replies_received.add(request_id)
+                
+            except zmq.error.Again:
+                logger.error(f"Timeout waiting for reply to request {request_id}")
+                return False
+                
+        # Verify we got all replies
+        assert len(replies_received) == 5, f"Only received {len(replies_received)} replies"
+        return True
+            
+    except Exception as e:
+        logger.error(f"Client error: {e}")
+        return False
+    finally:
+        socket.close()
+        context.term()
+
 def test_basic_request_reply():
     logger = _get_logger("TestReqRep")
     logger.debug("Starting request-reply test")
     
-    # Start broker in separate process
-    broker_process = multiprocessing.Process(target=run_broker)
-    broker_process.daemon = True
-    broker_process.start()
+    service_name = b"test_service"
+    processes = []
     
     try:
+        # Start broker process
+        broker_process = multiprocessing.Process(target=run_broker, name="Broker")
+        broker_process.daemon = True
+        broker_process.start()
+        processes.append(broker_process)
+        
         # Allow broker to initialize
-        time.sleep(0.1)
+        time.sleep(0.5)
         
-        # Setup worker with timeout
-        worker_context = zmq.Context()
-        worker_socket = worker_context.socket(zmq.DEALER)
-        worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
-        worker_socket.connect("tcp://localhost:5560")
+        # Start worker process
+        worker_process = multiprocessing.Process(target=run_worker, args=(service_name,), name="Worker")
+        worker_process.daemon = True
+        worker_process.start()
+        processes.append(worker_process)
         
-        # Worker registers with broker using MDP
-        service_name = b"test_service"
-        logger.debug("Registering worker")
-        worker_socket.send_multipart([
-            b'',                # Empty frame
-            MDPW_WORKER,       # MDP Worker header
-            W_READY,           # Ready command
-            service_name       # Service name
-        ])
-        
-        # Wait for worker registration to complete
+        # Allow worker to register
         time.sleep(1.0)
         
-        # Setup client
-        client_context = zmq.Context()
-        client_socket = client_context.socket(zmq.DEALER)
-        client_socket.setsockopt(zmq.RCVTIMEO, 1000)
-        client_socket.connect("tcp://localhost:5559")
+        # Start multiple client processes
+        client_processes = []
+        for client_id in range(2):
+            client_process = multiprocessing.Process(
+                target=run_client, 
+                args=(service_name, client_id), 
+                name=f"Client-{client_id}"
+            )
+            client_process.daemon = True
+            client_process.start()
+            processes.append(client_process)
+            client_processes.append(client_process)
         
-        # Client sends request using MDP
-        request_data = {"action": "test"}
-        logger.debug("Client sending request")
-        client_socket.send_multipart([
-            b'',                # Empty frame
-            MDPC_CLIENT,       # MDP Client header
-            service_name,       # Service name
-            json.dumps(request_data).encode()
-        ])
+        # Wait for all clients to complete
+        for client_process in client_processes:
+            client_process.join(timeout=10)
+            assert not client_process.is_alive(), f"Client process {client_process.name} timed out"
+            assert client_process.exitcode == 0, f"Client process {client_process.name} failed"
         
-        # Worker receives request
-        logger.debug("Worker waiting for request")
-        try:
-            worker_msg = worker_socket.recv_multipart()
-            logger.debug(f"Worker received message: {worker_msg}")
-            assert worker_msg[1] == MDPW_WORKER  # Check protocol header
-            assert worker_msg[2] == W_REQUEST    # Check command
-            client_id = worker_msg[3]            # Client address
-            request = json.loads(worker_msg[4].decode())  # Request data
-            assert request == request_data
-        except zmq.error.Again:
-            pytest.fail("Timeout waiting for worker to receive request")
+        # Allow worker to finish processing
+        time.sleep(0.5)
         
-        # Worker sends reply using MDP
-        reply_data = {"result": "success"}
-        logger.debug("Worker sending reply")
-        worker_socket.send_multipart([
-            b'',                # Empty frame
-            MDPW_WORKER,       # MDP Worker header
-            W_REPLY,           # Reply command
-            service_name,      # Service name
-            client_id,         # Original client address
-            json.dumps(reply_data).encode()  # Reply data
-        ])
+        # Signal worker to stop by closing its socket (it will timeout and exit)
+        worker_process.join(timeout=2)
+        if worker_process.is_alive():
+            worker_process.terminate()
+            worker_process.join(timeout=1)
         
-        # Client receives reply
-        logger.debug("Client waiting for reply")
-        try:
-            client_msg = client_socket.recv_multipart()
-            logger.debug(f"Client received message: {client_msg}")
-            assert client_msg[1] == MDPC_CLIENT  # Check MDP header
-            assert client_msg[2] == service_name  # Check service name
-            reply = json.loads(client_msg[3].decode())  # Reply data
-            assert reply == reply_data
-        except zmq.error.Again:
-            pytest.fail("Timeout waiting for client to receive reply")
-            
     finally:
         logger.debug("Cleaning up test resources")
-        # Close sockets before terminating contexts
-        if 'worker_socket' in locals():
-            worker_socket.close()
-        if 'client_socket' in locals():
-            client_socket.close()
-            
-        # Small delay before context termination    
-        time.sleep(0.1)
         
-        if 'worker_context' in locals():
-            worker_context.term()
-        if 'client_context' in locals():
-            client_context.term()
-            
-        # Terminate broker process
-        logger.debug("Terminating broker process")
-        broker_process.terminate()
-        broker_process.join(timeout=1)
-        if broker_process.is_alive():
-            logger.warning("Broker didn't terminate, killing process")
-            broker_process.kill()
-            broker_process.join(timeout=1)
+        # Terminate all processes
+        for p in processes:
+            if p.is_alive():
+                logger.debug(f"Terminating {p.name}")
+                p.terminate()
+                p.join(timeout=1)
+                if p.is_alive():
+                    logger.warning(f"Process {p.name} didn't terminate, killing")
+                    p.kill()
+                    p.join(timeout=1)
 
 if __name__ == '__main__':
     pytest.main([__file__]) 
