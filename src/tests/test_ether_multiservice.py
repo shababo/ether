@@ -211,5 +211,7 @@ def test_multiple_services():
                     p.kill()
                     p.join(timeout=1)
 
+        ether.shutdown()
+
 if __name__ == '__main__':
     pytest.main([__file__]) 

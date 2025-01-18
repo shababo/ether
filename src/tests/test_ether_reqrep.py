@@ -202,5 +202,7 @@ def test_ether_request_reply():
                     p.kill()
                     p.join(timeout=1)
 
+        ether.shutdown()
+
 if __name__ == '__main__':
     pytest.main([__file__]) 
