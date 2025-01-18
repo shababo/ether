@@ -2,7 +2,7 @@ from typing import List
 from ether import ether
 from ether._internal._config import EtherConfig, EtherInstanceConfig
 from ether import ether_save, ether_get
-from ether.utils import _get_logger
+from ether.utils import get_ether_logger
 
 class DataService:
     def __init__(self):
@@ -28,7 +28,7 @@ class DataService:
         return self.data[id]
 
 def test_ether_save():
-    logger = _get_logger("TestEtherSave")
+    logger = get_ether_logger("TestEtherSave")
     
     config = EtherConfig(
         instances={

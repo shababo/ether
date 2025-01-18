@@ -4,7 +4,7 @@ from typing import List, Optional
 from ether import ether
 from ether._internal._config import EtherConfig, EtherInstanceConfig
 from ether._internal._registry import _ether_get, _ether_save
-from ether.utils import _get_logger
+from ether.utils import get_ether_logger
 import zmq
 from ether.liaison import EtherInstanceLiaison
 
@@ -36,7 +36,7 @@ class HeartbeatService:
         return {"slow_until": self.slow_until}
 
 def test_heartbeat_and_reconnect():
-    logger = _get_logger("TestHeartbeat")
+    logger = get_ether_logger("TestHeartbeat")
     
     # Setup retry counting
     retry_count = 0

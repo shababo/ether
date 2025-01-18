@@ -4,7 +4,7 @@ from typing import List, Optional
 from ether import ether
 from ether._internal._config import EtherConfig, EtherInstanceConfig
 from ether import ether_get, ether_save
-from ether.utils import _get_logger
+from ether.utils import get_ether_logger
 from ether.liaison import EtherInstanceLiaison
 
 class FlowControlService:
@@ -39,7 +39,7 @@ class FlowControlService:
         return reply
 
 def test_message_flow_control():
-    logger = _get_logger("TestFlowControl")
+    logger = get_ether_logger("TestFlowControl")
     
     config = EtherConfig(
         instances={

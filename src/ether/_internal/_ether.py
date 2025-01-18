@@ -13,7 +13,7 @@ import json
 import signal
 import multiprocessing
 
-from ..utils import _ETHER_PUB_PORT, _get_logger
+from ..utils import _ETHER_PUB_PORT, get_ether_logger
 from ._session import EtherSession, session_process_launcher
 from ._pubsub import _EtherPubSubProxy
 from ..liaison import EtherInstanceLiaison 
@@ -50,7 +50,7 @@ def _run_pubsub():
 
 def _run_monitor():
     """Standalone function to run instance monitoring"""
-    logger = _get_logger("EtherMonitor")
+    logger = get_ether_logger("EtherMonitor")
     liaison = EtherInstanceLiaison()
     
     while True:
@@ -110,7 +110,7 @@ class _Ether:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(_Ether, cls).__new__(cls)
-            cls._instance._logger = _get_logger("Ether")
+            cls._instance._logger = get_ether_logger("Ether")
             cls._instance._logger.debug("Creating new Ether instance")
 
             cls._instance._logger.debug("Initializing Ether instance")

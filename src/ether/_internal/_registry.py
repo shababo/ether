@@ -10,7 +10,7 @@ import json
 import sys
 import importlib
 
-from ..utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
+from ..utils import get_ether_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
 from ether.liaison import EtherInstanceLiaison
 from ._config import EtherClassConfig
 from ._reqrep import (
@@ -30,7 +30,7 @@ class EtherRegistry:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(EtherRegistry, cls).__new__(cls)
-            cls._instance._logger = _get_logger("EtherRegistry")  # Will use default levels
+            cls._instance._logger = get_ether_logger("EtherRegistry")  # Will use default levels
         return cls._instance
     
     def mark_for_processing(self, class_qualname: str, module_name: str):
@@ -119,7 +119,7 @@ class EtherRegistry:
 def add_ether_functionality(cls):
     """Adds Ether functionality directly to a class"""
     # Use the class name for logging
-    logger = _get_logger(cls.__name__)  # Will use default levels
+    logger = get_ether_logger(cls.__name__)  # Will use default levels
     logger.debug(f"Adding Ether functionality to class: {cls.__name__}")
     
     # Check if already processed
@@ -144,7 +144,7 @@ def add_ether_functionality(cls):
         self.id = str(uuid.uuid4())
         self.name = name or self.id
         # Pass log_level as both console and file level if specified
-        self._logger = _get_logger(
+        self._logger = get_ether_logger(
             process_name=self.__class__.__name__,
             instance_name=self.name,
             # console_level=log_level,

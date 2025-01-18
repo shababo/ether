@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 from ether import ether, ether_pub, ether_sub, ether_save
 from ether.liaison import EtherInstanceLiaison
-from ether.utils import _get_logger
+from ether.utils import get_ether_logger
 from pprint import pprint
 
 # Test Models
@@ -20,7 +20,7 @@ class ComplexMessage(BaseModel):
 class DataVerificationPublisher:
     """Publisher that sends messages with verifiable data"""
     def __init__(self):
-        self._logger = _get_logger(self.__class__.__name__)
+        self._logger = get_ether_logger(self.__class__.__name__)
     
     @ether_pub(topic="complex_data")
     def send_complex_data(self) -> ComplexMessage:
@@ -54,7 +54,7 @@ class ReceivedData(BaseModel):
 class DataVerificationSubscriber:
     """Subscriber that verifies received message data"""
     def __init__(self):
-        self._logger = _get_logger(self.__class__.__name__)
+        self._logger = get_ether_logger(self.__class__.__name__)
         self.received_data = ReceivedData()
         self.liaison = EtherInstanceLiaison()
 

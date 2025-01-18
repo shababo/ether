@@ -1,7 +1,7 @@
 import zmq
 import uuid
 
-from ..utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, _get_logger
+from ..utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, get_ether_logger
 
 class _EtherPubSubProxy:
     """Proxy that uses XPUB/XSUB sockets for efficient message distribution.
@@ -12,7 +12,7 @@ class _EtherPubSubProxy:
     def __init__(self):
         self.id = uuid.uuid4()
         self.name = f"EtherPubSubProxy_{self.id}"
-        self._logger = _get_logger("EtherPubSubProxy")
+        self._logger = get_ether_logger("EtherPubSubProxy")
         self._logger.debug("Initializing PubSub proxy")
         
         self.capture_socket = None

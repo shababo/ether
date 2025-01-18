@@ -18,11 +18,11 @@ from ether._internal._reqrep import (
     REQUEST_COMMAND_INDEX,
     REQUEST_CLIENT_ID_INDEX
 )
-from ether.utils import _get_logger
+from ether.utils import get_ether_logger
 
 def run_worker(service_name):
     """Run a worker in a separate process"""
-    logger = _get_logger("Worker")
+    logger = get_ether_logger("Worker")
     context = zmq.Context()
     socket = context.socket(zmq.DEALER)
     socket.setsockopt(zmq.RCVTIMEO, 2500)
@@ -79,7 +79,7 @@ def run_worker(service_name):
 
 def run_client(service_name, client_id):
     """Run a client in a separate process"""
-    logger = _get_logger(f"Client-{client_id}")
+    logger = get_ether_logger(f"Client-{client_id}")
     context = zmq.Context()
     socket = context.socket(zmq.DEALER)
     socket.setsockopt(zmq.RCVTIMEO, 2500)
@@ -136,7 +136,7 @@ def run_client(service_name, client_id):
         context.term()
 
 def test_ether_request_reply():
-    logger = _get_logger("TestEtherReqRep")
+    logger = get_ether_logger("TestEtherReqRep")
     logger.debug("Starting Ether request-reply test")
     
     # Initialize Ether (this starts the broker)

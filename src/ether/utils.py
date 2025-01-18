@@ -14,7 +14,7 @@ def _ensure_log_dir(path: Path):
     """Ensure log directory exists"""
     path.mkdir(parents=True, exist_ok=True)
 
-def _get_logger(
+def get_ether_logger(
     process_name: str, 
     run_id: str = None,
     instance_name: str = None, 

@@ -1,7 +1,7 @@
 from typing import Union
 from multiprocessing import Process
 
-from ..utils import _get_logger
+from ..utils import get_ether_logger
 from ._config import EtherConfig
 from ether.liaison import EtherInstanceLiaison
 
@@ -14,7 +14,7 @@ class _EtherInstanceManager:
             autolaunch: bool = True
         ):
         self._instance_processes: dict[str, Process] = {}
-        self._logger = _get_logger("EtherInstanceManager")
+        self._logger = get_ether_logger("EtherInstanceManager")
         self._logger.debug("Initializing EtherInstanceManager")
         self._liaison = EtherInstanceLiaison()
         self._config = config

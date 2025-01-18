@@ -1,7 +1,7 @@
 import pytest
 from ether import ether
 from ether import ether_get
-from ether.utils import _get_logger
+from ether.utils import get_ether_logger
 from typing import Optional, List
 from ether._internal._config import EtherConfig, EtherInstanceConfig
 
@@ -45,7 +45,7 @@ class DataService:
         }
 
 def test_ether_get_with_params():
-    logger = _get_logger("TestEtherGet")
+    logger = get_ether_logger("TestEtherGet")
     logger.debug("Starting Ether get test")
     
     # Create configuration

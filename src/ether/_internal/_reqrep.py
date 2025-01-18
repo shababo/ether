@@ -2,7 +2,7 @@ import zmq
 import time
 import uuid
 from typing import Dict, Optional
-from ..utils import _get_logger
+from ..utils import get_ether_logger
 
 # MDP protocol constants
 MDPW_WORKER = b"MDPW01"  # MDP/Worker v0.1
@@ -51,7 +51,7 @@ class EtherReqRepBroker:
 
     def __init__(self, frontend_port: int = 5559, backend_port: int = 5560):
         self.id = str(uuid.uuid4())
-        self._logger = _get_logger("EtherReqRepBroker")
+        self._logger = get_ether_logger("EtherReqRepBroker")
         self._logger.debug("Initializing MDP broker")
         
         self.frontend_port = frontend_port
