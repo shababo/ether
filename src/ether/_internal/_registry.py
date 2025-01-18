@@ -131,7 +131,7 @@ def add_ether_functionality(cls):
         name: method for name, method in cls.__dict__.items()
         if hasattr(method, '_pub_metadata') or 
            hasattr(method, '_sub_metadata') or
-           hasattr(method, '_get_metadata')  # Add get methods
+           hasattr(method, '_reqrep_metadata')  # Add get methods
     }
     logger.debug(f"Found {len(ether_methods)} Ether methods in {cls.__name__}")
     
@@ -188,8 +188,8 @@ def add_ether_functionality(cls):
         
         # Register get methods
         for method in self._ether_methods_info.values():
-            if hasattr(method, '_get_metadata'):
-                metadata = method._get_metadata
+            if hasattr(method, '_reqrep_metadata'):
+                metadata = method._reqrep_metadata
                 self._worker_metadata[metadata.service_name] = metadata
     
     def setup_sockets(self):
@@ -243,10 +243,10 @@ def add_ether_functionality(cls):
         time.sleep(0.1)
         
         # Setup worker socket if we have get methods
-        has_get_method = any(hasattr(m, '_get_metadata') 
+        has_reqrep_method = any(hasattr(m, '_reqrep_metadata') 
                            for m in self._ether_methods_info.values())
         
-        if has_get_method:
+        if has_reqrep_method:
             self._logger.debug("Setting up worker socket")
             self._worker_socket = self._zmq_context.socket(zmq.DEALER)
             self._worker_socket.connect("tcp://localhost:5560")
@@ -530,7 +530,8 @@ class EtherSubMetadata:
         self.topic = topic
         self.args_model = args_model
 
-class EtherRequestMetadata:
+class EtherReqRepMetadata:
+    """Metadata for request-reply methods"""
     def __init__(self, func, service_name, args_model: Type[BaseModel]):
         self.func = func
         self.service_name = service_name
@@ -644,7 +645,7 @@ def _ether_get(func):
     args_model = _create_model_from_signature(func)
     
     # Create and attach metadata
-    wrapper._get_metadata = EtherRequestMetadata(
+    wrapper._reqrep_metadata = EtherReqRepMetadata(
         func=func,
         service_name=f"{func.__qualname__}.get",
         args_model=args_model
@@ -669,7 +670,6 @@ def _ether_save(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         try:
-            # Execute the function and get result
             result = func(*args, **kwargs)
             return {
                 "status": "success",
@@ -687,9 +687,9 @@ def _ether_save(func):
     args_model = _create_model_from_signature(func)
     
     # Create and attach metadata
-    wrapper._get_metadata = EtherRequestMetadata(
-        func=wrapper,  # Use wrapper to get error handling
-        service_name=f"{func.__qualname__}.save",  # Use .save suffix
+    wrapper._reqrep_metadata = EtherReqRepMetadata(
+        func=wrapper,
+        service_name=f"{func.__qualname__}.save",
         args_model=args_model
     )
     

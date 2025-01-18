@@ -102,6 +102,7 @@ class _Ether:
     _started = False
     _is_main_session = False
     _pub_socket = None
+    _request_socket = None
     _zmq_context = None
     _pubsub_proxy_process: Optional[multiprocessing.Process] = None
     _reqrep_broker_process: Optional[multiprocessing.Process] = None
@@ -243,6 +244,9 @@ class _Ether:
 
         self._logger.debug("Setting up publisher...")
         self._setup_publisher()
+
+        self._logger.debug("Setting up request socket...")
+        self._setup_request_socket()
         
         self._started = True
         self._logger.info("Ether system started successfully")
@@ -382,6 +386,12 @@ class _Ether:
                 if self._instance_manager:
                     self._logger.debug("Stopping all instances...")
                     self._instance_manager.stop_all_instances()
+
+                # close request socket
+                if self._request_socket:
+                    self._logger.debug("Closing request socket...")
+                    self._request_socket.close()
+                    self._request_socket = None
                 
                 # close publishing socket and context
                 if self._pub_socket:
@@ -391,6 +401,8 @@ class _Ether:
                 if self._zmq_context:
                     self._zmq_context.term()
                     self._zmq_context = None
+
+                
                     
                 # Terminate pubsub proxy process
                 if self._pubsub_process:
@@ -507,24 +519,43 @@ class _Ether:
                 self._reqrep_broker_process.kill()
                 self._reqrep_broker_process.join(timeout=1)
 
+    def _setup_request_socket(self):
+        """Set up the ZMQ request socket"""
+        self._logger.debug("Setting up request socket")
+        if self._request_socket is None:
+            if self._zmq_context is None:
+                self._zmq_context = zmq.Context()
+            self._request_socket = self._zmq_context.socket(zmq.DEALER)
+            self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
+            self._request_socket.connect("tcp://localhost:5559")
+            self._logger.debug("Request socket connected")
+
     def request(self, service_class: str, method_name: str, params=None, request_type="get", timeout=2500):
         """Make a request to a service"""
+        self._logger.debug(f"Request received - Service: {service_class}.{method_name}")
+        
+        if not self._started:
+            self._logger.debug("Cannot make request: Ether system not started")
+            raise RuntimeError("Ether system not started")
+        
+        if self._request_socket is None:
+            self._logger.debug("Request socket not initialized, setting up...")
+            self._setup_request_socket()
+        
         service_name = f"{service_class}.{method_name}.{request_type}".encode()
         self._logger.debug(f"Requesting from service: {service_name}")
         
-        context = zmq.Context()
-        socket = context.socket(zmq.DEALER)
-        socket.setsockopt(zmq.RCVTIMEO, timeout)
-        socket.connect("tcp://localhost:5559")
+        # Update socket timeout if different from default
+        if timeout != 2500:
+            self._request_socket.setsockopt(zmq.RCVTIMEO, timeout)
         
         try:
-            # Send request
             request_data = {
                 "timestamp": time.time(),
                 "type": request_type,
                 "params": params or {}
             }
-            socket.send_multipart([
+            self._request_socket.send_multipart([
                 b'',
                 MDPC_CLIENT,
                 service_name,
@@ -535,7 +566,7 @@ class _Ether:
             retries = 5
             while retries > 0:
                 try:
-                    msg = socket.recv_multipart()
+                    msg = self._request_socket.recv_multipart()
                     break
                 except Exception as e:
                     self._logger.error(f"Error receiving reply: {e}, retries remaining: {retries}")
@@ -554,8 +585,9 @@ class _Ether:
                 raise Exception(f"Request failed: {reply.get('error', 'Unknown error')}")
             
         finally:
-            socket.close()
-            context.term()
+            # Reset timeout to default if it was changed
+            if timeout != 2500:
+                self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
 
 # Create singleton instance but don't start it
 _ether = _Ether()
