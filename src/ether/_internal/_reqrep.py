@@ -15,6 +15,17 @@ W_REPLY = b"\x03"      # Worker reply
 W_HEARTBEAT = b"\x04"  # Worker heartbeat
 W_DISCONNECT = b"\x05" # Worker disconnect
 
+
+REQUEST_WORKER_INDEX = 1
+REQUEST_COMMAND_INDEX = 2
+REQUEST_CLIENT_ID_INDEX = 3
+REQUEST_SERVICE_INDEX = 4
+REQUEST_DATA_INDEX = 5
+
+REPLY_CLIENT_INDEX = 1
+REPLY_SERVICE_INDEX = 2
+REPLY_DATA_INDEX = 3
+
 class Service:
     """Represents a service and its associated workers"""
     def __init__(self, name: str):
@@ -24,12 +35,13 @@ class Service:
 
 class Worker:
     """Represents a worker instance"""
-    def __init__(self, id: str, service: str, address: bytes):
+    def __init__(self, id: str, service: str, address: bytes, use_expiry: bool = False):
         self.id = id
         self.service = service  # Service this worker provides
         self.address = address
-        self.expiry = time.time() + 5  # 5 second timeout
-        self.liveness = 3    # 3 heartbeats missed before death
+        self.use_expiry = use_expiry
+        self.expiry = time.time() + 10 if use_expiry else None
+        self.liveness = 3 if use_expiry else None
 
 class EtherReqRepBroker:
     """Broker implementing Majordomo Protocol v0.1"""
@@ -127,7 +139,8 @@ class EtherReqRepBroker:
                 ])
                 
                 # Worker is now available again
-                worker.expiry = time.time() + 5
+                if worker.use_expiry:
+                    worker.expiry = time.time() + 10
                 service.waiting.append(worker)
                 self._dispatch_requests(service)
 
@@ -154,7 +167,7 @@ class EtherReqRepBroker:
         """Look for and kill expired workers"""
         now = time.time()
         for worker_id, worker in list(self.workers.items()):
-            if now > worker.expiry:
+            if worker.use_expiry and worker.expiry and now > worker.expiry:
                 self._logger.debug(f"Deleting expired worker: {worker_id}")
                 self._delete_worker(worker_id)
 
@@ -183,15 +196,19 @@ class EtherReqRepBroker:
                 MDPW_WORKER,
                 W_REQUEST,
                 client,
+                service.name.encode(),
                 *request
             ])
             self._logger.debug(f"Request dispatched to worker for service: {service.name}")
 
     def run(self):
-        """Main broker loop"""
+        """Run the broker loop"""
         self._logger.info("Starting broker loop")
+        
         try:
             while True:
+                sockets = dict(self.poller.poll())
+                self._logger.debug(f"Active sockets: {sockets}")
                 events = dict(self.poller.poll(self.HEARTBEAT_INTERVAL))
                 
                 if self.frontend in events:

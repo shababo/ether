@@ -9,7 +9,14 @@ from ether._internal._reqrep import (
     MDPW_WORKER,
     W_READY,
     W_REQUEST, 
-    W_REPLY
+    W_REPLY,
+    REQUEST_WORKER_INDEX,
+    REQUEST_COMMAND_INDEX,
+    REQUEST_CLIENT_ID_INDEX,
+    REQUEST_DATA_INDEX,
+    REPLY_CLIENT_INDEX,
+    REPLY_SERVICE_INDEX,
+    REPLY_DATA_INDEX
 )
 from ether.utils import _get_logger
 
@@ -37,10 +44,10 @@ def run_worker(service_name):
                 msg = socket.recv_multipart()
                 logger.debug(f"Received request: {msg}")
                 
-                assert msg[1] == MDPW_WORKER
-                assert msg[2] == W_REQUEST
-                client_id = msg[3]
-                request = json.loads(msg[4].decode())
+                assert msg[REQUEST_WORKER_INDEX] == MDPW_WORKER
+                assert msg[REQUEST_COMMAND_INDEX] == W_REQUEST
+                client_id = msg[REQUEST_CLIENT_ID_INDEX]
+                request = json.loads(msg[REQUEST_DATA_INDEX].decode())
                 logger.debug(f"Decoded request: {request}")
                 
                 # Send reply with request details and service name
@@ -105,9 +112,9 @@ def run_client(client_id, services):
                     msg = socket.recv_multipart()
                     logger.debug(f"Received reply: {msg}")
                     
-                    assert msg[1] == MDPC_CLIENT
-                    assert msg[2] == service_name
-                    reply = json.loads(msg[3].decode())
+                    assert msg[REPLY_CLIENT_INDEX] == MDPC_CLIENT
+                    assert msg[REPLY_SERVICE_INDEX] == service_name
+                    reply = json.loads(msg[REPLY_DATA_INDEX].decode())
                     
                     # Verify reply matches our request
                     assert reply["result"] == "success"

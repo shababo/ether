@@ -13,6 +13,11 @@ import importlib
 from ..utils import _get_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
 from ether.liaison import EtherInstanceLiaison
 from ._config import EtherClassConfig
+from ._reqrep import (
+    W_READY, W_REQUEST, W_REPLY, MDPW_WORKER, MDPC_CLIENT,
+    REQUEST_WORKER_INDEX, REQUEST_COMMAND_INDEX, REQUEST_CLIENT_ID_INDEX, REQUEST_DATA_INDEX,
+    REPLY_CLIENT_INDEX, REPLY_SERVICE_INDEX, REPLY_DATA_INDEX
+)
 
 class EtherRegistry:
     """Registry to track and process classes with Ether methods"""
@@ -124,7 +129,9 @@ def add_ether_functionality(cls):
     # Collect Ether methods
     ether_methods = {
         name: method for name, method in cls.__dict__.items()
-        if hasattr(method, '_pub_metadata') or hasattr(method, '_sub_metadata')
+        if hasattr(method, '_pub_metadata') or 
+           hasattr(method, '_sub_metadata') or
+           hasattr(method, '_get_metadata')  # Add get methods
     }
     logger.debug(f"Found {len(ether_methods)} Ether methods in {cls.__name__}")
     
@@ -174,6 +181,16 @@ def add_ether_functionality(cls):
             'sub_topics': [m._sub_metadata.topic for m in self._ether_methods_info.values() 
                           if hasattr(m, '_sub_metadata')]
         })
+        
+        # Add reqrep worker socket
+        self._worker_socket = None
+        self._worker_metadata = {}
+        
+        # Register get methods
+        for method in self._ether_methods_info.values():
+            if hasattr(method, '_get_metadata'):
+                metadata = method._get_metadata
+                self._worker_metadata[metadata.service_name] = metadata
     
     def setup_sockets(self):
         self._logger.debug(f"Setting up sockets for {self.name}")
@@ -224,7 +241,127 @@ def add_ether_functionality(cls):
 
 
         time.sleep(0.1)
+        
+        # Setup worker socket if we have get methods
+        has_get_method = any(hasattr(m, '_get_metadata') 
+                           for m in self._ether_methods_info.values())
+        
+        if has_get_method:
+            self._logger.debug("Setting up worker socket")
+            self._worker_socket = self._zmq_context.socket(zmq.DEALER)
+            self._worker_socket.connect("tcp://localhost:5560")
+            self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
+            
+            # Register all services
+            for metadata in self._worker_metadata.values():
+                service_name = metadata.service_name.encode()
+                self._logger.debug(f"Registering service: {service_name}")
+                self._worker_socket.send_multipart([
+                    b'',
+                    MDPW_WORKER,
+                    W_READY,
+                    service_name
+                ])
+                self._logger.debug(f"Service registered: {service_name}")
     
+    def _handle_subscriber_message(self, timeout=1000):
+        """Handle a message from the subscriber socket"""
+        if self._sub_socket and self._sub_socket.poll(timeout=timeout):
+            message = self._sub_socket.recv_multipart()
+            topic = message[0].decode()
+            data = json.loads(message[1].decode())
+            
+            self._logger.debug(f"Received message: topic={topic}, data={data}")
+            
+            if topic in self._sub_topics:
+                metadata = self._sub_metadata.get(topic)
+                if metadata:
+                    # Get the method's signature parameters
+                    sig = inspect.signature(metadata.func)
+                    valid_params = sig.parameters.keys()
+                    
+                    # Remove 'self' from valid params if present
+                    if 'self' in valid_params:
+                        valid_params = [p for p in valid_params if p != 'self']
+                    
+                    # If using root model, pass the entire data as 'root'
+                    if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
+                        args = {'root': metadata.args_model(data).root}
+                    else:
+                        # Validate data with the model
+                        model_instance = metadata.args_model(**data)
+                        validated_data = model_instance.model_dump()
+                        args = {k: v for k, v in validated_data.items() if k in valid_params}
+                    
+                    metadata.func(self, **args)
+
+    def _handle_worker_message(self, timeout=1000):
+        """Handle a message from the worker socket"""
+        if self._worker_socket and self._worker_socket.poll(timeout=timeout):
+            msg = self._worker_socket.recv_multipart()
+            self._logger.debug(f"Received worker message: {msg}")
+            if msg[REQUEST_WORKER_INDEX] == MDPW_WORKER and msg[REQUEST_COMMAND_INDEX] == W_REQUEST:
+                client_id = msg[REQUEST_CLIENT_ID_INDEX]
+                service_name = msg[4].decode()  # Get service name from message
+                request = json.loads(msg[5].decode())  # Request data now at index 5
+                
+                self._logger.debug(f"Handling request for service: {service_name}")
+                
+                metadata = self._worker_metadata.get(service_name)
+                if metadata:
+                    try:
+                        # Get the method's signature parameters
+                        sig = inspect.signature(metadata.func)
+                        valid_params = sig.parameters.keys()
+                        
+                        # Remove 'self' from valid params if present
+                        if 'self' in valid_params:
+                            valid_params = [p for p in valid_params if p != 'self']
+                        
+                        self._logger.debug(f"Validating request parameters for {service_name}")
+                        
+                        # Validate request parameters using the model
+                        if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
+                            args = {'root': metadata.args_model(request["params"]).root}
+                        else:
+                            model_instance = metadata.args_model(**request.get("params", {}))
+                            validated_data = model_instance.model_dump()
+                            args = {k: v for k, v in validated_data.items() if k in valid_params}
+                        
+                        self._logger.debug(f"Executing {service_name} with args: {args}")
+                        
+                        # Call function with validated parameters
+                        result = metadata.func(self, **args)
+                        reply_data = {
+                            "result": result,
+                            "status": "success"
+                        }
+                        self._logger.debug(f"Successfully executed {service_name}")
+                        
+                    except ValidationError as e:
+                        self._logger.error(f"Validation error in {service_name}: {str(e)}")
+                        reply_data = {
+                            "error": f"Invalid parameters: {str(e)}",
+                            "status": "error"
+                        }
+                    except Exception as e:
+                        self._logger.error(f"Error executing {service_name}: {str(e)}")
+                        reply_data = {
+                            "error": str(e),
+                            "status": "error"
+                        }
+                        
+                    self._logger.debug(f"Sending reply for {service_name}")
+                    self._worker_socket.send_multipart([
+                        b'',
+                        MDPW_WORKER,
+                        W_REPLY,
+                        service_name.encode(),
+                        client_id,
+                        json.dumps(reply_data).encode()
+                    ])
+
+        
     # Add message tracking
     def track_message(self, publisher_id: str, sequence: int, timestamp: float):
         now = time.time()
@@ -276,54 +413,35 @@ def add_ether_functionality(cls):
         with open(self.results_file, 'w') as f:
             json.dump(results, f)
 
-    def receive_single_message(self, timeout=1000):
-        if self._sub_socket and self._sub_socket.poll(timeout=timeout):
-            message = self._sub_socket.recv_multipart()
-            topic = message[0].decode()
-            data = json.loads(message[1].decode())
-            
-            self._logger.debug(f"Received message: topic={topic}, data={data}")
-            
-            if topic in self._sub_topics:
-                metadata = self._sub_metadata.get(topic)
-                if metadata:
-                    # Get the method's signature parameters
-                    sig = inspect.signature(metadata.func)
-                    valid_params = sig.parameters.keys()
-                    
-                    # Remove 'self' from valid params if present
-                    if 'self' in valid_params:
-                        valid_params = [p for p in valid_params if p != 'self']
-                    
-                    # If using root model, pass the entire data as 'root'
-                    if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
-                        args = {'root': metadata.args_model(data).root}
-                    else:
-                        # Validate data with the model
-                        model_instance = metadata.args_model(**data)
-                        validated_data = model_instance.model_dump()
-                        
-                        # Only pass the arguments that exist in the method signature
-                        args = {k: v for k, v in validated_data.items() if k in valid_params}
-                    
-                    metadata.func(self, **args)
 
-    
-    # Add run method
     def run(self):
         last_refresh = 0
         while True:
             try:
-                # Refresh TTL periodically (half the TTL time)
+                # Refresh TTL periodically
                 now = time.time()
                 if now - last_refresh >= (self._instance_tracker.ttl / 2):
                     self._instance_tracker.refresh_instance(self.id)
                     last_refresh = now
                 
+                # Create a poller to handle both sub and worker sockets
+                poller = zmq.Poller()
                 if self._sub_socket:
-                    self.receive_single_message()
+                    poller.register(self._sub_socket, zmq.POLLIN)
+                if self._worker_socket:
+                    poller.register(self._worker_socket, zmq.POLLIN)
+                
+                # Poll for messages with timeout
+                sockets = dict(poller.poll(timeout=1000))
+                
+                # Handle messages based on socket type
+                if self._sub_socket in sockets:
+                    self._handle_subscriber_message(timeout=0)
+                if self._worker_socket in sockets:
+                    self._handle_worker_message(timeout=0)
+                
             except Exception as e:
-                self._logger.error(f"Error in run loop: {e}")
+                self._logger.error(f"Error in run loop: {e}", exc_info=True)
                 break
         
         self.save_results()
@@ -339,15 +457,18 @@ def add_ether_functionality(cls):
             self._pub_socket.close()
         if hasattr(self, '_zmq_context') and self._zmq_context:
             self._zmq_context.term()
+        if hasattr(self, '_worker_socket') and self._worker_socket:
+            self._worker_socket.close()
     
     # Add methods to class
     cls.init_ether = init_ether_vars
     cls.setup_sockets = setup_sockets
+    cls._handle_subscriber_message = _handle_subscriber_message
+    cls._handle_worker_message = _handle_worker_message
     cls.track_message = track_message
     cls.save_results = save_results
     cls.run = run
     cls.cleanup = cleanup
-    cls.receive_single_message = receive_single_message
     
     # Modify __init__ to initialize attributes
     original_init = cls.__init__
@@ -409,7 +530,11 @@ class EtherSubMetadata:
         self.topic = topic
         self.args_model = args_model
 
-
+class EtherGetMetadata:
+    def __init__(self, func, service_name, args_model: Type[BaseModel]):
+        self.func = func
+        self.service_name = service_name
+        self.args_model = args_model
 
 def _ether_pub(topic: Optional[str] = None):
     """Decorator for methods that should publish messages."""
@@ -508,6 +633,86 @@ def _ether_sub(topic: Optional[str] = None, subtopic: Optional[str] = None):
         
         return wrapper
     return decorator
+
+def _ether_get(func):
+    """Decorator for methods that should handle get requests"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    
+    # Create model from function signature
+    args_model = _create_model_from_signature(func)
+    
+    # Create and attach metadata
+    wrapper._get_metadata = EtherGetMetadata(
+        func=func,
+        service_name=f"{func.__qualname__}.get",
+        args_model=args_model
+    )
+    
+    # Mark the containing class for Ether processing
+    frame = inspect.currentframe().f_back
+    while frame:
+        locals_dict = frame.f_locals
+        if '__module__' in locals_dict and '__qualname__' in locals_dict:
+            EtherRegistry().mark_for_processing(
+                locals_dict['__qualname__'],
+                locals_dict['__module__']
+            )
+            break
+        frame = frame.f_back
+    
+    return wrapper
+
+def _ether_request(service_class, method_name, params=None, request_type="get", timeout=2500):
+    """Make a request to a service"""
+    service_name = f"{service_class}.{method_name}.{request_type}".encode()
+    logger = _get_logger("EtherRequest")
+    logger.debug(f"Requesting from service: {service_name}")
+    
+    context = zmq.Context()
+    socket = context.socket(zmq.DEALER)
+    socket.setsockopt(zmq.RCVTIMEO, timeout)
+    socket.connect("tcp://localhost:5559")
+    
+    try:
+        # Send request
+        request_data = {
+            "timestamp": time.time(),
+            "type": request_type,
+            "params": params or {}
+        }
+        socket.send_multipart([
+            b'',
+            MDPC_CLIENT,
+            service_name,
+            json.dumps(request_data).encode()
+        ])
+        
+        # Get reply with retries
+        retries = 5
+        while retries > 0:
+            try:
+                msg = socket.recv_multipart()
+                break
+            except Exception as e:
+                logger.error(f"Error receiving reply: {e}, retries remaining: {retries}")
+                retries -= 1
+                if retries == 0:
+                    raise
+                logger.debug(f"Request timed out, retrying ({retries} attempts left)")
+        assert msg[REPLY_CLIENT_INDEX] == MDPC_CLIENT
+        assert msg[REPLY_SERVICE_INDEX] == service_name
+        reply = json.loads(msg[REPLY_DATA_INDEX].decode())
+        
+        if reply.get("status") == "success":
+            return reply["result"]
+        else:
+            raise Exception(f"Request failed: {reply.get('error', 'Unknown error')}")
+            
+    finally:
+        socket.close()
+        context.term()
 
 
 
