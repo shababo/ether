@@ -1,14 +1,14 @@
 from typing import List
 from ether import ether
 from ether._internal._config import EtherConfig, EtherInstanceConfig
-from ether._internal._registry import _ether_save, _ether_get
+from ether import ether_save, ether_get
 from ether.utils import _get_logger
 
 class DataService:
     def __init__(self):
         self.data = {}
     
-    @_ether_save(heartbeat=True)
+    @ether_save(heartbeat=True)
     def save_item(self, id: int, name: str, tags: List[str]) -> dict:
         """Save an item to the data store"""
         if id in self.data:
@@ -20,7 +20,7 @@ class DataService:
         }
         return self.data[id]  # Return saved item
 
-    @_ether_get
+    @ether_get
     def get_item(self, id: int) -> dict:
         """Get a single item by ID"""
         if id not in self.data:
@@ -44,7 +44,7 @@ def test_ether_save():
     try:
         
         # Test saving new item
-        reply = ether.request(
+        reply = ether.save(
             "DataService", 
             "save_item", 
             params={
@@ -52,7 +52,6 @@ def test_ether_save():
                 "name": "Test Item",
                 "tags": ["test", "new"]
             },
-            request_type="save"
         )
         logger.info(f"Save reply: {reply}")
         assert reply["status"] == "success"
@@ -60,14 +59,14 @@ def test_ether_save():
         assert result["name"] == "Test Item"
         
         # Verify item was saved
-        item = ether.request("DataService", "get_item", params={"id": 1})
+        item = ether.get("DataService", "get_item", params={"id": 1})
         logger.info(f"Get item: {item}")
         assert item["name"] == "Test Item"
         assert item["tags"] == ["test", "new"]
         
         # Test saving duplicate item
 
-        reply = ether.request(
+        reply = ether.save(
             "DataService", 
             "save_item", 
             params={
@@ -75,7 +74,6 @@ def test_ether_save():
                 "name": "Duplicate",
                 "tags": []
             },
-            request_type="save"
         )
         logger.info(f"Duplicate save reply: {reply}")
         assert reply["status"] == "error"

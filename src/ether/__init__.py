@@ -6,7 +6,7 @@ import atexit
 import time
 import uuid
 
-from .decorators import ether_pub, ether_sub, ether_init, ether_save, ether_cleanup, ether_start
+from .decorators import ether_pub, ether_sub, ether_init, ether_save, ether_cleanup, ether_start, ether_get, ether_save_all, ether_shutdown
 from .utils import _get_logger
 from ._internal._ether import _ether
 from ._internal._config import EtherConfig
@@ -87,6 +87,6 @@ class Ether:
 # instantiate singleton for API
 ether = Ether()
 # export decorators
-decorators = ['ether_pub', 'ether_sub', 'ether_init', 'ether_save', 'ether_cleanup', 'ether_start']
+decorators = ['ether_pub', 'ether_sub', 'ether_init', 'ether_save', 'ether_cleanup', 'ether_start', 'ether_get', 'ether_save_all', 'ether_shutdown']
 __all__ = ['ether'] + decorators
 

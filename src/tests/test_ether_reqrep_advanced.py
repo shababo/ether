@@ -65,21 +65,20 @@ def test_heartbeat_and_reconnect():
     
     try:
         # Test basic request-reply with heartbeat
-        result = ether.request("HeartbeatService", "get_count")
+        result = ether.get("HeartbeatService", "get_count")
         assert result == 0
         
         # Test save with heartbeat
-        reply = ether.request(
+        reply = ether.save(
             "HeartbeatService", 
             "increment", 
             params={"amount": 5},
-            request_type="save"
         )
         assert reply["status"] == "success"
         assert reply["result"]["counter"] == 5
         
         # Verify counter was updated
-        result = ether.request("HeartbeatService", "get_count")
+        result = ether.get("HeartbeatService", "get_count")
         assert result == 5
         
         # Let heartbeats happen
@@ -87,11 +86,11 @@ def test_heartbeat_and_reconnect():
         time.sleep(3.0)  # Allow multiple heartbeat cycles
         
         # Test another request after heartbeats
-        result = ether.request("HeartbeatService", "get_count")
+        result = ether.get("HeartbeatService", "get_count")
         assert result == 5
         
         # Make service slow
-        reply = ether.request(
+        reply = ether.get(
             "HeartbeatService",
             "set_slow",
             params={"duration": 1.0},
@@ -105,7 +104,7 @@ def test_heartbeat_and_reconnect():
         
         start_time = time.time()
         try:
-            result = ether.request(
+            result = ether.get(
                 "HeartbeatService", 
                 "get_count", 
                 timeout=50  # 50ms timeout
@@ -120,7 +119,7 @@ def test_heartbeat_and_reconnect():
         assert retry_count > 1, f"Expected multiple retries, got {retry_count}"
         
         # Verify service still works
-        result = ether.request("HeartbeatService", "get_count")
+        result = ether.get("HeartbeatService", "get_count")
         assert result == 5  # Service should still be working
         
         # Test reconnection
@@ -142,7 +141,7 @@ def test_heartbeat_and_reconnect():
         # Send disconnect command to broker
         logger.info("Sending disconnect command...")
         try:
-            ether.request(
+            ether.get(
                 "HeartbeatService",
                 "get_count",
                 timeout=1  # Very short timeout to force disconnect
@@ -153,7 +152,7 @@ def test_heartbeat_and_reconnect():
         time.sleep(0.5)  # Allow more time for reconnect
         
         # Verify service still works after reconnect
-        result = ether.request("HeartbeatService", "get_count")
+        result = ether.get("HeartbeatService", "get_count")
         assert result == 5  # Service should still work
         
         # Verify instance is still registered
