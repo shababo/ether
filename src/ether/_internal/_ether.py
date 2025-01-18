@@ -7,10 +7,11 @@ import redis
 import os
 from multiprocessing import Process
 import zmq
-from typing import Union, Dict
+from typing import Union, Dict, Optional
 from pydantic import BaseModel
 import json
 import signal
+import multiprocessing
 
 from ..utils import _ETHER_PUB_PORT, _get_logger
 from ._session import EtherSession, session_process_launcher
@@ -19,6 +20,8 @@ from ..liaison import EtherInstanceLiaison
 from ._manager import _EtherInstanceManager
 from ._config import EtherConfig
 from ._registry import EtherRegistry
+from ._pubsub import EtherPubSubProxy
+from ._reqrep import EtherReqRepBroker
 
 
 # Constants
@@ -60,6 +63,26 @@ def _run_monitor():
             logger.error(f"Error monitoring instances: {e}")
             time.sleep(1)
 
+def _run_pubsub_proxy(frontend_port: int, backend_port: int):
+    """Run the pubsub proxy in a separate process"""
+    proxy = EtherPubSubProxy(frontend_port=frontend_port, backend_port=backend_port)
+    try:
+        proxy.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        proxy.cleanup()
+
+def _run_reqrep_broker(frontend_port: int, backend_port: int):
+    """Run the request-reply broker in a separate process"""
+    broker = EtherReqRepBroker(frontend_port=frontend_port, backend_port=backend_port)
+    try:
+        broker.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        broker.cleanup()
+
 class _Ether:
     """Singleton to manage Ether services behind the scenes."""
     _instance = None
@@ -75,6 +98,8 @@ class _Ether:
     _is_main_session = False
     _pub_socket = None
     _zmq_context = None
+    _pubsub_proxy_process: Optional[multiprocessing.Process] = None
+    _reqrep_broker_process: Optional[multiprocessing.Process] = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -400,6 +425,54 @@ class _Ether:
                     for handler in self._logger.handlers[:]:
                         handler.close()
                         self._logger.removeHandler(handler)
+
+    def _start_pubsub_proxy(self, frontend_port: int = 5555, backend_port: int = 5556):
+        """Start the pubsub proxy process"""
+        self._logger.debug("Starting PubSub proxy")
+        self._pubsub_proxy_process = multiprocessing.Process(
+            target=_run_pubsub_proxy,
+            args=(frontend_port, backend_port),
+            name="PubSubProxy"
+        )
+        self._pubsub_proxy_process.daemon = True
+        self._pubsub_proxy_process.start()
+        time.sleep(0.1)  # Allow proxy to initialize
+        
+    def _start_reqrep_broker(self, frontend_port: int = 5559, backend_port: int = 5560):
+        """Start the request-reply broker process"""
+        self._logger.debug("Starting ReqRep broker")
+        self._reqrep_broker_process = multiprocessing.Process(
+            target=_run_reqrep_broker,
+            args=(frontend_port, backend_port),
+            name="ReqRepBroker"
+        )
+        self._reqrep_broker_process.daemon = True
+        self._reqrep_broker_process.start()
+        time.sleep(0.1)  # Allow broker to initialize
+        
+    def cleanup(self):
+        """Clean up Ether resources"""
+        self._logger.debug("Cleaning up Ether")
+        
+        # Terminate proxy process
+        if self._pubsub_proxy_process and self._pubsub_proxy_process.is_alive():
+            self._logger.debug("Terminating PubSub proxy")
+            self._pubsub_proxy_process.terminate()
+            self._pubsub_proxy_process.join(timeout=1)
+            if self._pubsub_proxy_process.is_alive():
+                self._logger.warning("PubSub proxy didn't terminate, killing")
+                self._pubsub_proxy_process.kill()
+                self._pubsub_proxy_process.join(timeout=1)
+                
+        # Terminate broker process
+        if self._reqrep_broker_process and self._reqrep_broker_process.is_alive():
+            self._logger.debug("Terminating ReqRep broker")
+            self._reqrep_broker_process.terminate()
+            self._reqrep_broker_process.join(timeout=1)
+            if self._reqrep_broker_process.is_alive():
+                self._logger.warning("ReqRep broker didn't terminate, killing")
+                self._reqrep_broker_process.kill()
+                self._reqrep_broker_process.join(timeout=1)
 
 # Create singleton instance but don't start it
 _ether = _Ether()
