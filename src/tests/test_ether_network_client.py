@@ -13,7 +13,6 @@ def run_client(server_host: str):
     
     network_config = EtherNetworkConfig(
         host=server_host,  # Connect to server for ZMQ
-        redis_host=server_host,  # Connect to server's Redis
         pubsub_frontend_port=5555,
         pubsub_backend_port=5556,
         reqrep_frontend_port=5559,

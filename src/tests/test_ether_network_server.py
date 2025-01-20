@@ -2,6 +2,21 @@ from ether import ether
 from ether._internal._config import EtherConfig, EtherInstanceConfig, EtherNetworkConfig
 from ether import ether_save, ether_get
 from ether.utils import get_ether_logger
+import socket
+
+def get_local_ip():
+    """Get the local IP address"""
+    # This gets the local IP that would be used to connect to the internet
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # Doesn't need to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
 
 class NetworkTestService:
     def __init__(self):
@@ -20,18 +35,21 @@ class NetworkTestService:
             return None
         return {"id": id, "value": self.data[id]}
 
-def run_server(host: str = "0.0.0.0"):
+def run_server(host: str = None):
     """Run the Ether server
     
     Args:
-        host: IP to bind to. Use 0.0.0.0 to accept connections from any IP
+        host: IP to bind to.
     """
     logger = get_ether_logger("EtherNetworkServer")
     logger.info(f"Starting server on {host}")
+
+    # Get the local IP address
+    local_ip = get_local_ip()
+    logger.info(f"Local IP address: {local_ip}")
     
     network_config = EtherNetworkConfig(
-        host="0.0.0.0",  # Accept connections from anywhere
-        redis_host="0.0.0.0",  # Allow Redis connections from anywhere
+        host=local_ip,  # Accept connections from anywhere
         pubsub_frontend_port=5555,
         pubsub_backend_port=5556,
         reqrep_frontend_port=5559,
