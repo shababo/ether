@@ -5,7 +5,7 @@ import logging
 from typing import List, Dict, Optional
 from pydantic import BaseModel
 from ether import ether, ether_pub, ether_sub
-from ether.utils import _get_logger
+from ether.utils import get_ether_logger
 
 # Test Models
 class ValidMessage(BaseModel):
@@ -21,7 +21,7 @@ class NestedMessage(BaseModel):
 class PublisherBase:
     def __init__(self, name=None):
         self.name = name or self.__class__.__name__
-        self._logger = _get_logger(self.__class__.__name__, instance_name=name)
+        self._logger = get_ether_logger(self.__class__.__name__, instance_name=name)
 
 # Test Classes
 class ValidPublisher:
@@ -90,7 +90,7 @@ def run_valid_type_test():
         }
         
         # Initialize system with restart to ensure clean state
-        ether.init(config=config, restart=True)
+        ether.tap(config=config, restart=True)
         time.sleep(1.0)  # Allow more time for setup
         
         # Create publisher and send messages
@@ -111,7 +111,7 @@ def run_invalid_type_test():
     """Test invalid type scenarios"""
     try:
         # Initialize system first
-        ether.init(restart=True)
+        ether.tap(restart=True)
         time.sleep(0.5)
         
         publisher = InvalidPublisher()
@@ -159,7 +159,7 @@ def run_type_mismatch_test():
         }
     }
     
-    ether.init(config=config, restart=True)
+    ether.tap(config=config, restart=True)
     time.sleep(0.5)
     
     publisher = MismatchPublisher()

@@ -7,18 +7,28 @@ import redis
 import os
 from multiprocessing import Process
 import zmq
-from typing import Union, Dict
+from typing import Union, Dict, Optional
 from pydantic import BaseModel
 import json
 import signal
+import multiprocessing
 
-from ..utils import _ETHER_PUB_PORT, _get_logger
+from ..utils import _ETHER_PUB_PORT, get_ether_logger
 from ._session import EtherSession, session_process_launcher
 from ._pubsub import _EtherPubSubProxy
 from ..liaison import EtherInstanceLiaison 
 from ._manager import _EtherInstanceManager
 from ._config import EtherConfig
 from ._registry import EtherRegistry
+from ._reqrep import (
+    MDPW_WORKER,
+    W_DISCONNECT,
+    EtherReqRepBroker,
+    MDPC_CLIENT,
+    REPLY_CLIENT_INDEX,
+    REPLY_SERVICE_INDEX,
+    REPLY_DATA_INDEX,
+)
 
 
 # Constants
@@ -42,7 +52,7 @@ def _run_pubsub():
 
 def _run_monitor():
     """Standalone function to run instance monitoring"""
-    logger = _get_logger("EtherMonitor")
+    logger = get_ether_logger("EtherMonitor")
     liaison = EtherInstanceLiaison()
     
     while True:
@@ -60,6 +70,26 @@ def _run_monitor():
             logger.error(f"Error monitoring instances: {e}")
             time.sleep(1)
 
+def _run_pubsub_proxy(frontend_port: int, backend_port: int):
+    """Run the pubsub proxy in a separate process"""
+    proxy = _EtherPubSubProxy(frontend_port=frontend_port, backend_port=backend_port)
+    try:
+        proxy.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        proxy.cleanup()
+
+def _run_reqrep_broker(frontend_port: int = 5559, backend_port: int = 5560):
+    """Run the request-reply broker in a separate process"""
+    broker = EtherReqRepBroker(frontend_port=frontend_port, backend_port=backend_port)
+    try:
+        broker.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        broker.cleanup()
+
 class _Ether:
     """Singleton to manage Ether services behind the scenes."""
     _instance = None
@@ -67,6 +97,7 @@ class _Ether:
     _logger = None
     _redis_port = None
     _redis_pidfile = None
+    _redis_process = None
     _pubsub_process = None
     _monitor_process = None
     _instance_manager = None
@@ -74,12 +105,15 @@ class _Ether:
     _started = False
     _is_main_session = False
     _pub_socket = None
+    _request_socket = None
     _zmq_context = None
+    _pubsub_proxy_process: Optional[multiprocessing.Process] = None
+    _reqrep_broker_process: Optional[multiprocessing.Process] = None
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(_Ether, cls).__new__(cls)
-            cls._instance._logger = _get_logger("Ether")
+            cls._instance._logger = get_ether_logger("Ether")
             cls._instance._logger.debug("Creating new Ether instance")
 
             cls._instance._logger.debug("Initializing Ether instance")
@@ -173,6 +207,11 @@ class _Ether:
             if not self._ensure_pubsub_running():
                 raise RuntimeError("PubSub proxy failed to start")
             
+            # Start ReqRep broker
+            self._logger.debug("Starting ReqRep broker...")
+            if not self._ensure_reqrep_running():
+                raise RuntimeError("ReqRep broker failed to start")
+            
             # Start monitoring
             self._logger.debug("Starting instance monitor...")
             self._monitor_process = Process(target=_run_monitor)
@@ -208,6 +247,9 @@ class _Ether:
 
         self._logger.debug("Setting up publisher...")
         self._setup_publisher()
+
+        self._logger.debug("Setting up request socket...")
+        self._setup_request_socket()
         
         self._started = True
         self._logger.info("Ether system started successfully")
@@ -236,7 +278,19 @@ class _Ether:
             self._pubsub_process.start()
 
         return self._test_pubsub_connection()
+    
+    def _ensure_reqrep_running(self) -> bool:
+        """Ensure ReqRep broker is running"""
+        if self._reqrep_broker_process is None:
+            self._reqrep_broker_process = Process(target=_run_reqrep_broker)
+            self._reqrep_broker_process.daemon = True
+            self._reqrep_broker_process.start()
+        return self._test_reqrep_connection()
 
+    def _test_reqrep_connection(self) -> bool:
+        """Test ReqRep broker connection"""
+        # TODO: Implement actual connection test
+        return True
     
     def _test_redis_connection(self) -> bool:
         """Test Redis connection"""
@@ -335,6 +389,12 @@ class _Ether:
                 if self._instance_manager:
                     self._logger.debug("Stopping all instances...")
                     self._instance_manager.stop_all_instances()
+
+                # close request socket
+                if self._request_socket:
+                    self._logger.debug("Closing request socket...")
+                    self._request_socket.close()
+                    self._request_socket = None
                 
                 # close publishing socket and context
                 if self._pub_socket:
@@ -344,6 +404,8 @@ class _Ether:
                 if self._zmq_context:
                     self._zmq_context.term()
                     self._zmq_context = None
+
+                
                     
                 # Terminate pubsub proxy process
                 if self._pubsub_process:
@@ -355,6 +417,17 @@ class _Ether:
                         self._pubsub_process.kill()
                         self._pubsub_process.join(timeout=1)
                     self._pubsub_process = None
+                    
+                # Terminate ReqRep broker process
+                if self._reqrep_broker_process:
+                    self._logger.debug("Shutting down ReqRep broker")
+                    self._reqrep_broker_process.terminate()
+                    self._reqrep_broker_process.join(timeout=2)
+                    if self._reqrep_broker_process.is_alive():
+                        self._logger.warning("ReqRep broker didn't stop gracefully, killing")
+                        self._reqrep_broker_process.kill()
+                        self._reqrep_broker_process.join(timeout=1)
+                    self._reqrep_broker_process = None
                     
                 # Terminate instance monitoring process
                 if self._monitor_process:
@@ -400,6 +473,196 @@ class _Ether:
                     for handler in self._logger.handlers[:]:
                         handler.close()
                         self._logger.removeHandler(handler)
+
+    def _start_pubsub_proxy(self, frontend_port: int = 5555, backend_port: int = 5556):
+        """Start the pubsub proxy process"""
+        self._logger.debug("Starting PubSub proxy")
+        self._pubsub_proxy_process = multiprocessing.Process(
+            target=_run_pubsub_proxy,
+            args=(frontend_port, backend_port),
+            name="PubSubProxy"
+        )
+        self._pubsub_proxy_process.daemon = True
+        self._pubsub_proxy_process.start()
+        time.sleep(0.1)  # Allow proxy to initialize
+        
+    def _start_reqrep_broker(self, frontend_port: int = 5559, backend_port: int = 5560):
+        """Start the request-reply broker process"""
+        self._logger.debug("Starting ReqRep broker")
+        self._reqrep_broker_process = multiprocessing.Process(
+            target=_run_reqrep_broker,
+            args=(frontend_port, backend_port),
+            name="ReqRepBroker"
+        )
+        self._reqrep_broker_process.daemon = True
+        self._reqrep_broker_process.start()
+        time.sleep(0.1)  # Allow broker to initialize
+        
+    def cleanup(self):
+        """Clean up Ether resources"""
+        self._logger.debug("Cleaning up Ether")
+        
+        # Terminate proxy process
+        if self._pubsub_proxy_process and self._pubsub_proxy_process.is_alive():
+            self._logger.debug("Terminating PubSub proxy")
+            self._pubsub_proxy_process.terminate()
+            self._pubsub_proxy_process.join(timeout=1)
+            if self._pubsub_proxy_process.is_alive():
+                self._logger.warning("PubSub proxy didn't terminate, killing")
+                self._pubsub_proxy_process.kill()
+                self._pubsub_proxy_process.join(timeout=1)
+                
+        # Terminate broker process
+        if self._reqrep_broker_process and self._reqrep_broker_process.is_alive():
+            self._logger.debug("Terminating ReqRep broker")
+            self._reqrep_broker_process.terminate()
+            self._reqrep_broker_process.join(timeout=1)
+            if self._reqrep_broker_process.is_alive():
+                self._logger.warning("ReqRep broker didn't terminate, killing")
+                self._reqrep_broker_process.kill()
+                self._reqrep_broker_process.join(timeout=1)
+
+    def _setup_request_socket(self):
+        """Set up the ZMQ request socket"""
+        self._logger.debug("Setting up request socket")
+        if self._request_socket is None:
+            if self._zmq_context is None:
+                self._zmq_context = zmq.Context()
+            self._request_socket = self._zmq_context.socket(zmq.DEALER)
+            self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
+            self._request_socket.connect("tcp://localhost:5559")
+            self._logger.debug("Request socket connected")
+
+    def request(self, service_class: str, method_name: str, params=None, request_type="get", timeout=2500):
+        """Make a request to a service"""
+        self._logger.debug(f"Request received - Service: {service_class}.{method_name}.{request_type}")
+        
+        if not self._started:
+            self._logger.debug("Cannot make request: Ether system not started")
+            raise RuntimeError("Ether system not started")
+        
+        if self._request_socket is None:
+            self._logger.debug("Request socket not initialized, setting up...")
+            self._setup_request_socket()
+        
+        service_name = f"{service_class}.{method_name}.{request_type}".encode()
+        self._logger.debug(f"Requesting from service: {service_name}")
+        
+        # Update socket timeout if different from default
+        if timeout != 2500:
+            self._request_socket.setsockopt(zmq.RCVTIMEO, timeout)
+        
+        try:
+            request_data = {
+                "timestamp": time.time(),
+                "type": request_type,
+                "params": params or {}
+            }
+            self._request_socket.send_multipart([
+                b'',
+                MDPC_CLIENT,
+                service_name,
+                json.dumps(request_data).encode()
+            ])
+            
+            # Get reply with retries
+            retries = 5
+            while retries > 0:
+                try:
+                    msg = self._request_socket.recv_multipart()
+                    self._logger.debug(f"Reply received: {msg}")
+                    break
+                except Exception as e:
+                    self._logger.warning(f"Error receiving reply: {e}, retries remaining: {retries}")
+                    retries -= 1
+                    if retries == 0:
+                        raise
+                    self._logger.debug(f"Request timed out, retrying ({retries} attempts left)")
+            
+            assert msg[REPLY_CLIENT_INDEX] == MDPC_CLIENT
+            assert msg[REPLY_SERVICE_INDEX] == service_name
+            reply = json.loads(msg[REPLY_DATA_INDEX].decode())
+            
+            if request_type == "get":
+                if isinstance(reply, dict) and reply.get("status") == "error":
+                    return None # TODO: return Ether error message type that can be checked against using isinstance, this allows sending error to client
+            
+            return reply
+        
+        except Exception as e:
+
+            reply = {
+                "status": "error",
+                "error": f"Request failed: {str(e)}"
+            }
+
+            if request_type == "get":
+                if reply.get("status") == "success":
+                    return reply["result"]
+                else:
+                    self._logger.error( f"Request failed: {reply.get('error', 'Unknown error')}")
+                    return None
+            
+            return reply
+
+
+        finally:
+            # Reset timeout to default if it was changed
+            if timeout != 2500:
+                self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
+
+    def _disconnect_req_service(self, service_name: str) -> dict:
+        """Disconnect a request-reply service using MDP protocol"""
+        self._logger.debug(f"Disconnecting service: {service_name}")
+        
+        if not self._started:
+            self._logger.warning("Cannot disconnect: Ether system not started")
+            return {"status": "error", "error": "Ether system not started"}
+        
+        if self._request_socket is None:
+            self._logger.warning("Cannot disconnect: No request socket")
+            return {"status": "error", "error": "No request socket"}
+        
+        # Set shorter timeout for disconnect
+        original_timeout = self._request_socket.getsockopt(zmq.RCVTIMEO)
+        self._request_socket.setsockopt(zmq.RCVTIMEO, 1000)  # 1 second timeout
+        
+        try:
+            # Send disconnect command through client protocol
+            self._request_socket.send_multipart([
+                MDPC_CLIENT,
+                service_name.encode(),
+                W_DISCONNECT  # Use command directly as request data
+            ])
+            self._logger.debug("Disconnect command sent")
+            
+            # Wait for acknowledgment with retries
+            retries = 3
+            while retries > 0:
+                try:
+                    msg = self._request_socket.recv_multipart()
+                    reply = json.loads(msg[REPLY_DATA_INDEX].decode())
+                    self._logger.debug(f"Received disconnect reply: {reply}")
+                    return reply
+                except zmq.error.Again:
+                    retries -= 1
+                    if retries > 0:
+                        self._logger.debug(f"Retrying disconnect response, {retries} attempts left")
+                        time.sleep(0.1)
+                    else:
+                        return {
+                            "status": "success",
+                            "result": {"status": "disconnected", "note": "No acknowledgment received"}
+                        }
+        except Exception as e:
+            self._logger.error(f"Error disconnecting service: {e}")
+            return {
+                "status": "error",
+                "error": f"Disconnect failed: {str(e)}"
+            }
+        finally:
+            # Restore original timeout
+            self._request_socket.setsockopt(zmq.RCVTIMEO, original_timeout)
 
 # Create singleton instance but don't start it
 _ether = _Ether()

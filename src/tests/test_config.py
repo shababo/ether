@@ -25,7 +25,7 @@ def run_mixed_autorun_test():
     }
     
     # Initialize - should only start generator
-    ether.init(config=config, restart=True)
+    ether.tap(config=config, restart=True)
     time.sleep(1)
     
     # Check that only generator is running
@@ -36,7 +36,7 @@ def run_mixed_autorun_test():
     
     # launch processor
     config["instances"]["test_processor"]["autorun"] = True
-    processes = ether.init(restart=True, config=config)
+    processes = ether.tap(restart=True, config=config)
     time.sleep(1)
     
     # Check both are running

@@ -9,7 +9,7 @@ from ether.liaison import EtherInstanceLiaison
 def run_instance_tracking_test():
     """Run instance tracking test in a separate process"""
     # Initialize Ether system with force_reinit
-    ether.init(restart=True)
+    ether.tap(restart=True)
     time.sleep(1)  # Wait for services to start
     
     # Create instances
@@ -58,7 +58,7 @@ def run_instance_tracking_test():
 def run_instance_ttl_test():
     """Run TTL test in a separate process"""
     # Initialize with force_reinit
-    ether.init(restart=True)
+    ether.tap(restart=True)
     
     # Create instance
     generator = DataGenerator(process_id=1)

@@ -4,7 +4,7 @@ import json
 import time
 import os
 
-from ether.utils import _get_logger
+from ether.utils import get_ether_logger
 
 
 class EtherInstanceLiaison:
@@ -22,7 +22,7 @@ class EtherInstanceLiaison:
         self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
         self.instance_key_prefix = "ether:instance:"
         self._ttl = 60  # seconds until instance considered dead
-        self._logger = _get_logger("EtherInstanceLiaison")
+        self._logger = get_ether_logger("EtherInstanceLiaison")
     
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         # __new__ handles initialization

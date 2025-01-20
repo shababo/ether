@@ -36,7 +36,7 @@ def run_manual_generator_test():
     }
     
     # Initialize system and start processor/collector
-    ether.init(config)
+    ether.tap(config)
     
     # Verify processor and collector are running
     instances = tracker.get_active_instances()

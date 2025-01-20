@@ -59,7 +59,7 @@ def test_external_integration():
     }
     
     # Initialize Ether with test configuration
-    ether.init(config=config_dict)
+    ether.tap(config=config_dict)
     
     # Give time for instances to start
     time.sleep(0.1)

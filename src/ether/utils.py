@@ -14,7 +14,7 @@ def _ensure_log_dir(path: Path):
     """Ensure log directory exists"""
     path.mkdir(parents=True, exist_ok=True)
 
-def _get_logger(
+def get_ether_logger(
     process_name: str, 
     run_id: str = None,
     instance_name: str = None, 
@@ -35,7 +35,7 @@ def _get_logger(
     
     # Create formatters with timestamps
     formatter = logging.Formatter(
-        '%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(message)s',
+        '%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(filename)s:%(funcName)s:%(lineno)d - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     

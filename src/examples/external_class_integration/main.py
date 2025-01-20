@@ -30,13 +30,13 @@ def main(config_name):
     """
     # Initialize Ether with our configuration
     config_path = _get_config_path(config_name)
-    ether.init(config=config_path)
+    ether.tap(config=config_path)
 
     # Use the DataGenerator class directly
-    from examples.external_class_integration import DataGenerator
-    generator = DataGenerator(process_id=1)
-    generator.generate_data(data=42)
-    time.sleep(0.1)  # Give time for processing
+    # from examples.external_class_integration import DataGenerator
+    # generator = DataGenerator(process_id=1)
+    # generator.generate_data(data=42)
+    # time.sleep(0.1)  # Give time for processing
 
     # Use the pub function to trigger DataGenerator.generate_data
     # via the automatically launched instance

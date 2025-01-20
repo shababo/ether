@@ -51,14 +51,14 @@ def main(config_name):
 
     # init ether
     config_path = _get_config_path(config_name)
-    ether.init(config=config_path)
+    ether.tap(config=config_path)
 
     # use ether's start method to publish to the "start" topic
     # this will call any method decorated with @ether_start
     ether.start()
     time.sleep(1.002)
 
-    ether.shutdown()
+    # ether.shutdown()
 
     # you can still use your code normally when ether is not running
     # in other words, if your code is still used other places, it will still work

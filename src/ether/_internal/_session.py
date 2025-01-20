@@ -9,7 +9,7 @@ import multiprocessing
 import errno
 from time import sleep
 
-from ether.utils import _get_logger
+from ether.utils import get_ether_logger
 
 class EtherSession: 
     DISCOVERY_PUB_PORT = 301309
@@ -21,7 +21,7 @@ class EtherSession:
         self.context = zmq.Context()
         self.is_discovery_service = False
         self.running = False
-        self._logger = _get_logger(process_name="EtherSession")
+        self._logger = get_ether_logger(process_name="EtherSession")
         
         self.metadata = {
             "session_id": self.session_id,
