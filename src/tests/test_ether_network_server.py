@@ -3,6 +3,36 @@ from ether._internal._config import EtherConfig, EtherInstanceConfig, EtherNetwo
 from ether import ether_save, ether_get
 from ether.utils import get_ether_logger
 import socket
+import urllib.request
+import json
+
+def get_public_ip():
+    """Get the public IP address using an IP lookup service"""
+    try:
+        # Try multiple IP lookup services in case one fails
+        services = [
+            'https://api.ipify.org?format=json',
+            'https://api.myip.com',
+            'https://api.ip.sb/jsonip'
+        ]
+        
+        for service in services:
+            try:
+                response = urllib.request.urlopen(service, timeout=2)
+                data = json.loads(response.read())
+                # Different services use different key names
+                ip = data.get('ip') or data.get('ipAddress')
+                if ip:
+                    return ip
+            except:
+                continue
+                
+        # Fallback to local IP if public IP lookup fails
+        return get_local_ip()
+        
+    except Exception as e:
+        print(f"Error getting public IP: {e}")
+        return None
 
 def get_local_ip():
     """Get the local IP address"""
@@ -44,12 +74,19 @@ def run_server(host: str = None):
     logger = get_ether_logger("EtherNetworkServer")
     logger.info(f"Starting server on {host}")
 
-    # Get the local IP address
+    # Get both local and public IPs
     local_ip = get_local_ip()
+    public_ip = get_public_ip()
+    
     logger.info(f"Local IP address: {local_ip}")
+    logger.info(f"Public IP address: {public_ip}")
+    
+    # Use public IP if available, otherwise fall back to local IP
+    server_ip = public_ip or local_ip
+    logger.info(f"Using IP address: {server_ip}")
     
     network_config = EtherNetworkConfig(
-        host=local_ip,  # Accept connections from anywhere
+        host=server_ip,  # Use public/local IP
         pubsub_frontend_port=5555,
         pubsub_backend_port=5556,
         reqrep_frontend_port=5559,
