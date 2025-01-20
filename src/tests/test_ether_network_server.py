@@ -5,6 +5,7 @@ from ether.utils import get_ether_logger
 import socket
 import urllib.request
 import json
+import time
 
 def get_public_ip():
     """Get the public IP address using an IP lookup service"""
@@ -108,9 +109,7 @@ def run_server(host: str = None):
         ether.tap(config=config)
         logger.info("Server running. Press Ctrl+C to stop.")
         
-        # Keep the server running
-        while True:
-            input()
+        time.sleep(10)
             
     except KeyboardInterrupt:
         logger.info("Shutting down server...")
