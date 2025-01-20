@@ -239,22 +239,22 @@ class _Ether:
             liaison.deregister_all()
             liaison.store_registry_config({})
 
-            if config and config.instances:
-                self._start_instances(config)
+            if self._config and self._config.instances:
+                self._start_instances()
 
         else:
             self._started = True
         
             # Store registry config in Redis if present
-            if config and config.registry:
+            if self._config and self._config.registry:
                 # Convert the entire registry config to a dict
                 registry_dict = {
                     class_path: class_config.model_dump()
-                    for class_path, class_config in config.registry.items()
+                    for class_path, class_config in self._config.registry.items()
                 }
                 liaison = EtherInstanceLiaison()
                 liaison.store_registry_config(registry_dict)
-                EtherRegistry().process_registry_config(config.registry)
+                EtherRegistry().process_registry_config(self._config.registry)
             
             # Process any pending classes
             EtherRegistry().process_pending_classes()
@@ -370,14 +370,14 @@ class _Ether:
         else:
             raise RuntimeError("Redis server failed to start")
     
-    def _start_instances(self, config: EtherConfig = None):
+    def _start_instances(self):
         """Start instances from configuration"""
         
         self._logger.debug("Starting instances")
         if not self._instance_manager:
-            self._instance_manager = _EtherInstanceManager(config=config)
+            self._instance_manager = _EtherInstanceManager(config=self._config)
         else:
-            self._instance_manager.launch_instances(config)
+            self._instance_manager.launch_instances(self._config)
         # Wait for instances to be ready
         time.sleep(1.0)
 
