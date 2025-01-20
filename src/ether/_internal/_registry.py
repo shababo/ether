@@ -573,96 +573,96 @@ def add_ether_functionality(cls):
         self.cleanup()
     cls.__del__ = new_del
     
-    def _reconnect_worker_socket(self):
-        """Reconnect the worker socket to broker"""
-        self._logger.debug("Reconnecting worker socket")
+    # def _reconnect_worker_socket(self):
+    #     """Reconnect the worker socket to broker"""
+    #     self._logger.debug("Reconnecting worker socket")
         
-        if self._worker_socket:
-            self._poller.unregister(self._worker_socket)  # Use instance poller
-            self._worker_socket.close()
+    #     if self._worker_socket:
+    #         self._poller.unregister(self._worker_socket)  # Use instance poller
+    #         self._worker_socket.close()
         
-        self._worker_socket = self._zmq_context.socket(zmq.DEALER)
-        self._worker_socket.linger = 0  # Don't wait on close
-        self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
-        self._worker_socket.connect("tcp://localhost:5560")
-        self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
+    #     self._worker_socket = self._zmq_context.socket(zmq.DEALER)
+    #     self._worker_socket.linger = 0  # Don't wait on close
+    #     self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
+    #     self._worker_socket.connect("tcp://localhost:5560")
+    #     self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
         
-        # Re-register all services
-        for metadata in self._worker_metadata.values():
-            service_name = metadata.service_name.encode()
-            self._logger.debug(f"Re-registering service: {service_name}")
-            self._worker_socket.send_multipart([
-                b'',
-                MDPW_WORKER,
-                W_READY,
-                service_name
-            ])
-            if metadata.heartbeat:
-                metadata.heartbeat_liveness = 3
-                metadata.last_heartbeat = time.time()
+    #     # Re-register all services
+    #     for metadata in self._worker_metadata.values():
+    #         service_name = metadata.service_name.encode()
+    #         self._logger.debug(f"Re-registering service: {service_name}")
+    #         self._worker_socket.send_multipart([
+    #             b'',
+    #             MDPW_WORKER,
+    #             W_READY,
+    #             service_name
+    #         ])
+    #         if metadata.heartbeat:
+    #             metadata.heartbeat_liveness = 3
+    #             metadata.last_heartbeat = time.time()
     
-    def _reconnect_request_socket(self):
-        """Reconnect the request socket to the broker"""
-        self._logger.debug("Reconnecting request socket")
-        if self._request_socket:
-            self._request_poller.unregister(self._request_socket)
-            self._request_socket.close()
+    # def _reconnect_request_socket(self):
+    #     """Reconnect the request socket to the broker"""
+    #     self._logger.debug("Reconnecting request socket")
+    #     if self._request_socket:
+    #         self._request_poller.unregister(self._request_socket)
+    #         self._request_socket.close()
         
-        self._request_socket = self._zmq_context.socket(zmq.REQ)
-        self._request_socket.linger = 0
-        self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
-        self._request_socket.connect("tcp://localhost:5559")
-        self._request_poller.register(self._request_socket, zmq.POLLIN)
+    #     self._request_socket = self._zmq_context.socket(zmq.REQ)
+    #     self._request_socket.linger = 0
+    #     self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
+    #     self._request_socket.connect("tcp://localhost:5559")
+    #     self._request_poller.register(self._request_socket, zmq.POLLIN)
 
-    def request(self, service_name: str, method: str, params=None, request_type="get", timeout=2500):
-        """Make a request to a service with improved error handling"""
-        if not self._request_socket:
-            self.setup_sockets()
+    # def request(self, service_name: str, method: str, params=None, request_type="get", timeout=2500):
+    #     """Make a request to a service with improved error handling"""
+    #     if not self._request_socket:
+    #         self.setup_sockets()
         
-        # Build full service name: ServiceName.method.get/save
-        service = f"{service_name}.{method}.{request_type}".encode()
+    #     # Build full service name: ServiceName.method.get/save
+    #     service = f"{service_name}.{method}.{request_type}".encode()
         
-        request_data = {
-            "timestamp": time.time(),
-            "type": request_type,
-            "params": params or {}
-        }
+    #     request_data = {
+    #         "timestamp": time.time(),
+    #         "type": request_type,
+    #         "params": params or {}
+    #     }
         
-        retries = 3
-        while retries > 0:
-            try:
-                # Send request with MDP client protocol
-                self._request_socket.send_multipart([
-                    MDPC_CLIENT,  # Protocol identifier
-                    service,      # Service name
-                    json.dumps(request_data).encode()  # Request data
-                ])
+    #     retries = 3
+    #     while retries > 0:
+    #         try:
+    #             # Send request with MDP client protocol
+    #             self._request_socket.send_multipart([
+    #                 MDPC_CLIENT,  # Protocol identifier
+    #                 service,      # Service name
+    #                 json.dumps(request_data).encode()  # Request data
+    #             ])
                 
-                # Wait for reply with timeout
-                if self._request_poller.poll(timeout):
-                    msg = self._request_socket.recv_multipart()
-                    # Verify protocol and service
-                    assert msg[0] == MDPC_CLIENT
-                    assert msg[1] == service
-                    reply = json.loads(msg[2].decode())
-                    return reply
-                else:
-                    self._logger.warning("No reply, reconnecting...")
-                    self._reconnect_request_socket()
-                    retries -= 1
+    #             # Wait for reply with timeout
+    #             if self._request_poller.poll(timeout):
+    #                 msg = self._request_socket.recv_multipart()
+    #                 # Verify protocol and service
+    #                 assert msg[0] == MDPC_CLIENT
+    #                 assert msg[1] == service
+    #                 reply = json.loads(msg[2].decode())
+    #                 return reply
+    #             else:
+    #                 self._logger.warning("No reply, reconnecting...")
+    #                 self._reconnect_request_socket()
+    #                 retries -= 1
                     
-            except zmq.error.Again:
-                self._logger.warning(f"Request timed out, retries left: {retries}")
-                self._reconnect_request_socket()
-                retries -= 1
-            except Exception as e:
-                self._logger.error(f"Request error: {e}")
-                self._reconnect_request_socket()
-                retries -= 1
+    #         except zmq.error.Again:
+    #             self._logger.warning(f"Request timed out, retries left: {retries}")
+    #             self._reconnect_request_socket()
+    #             retries -= 1
+    #         except Exception as e:
+    #             self._logger.error(f"Request error: {e}")
+    #             self._reconnect_request_socket()
+    #             retries -= 1
                 
-        raise TimeoutError("Request failed after all retries")
+    #     raise TimeoutError("Request failed after all retries")
     
-    return cls
+    # return cls
 
 
 def _create_model_from_signature(func) -> Type[BaseModel]:

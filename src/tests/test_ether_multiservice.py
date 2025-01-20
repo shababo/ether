@@ -16,7 +16,8 @@ from ether._internal._reqrep import (
     REQUEST_DATA_INDEX,
     REPLY_CLIENT_INDEX,
     REPLY_SERVICE_INDEX,
-    REPLY_DATA_INDEX
+    REPLY_DATA_INDEX,
+    W_HEARTBEAT
 )
 from ether.utils import get_ether_logger
 
@@ -25,6 +26,7 @@ def run_worker(service_name):
     logger = get_ether_logger(f"Worker-{service_name.decode()}")
     context = zmq.Context()
     socket = context.socket(zmq.DEALER)
+    socket.linger = 0
     socket.setsockopt(zmq.RCVTIMEO, 2500)
     socket.connect("tcp://localhost:5560")
     
@@ -45,27 +47,33 @@ def run_worker(service_name):
                 logger.debug(f"Received request: {msg}")
                 
                 assert msg[REQUEST_WORKER_INDEX] == MDPW_WORKER
-                assert msg[REQUEST_COMMAND_INDEX] == W_REQUEST
-                client_id = msg[REQUEST_CLIENT_ID_INDEX]
-                request = json.loads(msg[REQUEST_DATA_INDEX].decode())
-                logger.debug(f"Decoded request: {request}")
+                command = msg[REQUEST_COMMAND_INDEX]
                 
-                # Send reply with request details and service name
-                reply_data = {
-                    "result": "success",
-                    "service": service_name.decode(),
-                    "request_id": request["request_id"],
-                    "client_id": request["client_id"]
-                }
-                logger.debug(f"Sending reply: {reply_data}")
-                socket.send_multipart([
-                    b'',
-                    MDPW_WORKER,
-                    W_REPLY,
-                    service_name,
-                    client_id,
-                    json.dumps(reply_data).encode()
-                ])
+                if command == W_REQUEST:
+                    client_id = msg[REQUEST_CLIENT_ID_INDEX]
+                    request = json.loads(msg[REQUEST_DATA_INDEX].decode())
+                    logger.debug(f"Decoded request: {request}")
+                    
+                    # Send reply with request details and service name
+                    reply_data = {
+                        "result": "success",
+                        "service": service_name.decode(),
+                        "request_id": request["request_id"],
+                        "client_id": request["client_id"]
+                    }
+                    logger.debug(f"Sending reply: {reply_data}")
+                    socket.send_multipart([
+                        b'',
+                        MDPW_WORKER,
+                        W_REPLY,
+                        service_name,
+                        client_id,
+                        json.dumps(reply_data).encode()
+                    ])
+                elif command == W_HEARTBEAT:
+                    # Just acknowledge heartbeat by doing nothing
+                    logger.debug("Received heartbeat")
+                    continue
                 
             except zmq.error.Again:
                 # Normal timeout, return success
@@ -73,7 +81,7 @@ def run_worker(service_name):
                 
     except Exception as e:
         logger.error(f"Worker error: {e}")
-        return False
+        raise e
     finally:
         socket.close()
         context.term()
