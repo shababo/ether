@@ -202,6 +202,8 @@ class _Ether:
         except Exception as e:
             self._logger.warning(f"Error checking IP addresses: {e}, using original host")
 
+        self._logger.debug(f"Processed Config: {self._config}")
+
         # Start session with network config
         try:
             self._ether_session_process = Process(
