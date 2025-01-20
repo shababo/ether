@@ -95,6 +95,7 @@ class _Ether:
     _logger = None
     _redis_port = None
     _redis_pidfile = None
+    _redis_process = None
     _pubsub_process = None
     _monitor_process = None
     _instance_manager = None
