@@ -1,6 +1,7 @@
 import zmq
 import time
 import uuid
+import json
 from typing import Dict, Optional
 from ..utils import get_ether_logger
 
@@ -86,6 +87,37 @@ class EtherReqRepBroker:
         service_name = msg[1].decode()  # Service name comes after protocol
         request = msg[2]  # Request data is third frame
         
+        self._logger.debug(f"Processing client message: protocol={msg[0]}, service={service_name}, request={request}")
+        
+        # Handle disconnect command
+        if W_DISCONNECT in request:
+            self._logger.info(f"Processing disconnect request for service: {service_name}")
+            worker_count = 0
+            # Find all workers for this service and delete them
+            for worker_id, worker in list(self.workers.items()):
+                if worker.service == service_name:
+                    self._logger.debug(f"Disconnecting worker {worker_id} for service {service_name}")
+                    self._delete_worker(worker_id)
+                    worker_count += 1
+            
+            self._logger.info(f"Disconnected {worker_count} workers for service {service_name}")
+            
+            # Send success response
+            response = {
+                "status": "success",
+                "result": {
+                    "status": "disconnected",
+                    "workers_disconnected": worker_count
+                }
+            }
+            self._logger.debug(f"Sending disconnect response: {response}")
+            self.frontend.send_multipart([
+                MDPC_CLIENT,
+                service_name.encode(),
+                json.dumps(response).encode()
+            ])
+            return
+        
         service = self.services.get(service_name)
         if not service:
             service = Service(service_name)
@@ -108,6 +140,40 @@ class EtherReqRepBroker:
         
         command = msg.pop(0)
         worker_id = sender.hex()
+        
+        self._logger.debug(f"Processing worker message: worker_id={worker_id}, command={command}")
+
+        if command == W_HEARTBEAT:
+            if worker_id in self.workers:
+                worker = self.workers[worker_id]
+                worker.expiry = time.time() + 5
+                worker.liveness = self.HEARTBEAT_LIVENESS
+                self._logger.debug(f"Updated heartbeat for worker {worker_id}")
+                return
+
+        elif command == W_DISCONNECT:
+            self._logger.info(f"Processing worker disconnect command from {worker_id}")
+            if worker_id in self.workers:
+                # Send acknowledgment before disconnecting
+                self._logger.debug(f"Acknowledging disconnect from worker {worker_id}")
+                service_name = msg.pop(0).decode() if msg else None
+                if service_name:
+                    response = {
+                        "status": "success",
+                        "result": {"status": "disconnected", "worker_id": worker_id}
+                    }
+                    self._logger.debug(f"Sending disconnect acknowledgment: {response}")
+                    self.frontend.send_multipart([
+                        MDPC_CLIENT,
+                        service_name.encode(),
+                        json.dumps(response).encode()
+                    ])
+                self._delete_worker(worker_id)
+                self._logger.info(f"Worker {worker_id} disconnected")
+                return
+            else:
+                self._logger.warning(f"Disconnect request from unknown worker {worker_id}")
+
         full_service_name = msg.pop(0).decode()
         
         service = self.services.get(full_service_name)
@@ -145,15 +211,6 @@ class EtherReqRepBroker:
                 service.workers.append(worker)
                 self._dispatch_requests(service)
 
-        elif command == W_HEARTBEAT:
-            if worker_id in self.workers:
-                worker = self.workers[worker_id]
-                worker.expiry = time.time() + 5
-                worker.liveness = self.HEARTBEAT_LIVENESS
-
-        elif command == W_DISCONNECT:
-            self._delete_worker(worker_id)
-
     def _delete_worker(self, worker_id: str):
         """Delete worker from all data structures"""
         if worker_id in self.workers:
@@ -187,6 +244,7 @@ class EtherReqRepBroker:
     def _dispatch_requests(self, service: Service):
         """Dispatch requests with improved error handling"""
         while service.requests and service.workers:
+        
             client_socket, request = service.requests.pop(0)
             worker = service.workers.pop(0)
             
@@ -208,6 +266,24 @@ class EtherReqRepBroker:
                 service.requests.insert(0, (client_socket, request))
                 service.workers.append(worker)
                 self._logger.warning("Failed to dispatch request, will retry")
+                
+        # If we have requests but no workers, send error to clients
+        while service.requests and not service.workers:
+            client_socket, request = service.requests.pop(0)
+            error_reply = {
+                "status": "error",
+                "error": "Service not available - no workers",
+                "service": service.name
+            }
+            try:
+                client_socket.send_multipart([
+                    MDPC_CLIENT,
+                    service.name.encode(),
+                    json.dumps(error_reply).encode()
+                ])
+                self._logger.warning(f"Sent service unavailable error to client for {service.name}")
+            except Exception as e:
+                self._logger.error(f"Failed to send error reply to client: {e}")
 
     def run(self):
         """Run the broker loop"""
@@ -220,11 +296,15 @@ class EtherReqRepBroker:
                 events = dict(self.poller.poll(self.HEARTBEAT_INTERVAL))
                 
                 if self.frontend in events:
+                    self._logger.debug(f"Frontend in events: {self.frontend}")
                     msg = self.frontend.recv_multipart()
+                    self._logger.debug(f"Frontend resply msg: {msg}")
                     self._process_client(msg)
                     
                 if self.backend in events:
+                    self._logger.debug(f"Backend in events: {self.backend}")
                     msg = self.backend.recv_multipart()
+                    self._logger.debug(f"Backend reply msg: {msg}")
                     self._process_worker(msg[0], msg[1], msg[2:])
                 
                 self._purge_workers()

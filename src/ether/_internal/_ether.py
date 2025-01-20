@@ -21,6 +21,8 @@ from ._manager import _EtherInstanceManager
 from ._config import EtherConfig
 from ._registry import EtherRegistry
 from ._reqrep import (
+    MDPW_WORKER,
+    W_DISCONNECT,
     EtherReqRepBroker,
     MDPC_CLIENT,
     REPLY_CLIENT_INDEX,
@@ -571,7 +573,7 @@ class _Ether:
                     self._logger.debug(f"Reply received: {msg}")
                     break
                 except Exception as e:
-                    self._logger.error(f"Error receiving reply: {e}, retries remaining: {retries}")
+                    self._logger.warning(f"Error receiving reply: {e}, retries remaining: {retries}")
                     retries -= 1
                     if retries == 0:
                         raise
@@ -581,15 +583,86 @@ class _Ether:
             assert msg[REPLY_SERVICE_INDEX] == service_name
             reply = json.loads(msg[REPLY_DATA_INDEX].decode())
             
-            if reply.get("status") == "success":
-                return reply["result"]
-            else:
-                raise Exception(f"Request failed: {reply.get('error', 'Unknown error')}")
+            if request_type == "get":
+                if isinstance(reply, dict) and reply.get("status") == "error":
+                    return None # TODO: return Ether error message type that can be checked against using isinstance, this allows sending error to client
             
+            return reply
+        
+        except Exception as e:
+
+            reply = {
+                "status": "error",
+                "error": f"Request failed: {str(e)}"
+            }
+
+            if request_type == "get":
+                if reply.get("status") == "success":
+                    return reply["result"]
+                else:
+                    self._logger.error( f"Request failed: {reply.get('error', 'Unknown error')}")
+                    return None
+            
+            return reply
+
+
         finally:
             # Reset timeout to default if it was changed
             if timeout != 2500:
                 self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
+
+    def _disconnect_req_service(self, service_name: str) -> dict:
+        """Disconnect a request-reply service using MDP protocol"""
+        self._logger.debug(f"Disconnecting service: {service_name}")
+        
+        if not self._started:
+            self._logger.warning("Cannot disconnect: Ether system not started")
+            return {"status": "error", "error": "Ether system not started"}
+        
+        if self._request_socket is None:
+            self._logger.warning("Cannot disconnect: No request socket")
+            return {"status": "error", "error": "No request socket"}
+        
+        # Set shorter timeout for disconnect
+        original_timeout = self._request_socket.getsockopt(zmq.RCVTIMEO)
+        self._request_socket.setsockopt(zmq.RCVTIMEO, 1000)  # 1 second timeout
+        
+        try:
+            # Send disconnect command through client protocol
+            self._request_socket.send_multipart([
+                MDPC_CLIENT,
+                service_name.encode(),
+                W_DISCONNECT  # Use command directly as request data
+            ])
+            self._logger.debug("Disconnect command sent")
+            
+            # Wait for acknowledgment with retries
+            retries = 3
+            while retries > 0:
+                try:
+                    msg = self._request_socket.recv_multipart()
+                    reply = json.loads(msg[REPLY_DATA_INDEX].decode())
+                    self._logger.debug(f"Received disconnect reply: {reply}")
+                    return reply
+                except zmq.error.Again:
+                    retries -= 1
+                    if retries > 0:
+                        self._logger.debug(f"Retrying disconnect response, {retries} attempts left")
+                        time.sleep(0.1)
+                    else:
+                        return {
+                            "status": "success",
+                            "result": {"status": "disconnected", "note": "No acknowledgment received"}
+                        }
+        except Exception as e:
+            self._logger.error(f"Error disconnecting service: {e}")
+            return {
+                "status": "error",
+                "error": f"Disconnect failed: {str(e)}"
+            }
+        finally:
+            # Restore original timeout
+            self._request_socket.setsockopt(zmq.RCVTIMEO, original_timeout)
 
 # Create singleton instance but don't start it
 _ether = _Ether()

@@ -3,19 +3,18 @@ import time
 from typing import List, Optional
 from ether import ether
 from ether._internal._config import EtherConfig, EtherInstanceConfig
-from ether._internal._registry import _ether_get, _ether_save
+from ether import ether_get, ether_save  
 from ether.utils import get_ether_logger
 import zmq
 from ether.liaison import EtherInstanceLiaison
 
-@pytest.mark.skip(reason="Not a test class")
 class HeartbeatService:
     def __init__(self):
         self.data = {}
         self.counter = 0
         self.slow_until = 0
     
-    @_ether_get(heartbeat=True)  # Enable heartbeats
+    @ether_get(heartbeat=True)  # Changed from _ether_get
     def get_count(self) -> int:
         """Get current counter value"""
         # Add artificial delay if we're in slow mode
@@ -23,13 +22,13 @@ class HeartbeatService:
             time.sleep(0.1)  # Sleep 100ms
         return self.counter
     
-    @_ether_save(heartbeat=True)  # Enable heartbeats
+    @ether_save(heartbeat=True)  # Changed from _ether_save
     def increment(self, amount: int = 1) -> dict:
         """Increment counter by amount"""
         self.counter += amount
         return {"counter": self.counter}
     
-    @_ether_save(heartbeat=True)
+    @ether_save(heartbeat=True)  # Changed from _ether_save
     def set_slow(self, duration: float = 1.0) -> dict:
         """Make the service slow for a duration"""
         self.slow_until = time.time() + duration

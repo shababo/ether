@@ -35,7 +35,7 @@ def get_ether_logger(
     
     # Create formatters with timestamps
     formatter = logging.Formatter(
-        '%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(message)s',
+        '%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(filename)s:%(funcName)s:%(lineno)d - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     

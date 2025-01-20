@@ -71,17 +71,14 @@ def test_ether_get_with_params():
         
         # Test get_item with invalid ID
         logger.debug("Testing get_item with invalid ID")
-        with pytest.raises(Exception) as exc:
-            ether.get("DataService", "get_item", params={"id": 999})
-        logger.debug(f"get_item error: {str(exc.value)}")
-        assert "Item 999 not found" in str(exc.value)
+        
+        reply_invalid_id = ether.get("DataService", "get_item", params={"id": 999})
+        assert reply_invalid_id is None
         
         # Test get_item with invalid parameter type
         logger.debug("Testing get_item with invalid parameter type")
-        with pytest.raises(Exception) as exc:
-            ether.get("DataService", "get_item", params={"id": "not an int"})
-        logger.debug(f"get_item validation error: {str(exc.value)}")
-        assert "Invalid parameters" in str(exc.value)
+        reply_validation_error = ether.get("DataService", "get_item", params={"id": "not an int"})
+        assert reply_validation_error is None
         
         # Test get_items_by_tag with required parameter
         logger.debug("Testing get_items_by_tag with required parameter")

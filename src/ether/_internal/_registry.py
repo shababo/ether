@@ -388,11 +388,11 @@ def add_ether_functionality(cls):
                                 self._logger.debug(f"Executing {service_name} with args: {args}")
                                 
                                 # Call function with validated parameters
-                                result = metadata.func(self, **args)
-                                reply_data = {
-                                    "result": result,
-                                    "status": "success"
-                                }
+                                reply_data = metadata.func(self, **args)
+                                # reply_data = {
+                                #     "result": result,
+                                #     "status": "success"
+                                # }
                                 self._logger.debug(f"Successfully executed {service_name}")
                                 
                             except ValidationError as e:
@@ -408,7 +408,7 @@ def add_ether_functionality(cls):
                                     "status": "error"
                                 }
                                 
-                            self._logger.debug(f"Sending reply for {service_name}")
+                            self._logger.debug(f"Sending reply for {service_name}, msg: {[b'', MDPW_WORKER, W_REPLY, service_name.encode(), client_id, json.dumps(reply_data).encode()]}")
                             self._worker_socket.send_multipart([
                                 b'',
                                 MDPW_WORKER,
@@ -445,6 +445,47 @@ def add_ether_functionality(cls):
                                 self._logger.warning(f"Lost connection for {method._reqrep_metadata.service_name}, reconnecting...")
                                 self._reconnect_worker_socket()
                                 break
+
+    def _reconnect_worker_socket(self):
+        """Reconnect the worker socket to broker"""
+        self._logger.debug("Reconnecting worker socket")
+        
+        if self._worker_socket:
+            self._poller.unregister(self._worker_socket)  # Use instance poller
+            self._worker_socket.close()
+        
+        self._worker_socket = self._zmq_context.socket(zmq.DEALER)
+        self._worker_socket.linger = 0  # Don't wait on close
+        self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
+        self._worker_socket.connect("tcp://localhost:5560")
+        self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
+        
+        # Re-register all services
+        for metadata in self._worker_metadata.values():
+            service_name = metadata.service_name.encode()
+            self._logger.debug(f"Re-registering service: {service_name}")
+            self._worker_socket.send_multipart([
+                b'',
+                MDPW_WORKER,
+                W_READY,
+                service_name
+            ])
+            if metadata.heartbeat:
+                metadata.heartbeat_liveness = 3
+                metadata.last_heartbeat = time.time()
+    
+    def _reconnect_request_socket(self):
+        """Reconnect the request socket to the broker"""
+        self._logger.debug("Reconnecting request socket")
+        if self._request_socket:
+            self._request_poller.unregister(self._request_socket)
+            self._request_socket.close()
+        
+        self._request_socket = self._zmq_context.socket(zmq.REQ)
+        self._request_socket.linger = 0
+        self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
+        self._request_socket.connect("tcp://localhost:5559")
+        self._request_poller.register(self._request_socket, zmq.POLLIN)
 
     # Add message tracking
     def track_message(self, publisher_id: str, sequence: int, timestamp: float):
@@ -549,6 +590,8 @@ def add_ether_functionality(cls):
     cls.setup_sockets = setup_sockets
     cls._handle_subscriber_message = _handle_subscriber_message
     cls._handle_worker_message = _handle_worker_message
+    cls._reconnect_worker_socket = _reconnect_worker_socket
+    cls._reconnect_request_socket = _reconnect_request_socket
     cls.track_message = track_message
     cls.save_results = save_results
     cls.run = run
@@ -573,46 +616,7 @@ def add_ether_functionality(cls):
         self.cleanup()
     cls.__del__ = new_del
     
-    # def _reconnect_worker_socket(self):
-    #     """Reconnect the worker socket to broker"""
-    #     self._logger.debug("Reconnecting worker socket")
-        
-    #     if self._worker_socket:
-    #         self._poller.unregister(self._worker_socket)  # Use instance poller
-    #         self._worker_socket.close()
-        
-    #     self._worker_socket = self._zmq_context.socket(zmq.DEALER)
-    #     self._worker_socket.linger = 0  # Don't wait on close
-    #     self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
-    #     self._worker_socket.connect("tcp://localhost:5560")
-    #     self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
-        
-    #     # Re-register all services
-    #     for metadata in self._worker_metadata.values():
-    #         service_name = metadata.service_name.encode()
-    #         self._logger.debug(f"Re-registering service: {service_name}")
-    #         self._worker_socket.send_multipart([
-    #             b'',
-    #             MDPW_WORKER,
-    #             W_READY,
-    #             service_name
-    #         ])
-    #         if metadata.heartbeat:
-    #             metadata.heartbeat_liveness = 3
-    #             metadata.last_heartbeat = time.time()
     
-    # def _reconnect_request_socket(self):
-    #     """Reconnect the request socket to the broker"""
-    #     self._logger.debug("Reconnecting request socket")
-    #     if self._request_socket:
-    #         self._request_poller.unregister(self._request_socket)
-    #         self._request_socket.close()
-        
-    #     self._request_socket = self._zmq_context.socket(zmq.REQ)
-    #     self._request_socket.linger = 0
-    #     self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
-    #     self._request_socket.connect("tcp://localhost:5559")
-    #     self._request_poller.register(self._request_socket, zmq.POLLIN)
 
     # def request(self, service_name: str, method: str, params=None, request_type="get", timeout=2500):
     #     """Make a request to a service with improved error handling"""
@@ -662,7 +666,7 @@ def add_ether_functionality(cls):
                 
     #     raise TimeoutError("Request failed after all retries")
     
-    # return cls
+    return cls
 
 
 def _create_model_from_signature(func) -> Type[BaseModel]:
