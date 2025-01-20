@@ -80,11 +80,6 @@ def run_server(host: str = None):
     
     network_config = EtherNetworkConfig(
         host=ip,  # Use public/local IP
-        pubsub_frontend_port=5555,
-        pubsub_backend_port=5556,
-        reqrep_frontend_port=5559,
-        reqrep_backend_port=5560,
-        redis_port=6379
     )
     
     config = EtherConfig(

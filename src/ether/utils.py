@@ -1,8 +1,8 @@
 import logging
 from pathlib import Path
 import os
-
-
+import socket
+import requests
 # Standard ports for Ether communication
 _ETHER_SUB_PORT = 5555  # subscribe to this port
 _ETHER_PUB_PORT = 5556  # publish to this port
@@ -77,3 +77,40 @@ def get_ether_logger(
     logger.debug(f"Logging to file: {log_file}")
     
     return logger
+
+def get_ip_address(use_public: bool = True) -> str:
+    """Get IP address
+    
+    Args:
+        use_public: If True, attempts to get public IP. Falls back to local IP if failed.
+    
+    Returns:
+        IP address as string
+    """
+    if use_public:
+        # Try multiple IP lookup services in case one is down
+        services = [
+            "https://api.ipify.org",
+            "https://api.my-ip.io/ip",
+            "https://checkip.amazonaws.com",
+        ]
+        for service in services:
+            try:
+                response = requests.get(service, timeout=2)
+                if response.status_code == 200:
+                    return response.text.strip()
+            except:
+                continue
+        
+
+    # Get local IP as fallback
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # Doesn't need to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP

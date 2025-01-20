@@ -89,6 +89,7 @@ class EtherSession:
         poller = zmq.Poller()
         poller.register(self.rep_socket, zmq.POLLIN)
 
+        self._logger.debug(f"Running discovery service, ether_id: {self.ether_id}")
         while self.running:
             try:
                 self.pub_socket.send_json({
@@ -146,33 +147,34 @@ class EtherSession:
             context.term()
 
     def _connect_to_discovery(self) -> bool:
-        # print(f"Process {os.getpid()}: Attempting to connect to discovery...")
-        sub_socket = self.context.socket(zmq.SUB)
-        req_socket = self.context.socket(zmq.REQ)
-        
+        """Connect to an existing discovery service"""
         try:
-            sub_socket.setsockopt(zmq.LINGER, 0)
-            req_socket.setsockopt(zmq.LINGER, 0)
-            sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
+            # Create subscriber socket
+            self.sub_socket = self.context.socket(zmq.SUB)
+            # Should use network.host here
+            self.sub_socket.connect(f"tcp://{self.network.host}:{self.network.session_discovery_port}")
+            self.sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
             
-            sub_socket.connect(f"tcp://{self.network.host}:{self.network.session_discovery_port}")
-            req_socket.connect(f"tcp://{self.network.host}:{self.network.session_query_port}")
-
+            # Create request socket
+            self.req_socket = self.context.socket(zmq.REQ)
+            # And here
+            self.req_socket.connect(f"tcp://{self.network.host}:{self.network.session_query_port}")
+            
             poller = zmq.Poller()
-            poller.register(sub_socket, zmq.POLLIN)
+            poller.register(self.sub_socket, zmq.POLLIN)
             
             # print(f"Process {os.getpid()}: Checking for announcements...")
             events = dict(poller.poll(200))  # reduced timeout
-            if sub_socket in events:
+            if self.sub_socket in events:
                 # print(f"Process {os.getpid()}: Found existing service via SUB")
                 return True
 
             # print(f"Process {os.getpid()}: Trying direct query...")
-            req_socket.send_json({"type": "query"})
+            self.req_socket.send_json({"type": "query"})
             poller = zmq.Poller()
-            poller.register(req_socket, zmq.POLLIN)
+            poller.register(self.req_socket, zmq.POLLIN)
             events = dict(poller.poll(200))  # reduced timeout
-            if req_socket in events:
+            if self.req_socket in events:
                 print(f"Process {os.getpid()}: Found existing service via REQ")
                 return True
 
@@ -183,8 +185,8 @@ class EtherSession:
             print(f"Process {os.getpid()}: Error in connect_to_discovery: {e}")
             return False
         finally:
-            sub_socket.close()
-            req_socket.close()
+            self.sub_socket.close()
+            self.req_socket.close()
 
     def cleanup(self):
         self.running = False
@@ -236,16 +238,16 @@ def session_discovery_launcher(process_id: str, network_config: Optional[EtherNe
         # print(f"Process {process_id}: Shutting down")
         pass
 
-def main():
-    processes = []
-    for i in range(4):
-        p = multiprocessing.Process(target=session_discovery_launcher, args=(i,))
-        processes.append(p)
-        p.start()
-        time.sleep(0.1)  # Small delay between launches
+# def main():
+#     processes = []
+#     for i in range(4):
+#         p = multiprocessing.Process(target=session_discovery_launcher, args=(i,))
+#         processes.append(p)
+#         p.start()
+#         time.sleep(0.1)  # Small delay between launches
 
-    for p in processes:
-        p.join()
+#     for p in processes:
+#         p.join()
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
