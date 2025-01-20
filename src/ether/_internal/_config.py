@@ -60,16 +60,30 @@ class EtherInstanceConfig(BaseModel):
         cls = self.get_class()
         kwargs = self.kwargs.copy()
         # Override name if not explicitly set in kwargs
-        if 'name' not in kwargs:
-            kwargs['name'] = instance_name
+        if 'ether_name' not in kwargs:
+            kwargs['ether_name'] = instance_name
         instance = cls(*self.args, **kwargs)
         instance.run()
+
+
+# Add new NetworkConfig class
+class EtherNetworkConfig(BaseModel):
+    """Network configuration for Ether"""
+    host: str = "localhost"
+    pubsub_frontend_port: int = 5555
+    pubsub_backend_port: int = 5556
+    reqrep_frontend_port: int = 5559
+    reqrep_backend_port: int = 5560
+    redis_port: int = 6379
+    session_discovery_port: int = 301309
+    session_query_port: int = 301310
 
 
 class EtherConfig(BaseModel):
     """Complete Ether configuration"""
     registry: Dict[str, EtherClassConfig] = Field(default_factory=dict)
     instances: Dict[str, EtherInstanceConfig] = Field(default_factory=dict)
+    network: EtherNetworkConfig = Field(default_factory=EtherNetworkConfig)  # Add network config
     
     @classmethod
     def from_yaml(cls, path: str) -> "EtherConfig":

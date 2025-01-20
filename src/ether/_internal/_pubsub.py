@@ -1,7 +1,11 @@
 import zmq
 import uuid
+from typing import Optional
 
-from ..utils import _ETHER_SUB_PORT, _ETHER_PUB_PORT, get_ether_logger
+from ..utils import get_ether_logger
+from ._config import EtherNetworkConfig
+from ._session import EtherSession
+
 
 class _EtherPubSubProxy:
     """Proxy that uses XPUB/XSUB sockets for efficient message distribution.
@@ -9,11 +13,20 @@ class _EtherPubSubProxy:
     XPUB/XSUB sockets are special versions of PUB/SUB that expose subscriptions
     as messages, allowing for proper subscription forwarding.
     """
-    def __init__(self):
+    def __init__(self, network_config: Optional[EtherNetworkConfig] = None):
         self.id = uuid.uuid4()
         self.name = f"EtherPubSubProxy_{self.id}"
         self._logger = get_ether_logger("EtherPubSubProxy")
         self._logger.debug("Initializing PubSub proxy")
+        
+        # Use provided network config or get from session
+        if network_config is None:
+            session_data = EtherSession.get_current_session()
+            if session_data and "network" in session_data:
+                network_config = EtherNetworkConfig.model_validate(session_data["network"])
+            else:
+                network_config = EtherNetworkConfig()
+        self.network = network_config
         
         self.capture_socket = None
         self.broadcast_socket = None
@@ -27,16 +40,16 @@ class _EtherPubSubProxy:
         self._zmq_context = zmq.Context()
         
         # Setup capture (XSUB) socket
-        self._logger.debug(f"Setting up XSUB socket on port {_ETHER_PUB_PORT}")
+        self._logger.debug(f"Setting up XSUB socket on port {self.network.pubsub_backend_port}")
         self.capture_socket = self._zmq_context.socket(zmq.XSUB)
-        self.capture_socket.bind(f"tcp://*:{_ETHER_PUB_PORT}")
+        self.capture_socket.bind(f"tcp://{self.network.host}:{self.network.pubsub_backend_port}")
         self.capture_socket.setsockopt(zmq.RCVHWM, 1000000)
         self.capture_socket.setsockopt(zmq.RCVBUF, 65536)
         
         # Setup broadcast (XPUB) socket
-        self._logger.debug(f"Setting up XPUB socket on port {_ETHER_SUB_PORT}")
+        self._logger.debug(f"Setting up XPUB socket on port {self.network.pubsub_frontend_port}")
         self.broadcast_socket = self._zmq_context.socket(zmq.XPUB)
-        self.broadcast_socket.bind(f"tcp://*:{_ETHER_SUB_PORT}")
+        self.broadcast_socket.bind(f"tcp://{self.network.host}:{self.network.pubsub_frontend_port}")
         self.broadcast_socket.setsockopt(zmq.SNDHWM, 1000000)
         self.broadcast_socket.setsockopt(zmq.SNDBUF, 65536)
         self.broadcast_socket.setsockopt(zmq.XPUB_VERBOSE, 1)

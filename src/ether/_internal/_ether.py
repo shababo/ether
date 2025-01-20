@@ -14,11 +14,11 @@ import signal
 import multiprocessing
 
 from ..utils import _ETHER_PUB_PORT, get_ether_logger
-from ._session import EtherSession, session_process_launcher
+from ._session import EtherSession, session_discovery_launcher
 from ._pubsub import _EtherPubSubProxy
 from ..liaison import EtherInstanceLiaison 
 from ._manager import _EtherInstanceManager
-from ._config import EtherConfig
+from ._config import EtherConfig, EtherNetworkConfig
 from ._registry import EtherRegistry
 from ._reqrep import (
     MDPW_WORKER,
@@ -34,9 +34,21 @@ from ._reqrep import (
 # Constants
 CULL_INTERVAL = 10  # seconds between culling checks
 
-def _run_pubsub():
-    """Standalone function to run PubSub proxy"""
-    proxy = _EtherPubSubProxy()
+def _run_pubsub(network_config: Optional[EtherNetworkConfig] = None):
+    """Standalone function to run PubSub proxy
+    
+    Args:
+        network_config: Network configuration for the proxy
+    """
+    # Get network config from session if not provided
+    if network_config is None:
+        session_data = EtherSession.get_current_session()
+        if session_data and "network" in session_data:
+            network_config = EtherNetworkConfig.model_validate(session_data["network"])
+        else:
+            network_config = EtherNetworkConfig()
+    
+    proxy = _EtherPubSubProxy(network_config=network_config)
     
     def handle_stop(signum, frame):
         """Handle stop signal by cleaning up proxy"""
@@ -95,7 +107,7 @@ class _Ether:
     _instance = None
     _ether_id = None
     _logger = None
-    _redis_port = None
+    _config = None
     _redis_pidfile = None
     _redis_process = None
     _pubsub_process = None
@@ -114,12 +126,9 @@ class _Ether:
         if cls._instance is None:
             cls._instance = super(_Ether, cls).__new__(cls)
             cls._instance._logger = get_ether_logger("Ether")
-            cls._instance._logger.debug("Creating new Ether instance")
-
             cls._instance._logger.debug("Initializing Ether instance")
-            cls._instance._redis_port = 6379
             cls._instance._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
-
+            
 
         return cls._instance
         
@@ -130,7 +139,7 @@ class _Ether:
         if self._pub_socket is None:
             self._zmq_context = zmq.Context()
             self._pub_socket = self._zmq_context.socket(zmq.PUB)
-            self._pub_socket.connect(f"tcp://localhost:{_ETHER_PUB_PORT}")
+            self._pub_socket.connect(f"tcp://{self._config.network.host}:{self._config.network.pubsub_backend_port}")
             self._logger.debug("Publisher socket connected")
     
     def publish(self, data: Union[Dict, BaseModel], topic: str) -> None:
@@ -170,17 +179,24 @@ class _Ether:
         self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}")
         self._ether_id = ether_id
 
-        self._ether_session_process = Process(target=session_process_launcher, args=(self._ether_id,))
+        # Process configuration
+        if config:
+            if isinstance(config, (str, dict)):
+                self._config = EtherConfig.from_yaml(config) if isinstance(config, str) else EtherConfig.model_validate(config)
+            elif isinstance(config, EtherConfig):
+                self._config = config
+            else:
+                self._config = EtherConfig()
+
+        # Start session with network config
+        self._ether_session_process = Process(
+            target=session_discovery_launcher, 
+            args=(self._ether_id, self._config.network)
+        )
         self._ether_session_process.start()
         time.sleep(1.0)
 
-        if config:
-            self._logger.debug("Processing configuration...")
-            # Process registry configuration if present
-            if isinstance(config, (str, dict)):
-                config = EtherConfig.from_yaml(config) if isinstance(config, str) else EtherConfig.model_validate(config)
-        
-        session_metadata = EtherSession.get_current_session()
+        session_metadata = EtherSession.get_current_session(network_config=self._config.network)
         self._logger.debug(f"Session metadata: {session_metadata}")
         if session_metadata and session_metadata.get("ether_id") == ether_id:
 
@@ -273,7 +289,10 @@ class _Ether:
         # Clean up any existing ZMQ contexts
         zmq.Context.instance().term()
         if self._pubsub_process is None:
-            self._pubsub_process = Process(target=_run_pubsub)
+            self._pubsub_process = Process(
+                target=_run_pubsub,
+                args=(self._config.network,)
+            )
             self._pubsub_process.daemon = True
             self._pubsub_process.start()
 
@@ -295,7 +314,7 @@ class _Ether:
     def _test_redis_connection(self) -> bool:
         """Test Redis connection"""
         try:
-            r = redis.Redis(port=self._redis_port)
+            r = redis.Redis(port=self._config.network.redis_port)
             r.ping()
             r.close()
             return True
@@ -307,7 +326,7 @@ class _Ether:
         socket = context.socket(zmq.SUB)
         for _ in range(10):  # Try for 5 seconds
             try:
-                socket.connect(f"tcp://localhost:5555")
+                socket.connect(f"tcp://{self._config.network.host}:{self._config.network.pubsub_frontend_port}")
                 socket.close()
                 context.term()
                 return True
@@ -321,7 +340,7 @@ class _Ether:
         self._redis_process = subprocess.Popen(
             [
                 'redis-server',
-                '--port', str(self._redis_port),
+                '--port', str(self._config.network.redis_port),
                 '--dir', tempfile.gettempdir(),  # Use temp dir for dump.rdb
                 '--save', "", 
                 '--appendonly', 'no'
@@ -474,29 +493,29 @@ class _Ether:
                         handler.close()
                         self._logger.removeHandler(handler)
 
-    def _start_pubsub_proxy(self, frontend_port: int = 5555, backend_port: int = 5556):
-        """Start the pubsub proxy process"""
-        self._logger.debug("Starting PubSub proxy")
-        self._pubsub_proxy_process = multiprocessing.Process(
-            target=_run_pubsub_proxy,
-            args=(frontend_port, backend_port),
-            name="PubSubProxy"
-        )
-        self._pubsub_proxy_process.daemon = True
-        self._pubsub_proxy_process.start()
-        time.sleep(0.1)  # Allow proxy to initialize
+    # def _start_pubsub_proxy(self, frontend_port: int = 5555, backend_port: int = 5556):
+    #     """Start the pubsub proxy process"""
+    #     self._logger.debug("Starting PubSub proxy")
+    #     self._pubsub_proxy_process = multiprocessing.Process(
+    #         target=_run_pubsub_proxy,
+    #         args=(frontend_port, backend_port),
+    #         name="PubSubProxy"
+    #     )
+    #     self._pubsub_proxy_process.daemon = True
+    #     self._pubsub_proxy_process.start()
+    #     time.sleep(0.1)  # Allow proxy to initialize
         
-    def _start_reqrep_broker(self, frontend_port: int = 5559, backend_port: int = 5560):
-        """Start the request-reply broker process"""
-        self._logger.debug("Starting ReqRep broker")
-        self._reqrep_broker_process = multiprocessing.Process(
-            target=_run_reqrep_broker,
-            args=(frontend_port, backend_port),
-            name="ReqRepBroker"
-        )
-        self._reqrep_broker_process.daemon = True
-        self._reqrep_broker_process.start()
-        time.sleep(0.1)  # Allow broker to initialize
+    # def _start_reqrep_broker(self, frontend_port: int = 5559, backend_port: int = 5560):
+    #     """Start the request-reply broker process"""
+    #     self._logger.debug("Starting ReqRep broker")
+    #     self._reqrep_broker_process = multiprocessing.Process(
+    #         target=_run_reqrep_broker,
+    #         args=(frontend_port, backend_port),
+    #         name="ReqRepBroker"
+    #     )
+    #     self._reqrep_broker_process.daemon = True
+    #     self._reqrep_broker_process.start()
+    #     time.sleep(0.1)  # Allow broker to initialize
         
     def cleanup(self):
         """Clean up Ether resources"""
@@ -530,7 +549,7 @@ class _Ether:
                 self._zmq_context = zmq.Context()
             self._request_socket = self._zmq_context.socket(zmq.DEALER)
             self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
-            self._request_socket.connect("tcp://localhost:5559")
+            self._request_socket.connect(f"tcp://{self._config.network.host}:{self._config.network.reqrep_frontend_port}")
             self._logger.debug("Request socket connected")
 
     def request(self, service_class: str, method_name: str, params=None, request_type="get", timeout=2500):
