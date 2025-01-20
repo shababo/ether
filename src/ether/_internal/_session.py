@@ -56,9 +56,9 @@ class EtherSession:
             self.is_discovery_service = True
             self.running = True
             
-            self.service_process = multiprocessing.Process(target=self._run_discovery_service)
-            self.service_process.daemon = True
-            self.service_process.start()
+            self.service_thread = threading.Thread(target=self._run_discovery_service)
+            self.service_thread.daemon = True
+            self.service_thread.start()
             
             self._logger.debug(f"Process {os.getpid()}: Successfully started discovery service")
             

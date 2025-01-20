@@ -3,41 +3,40 @@ from ether._internal._config import EtherConfig, EtherInstanceConfig, EtherNetwo
 from ether import ether_save, ether_get
 from ether.utils import get_ether_logger
 import socket
-import urllib.request
-import json
-import time
+import requests
+from typing import Optional
 
-def get_public_ip():
-    """Get the public IP address using an IP lookup service"""
-    try:
-        # Try multiple IP lookup services in case one fails
-        services = [
-            'https://api.ipify.org?format=json',
-            'https://api.myip.com',
-            'https://api.ip.sb/jsonip'
-        ]
-        
-        for service in services:
-            try:
-                response = urllib.request.urlopen(service, timeout=2)
-                data = json.loads(response.read())
-                # Different services use different key names
-                ip = data.get('ip') or data.get('ipAddress')
-                if ip:
-                    return ip
-            except:
-                continue
-                
-        # Fallback to local IP if public IP lookup fails
-        return get_local_ip()
-        
-    except Exception as e:
-        print(f"Error getting public IP: {e}")
-        return None
-
-def get_local_ip():
-    """Get the local IP address"""
-    # This gets the local IP that would be used to connect to the internet
+def get_ip_address(use_public: bool = True) -> str:
+    """Get IP address
+    
+    Args:
+        use_public: If True, attempts to get public IP. Falls back to local IP if failed.
+    
+    Returns:
+        IP address as string
+    """
+    if use_public:
+        try:
+            # Try multiple IP lookup services in case one is down
+            services = [
+                "https://api.ipify.org",
+                "https://api.my-ip.io/ip",
+                "https://checkip.amazonaws.com",
+            ]
+            for service in services:
+                try:
+                    response = requests.get(service, timeout=2)
+                    if response.status_code == 200:
+                        return response.text.strip()
+                except:
+                    continue
+            
+            # If all services fail, fall back to local IP
+            logger.warning("Could not get public IP, falling back to local IP")
+        except Exception as e:
+            logger.warning(f"Error getting public IP: {e}, falling back to local IP")
+    
+    # Get local IP as fallback
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         # Doesn't need to be reachable
@@ -75,19 +74,12 @@ def run_server(host: str = None):
     logger = get_ether_logger("EtherNetworkServer")
     logger.info(f"Starting server on {host}")
 
-    # Get both local and public IPs
-    local_ip = get_local_ip()
-    public_ip = get_public_ip()
-    
-    logger.info(f"Local IP address: {local_ip}")
-    logger.info(f"Public IP address: {public_ip}")
-    
-    # Use public IP if available, otherwise fall back to local IP
-    server_ip = public_ip or local_ip
-    logger.info(f"Using IP address: {server_ip}")
+    # Get the public IP address
+    ip = get_ip_address(use_public=True)
+    logger.info(f"Server IP address: {ip}")
     
     network_config = EtherNetworkConfig(
-        host=server_ip,  # Use public/local IP
+        host=ip,  # Use public/local IP
         pubsub_frontend_port=5555,
         pubsub_backend_port=5556,
         reqrep_frontend_port=5559,
@@ -109,7 +101,9 @@ def run_server(host: str = None):
         ether.tap(config=config)
         logger.info("Server running. Press Ctrl+C to stop.")
         
-        time.sleep(10)
+        # Keep the server running
+        while True:
+            input()
             
     except KeyboardInterrupt:
         logger.info("Shutting down server...")

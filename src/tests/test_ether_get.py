@@ -53,7 +53,7 @@ def test_ether_get_with_params():
         instances={
             "data_service": EtherInstanceConfig(
                 class_path="tests.test_ether_get.DataService",
-                kwargs={"name": "data_service"}
+                kwargs={"ether_name": "data_service"}
             )
         }
     )
