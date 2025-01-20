@@ -42,14 +42,14 @@ class _EtherPubSubProxy:
         # Setup capture (XSUB) socket
         self._logger.debug(f"Setting up XSUB socket on port {self.network.pubsub_backend_port}")
         self.capture_socket = self._zmq_context.socket(zmq.XSUB)
-        self.capture_socket.bind(f"tcp://{self.network.host}:{self.network.pubsub_backend_port}")
+        self.capture_socket.bind(f"tcp://*:{self.network.pubsub_backend_port}")
         self.capture_socket.setsockopt(zmq.RCVHWM, 1000000)
         self.capture_socket.setsockopt(zmq.RCVBUF, 65536)
         
         # Setup broadcast (XPUB) socket
         self._logger.debug(f"Setting up XPUB socket on port {self.network.pubsub_frontend_port}")
         self.broadcast_socket = self._zmq_context.socket(zmq.XPUB)
-        self.broadcast_socket.bind(f"tcp://{self.network.host}:{self.network.pubsub_frontend_port}")
+        self.broadcast_socket.bind(f"tcp://*:{self.network.pubsub_frontend_port}")
         self.broadcast_socket.setsockopt(zmq.SNDHWM, 1000000)
         self.broadcast_socket.setsockopt(zmq.SNDBUF, 65536)
         self.broadcast_socket.setsockopt(zmq.XPUB_VERBOSE, 1)

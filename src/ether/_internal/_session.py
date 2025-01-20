@@ -48,10 +48,10 @@ class EtherSession:
     def _start_discovery_service(self):
         try:
             self.pub_socket = self.context.socket(zmq.PUB)
-            self.pub_socket.bind(f"tcp://{self.network.host}:{self.network.session_discovery_port}")
+            self.pub_socket.bind(f"tcp://*:{self.network.session_discovery_port}")
             
             self.rep_socket = self.context.socket(zmq.REP)
-            self.rep_socket.bind(f"tcp://{self.network.host}:{self.network.session_query_port}")
+            self.rep_socket.bind(f"tcp://*:{self.network.session_query_port}")
             
             self.is_discovery_service = True
             self.running = True

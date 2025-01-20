@@ -341,6 +341,7 @@ class _Ether:
             [
                 'redis-server',
                 '--port', str(self._config.network.redis_port),
+                '--bind', self._config.network.redis_host if self._config.network.redis_host != "0.0.0.0" else "*",
                 '--dir', tempfile.gettempdir(),  # Use temp dir for dump.rdb
                 '--save', "", 
                 '--appendonly', 'no'
