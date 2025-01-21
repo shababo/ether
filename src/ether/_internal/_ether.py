@@ -174,7 +174,7 @@ class _Ether:
         ])
         self._logger.debug(f"Published to {topic}: {json_data}")
     
-    def start(self, ether_id: str, config = None, restart: bool = False):
+    def start(self, ether_id: str, config = None, restart: bool = False, discovery = True):
         """Start all daemon services"""
         self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}")
         self._ether_id = ether_id
@@ -205,16 +205,17 @@ class _Ether:
         self._logger.debug(f"Processed Config: {self._config}")
 
         # Start session with network config
-        try:
-            self._ether_session_process = Process(
-                target=session_discovery_launcher, 
-                args=(self._ether_id, self._config.network)
-            )
-            self._ether_session_process.start()
-            time.sleep(1.0)
-        except Exception as e:
-            self._logger.error(f"Failed to start session discovery process: {e}", exc_info=True)
-            raise
+        if discovery:
+            try:
+                self._ether_session_process = Process(
+                    target=session_discovery_launcher, 
+                    args=(self._ether_id, self._config.network)
+                )
+                self._ether_session_process.start()
+                time.sleep(1.0)
+            except Exception as e:
+                self._logger.error(f"Failed to start session discovery process: {e}", exc_info=True)
+                raise
 
         try:
             session_metadata = EtherSession.get_current_session(network_config=self._config.network)
@@ -271,8 +272,7 @@ class _Ether:
                 liaison.deregister_all()
                 liaison.store_registry_config({})
 
-                if self._config and self._config.instances:
-                    self._start_instances()
+                
 
             else:
                 self._logger.warning(f"Joining Ether session, session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}")
@@ -291,6 +291,9 @@ class _Ether:
                 
                 # Process any pending classes
                 EtherRegistry().process_pending_classes()
+
+            if self._config and self._config.instances:
+                self._start_instances()
 
         except Exception as e:
             self._logger.error(f"Error during Ether startup: {e}", exc_info=True)
@@ -593,10 +596,6 @@ class _Ether:
     def request(self, service_class: str, method_name: str, params=None, request_type="get", timeout=2500):
         """Make a request to a service"""
         self._logger.debug(f"Request received - Service: {service_class}.{method_name}.{request_type}")
-        
-        if not self._started:
-            self._logger.debug("Cannot make request: Ether system not started")
-            raise RuntimeError("Ether system not started")
         
         if self._request_socket is None:
             self._logger.debug("Request socket not initialized, setting up...")

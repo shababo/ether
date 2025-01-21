@@ -1,6 +1,6 @@
 from ether import ether
 from ether._internal._config import EtherConfig, EtherInstanceConfig, EtherNetworkConfig
-from ether import ether_save, ether_get
+from ether import ether_save, ether_get, ether_start
 from ether.utils import get_ether_logger, get_ip_address
 import socket
 import requests
@@ -10,11 +10,17 @@ from typing import Optional
 class NetworkTestService:
     def __init__(self):
         self.data = {}
+
+    @ether_start
+    def reset(self):
+        self.data = {}
+        self._logger.info(f"Resetting data store, data: {self.data}")
     
     @ether_save
     def save_item(self, id: int, value: str) -> dict:
         """Save an item to the data store"""
         self.data[id] = value
+        self._logger.info(f"Saved item {id} with value {value}, data: {self.data}")
         return {"id": id, "value": value}
 
     @ether_get

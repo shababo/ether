@@ -12,7 +12,7 @@ import importlib
 
 from ..utils import get_ether_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
 from ether.liaison import EtherInstanceLiaison
-from ._config import EtherClassConfig, EtherNetworkConfig
+from ._config import EtherClassConfig, EtherNetworkConfig, EtherConfig
 from ._reqrep import (
     W_READY, W_REQUEST, W_REPLY, MDPW_WORKER, MDPC_CLIENT,
     REQUEST_WORKER_INDEX, REQUEST_COMMAND_INDEX, REQUEST_CLIENT_ID_INDEX, REQUEST_DATA_INDEX,
@@ -141,9 +141,13 @@ def add_ether_functionality(cls):
     
     # Add core attributes
     def init_ether_vars(self, name=None, network_config: Optional[EtherNetworkConfig] = None, log_level=logging.INFO):
+        
         self.id = str(uuid.uuid4())
         self.name = name or self.id
         self.network_config = network_config or EtherNetworkConfig()
+
+        from ether import ether
+        ether.tap(config=EtherConfig(network=self.network_config), discovery=False)
         # Pass log_level as both console and file level if specified
         self._logger = get_ether_logger(
             process_name=self.__class__.__name__,
