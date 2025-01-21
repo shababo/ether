@@ -4,16 +4,15 @@ import json
 import time
 import os
 
-from ether.utils import get_ether_logger
+from ether.utils import get_ether_logger, get_ip_address
 from ether._internal._session import EtherSession
 from ether._internal._config import EtherNetworkConfig
 
 
 class EtherInstanceLiaison:
     """An interface for (de)registrations and process tracking for instances"""
-    _instance = None
     
-    def _init(self):
+    def __init__(self):
         """Initialize the instance (only called once)"""
         self._logger = get_ether_logger("EtherInstanceLiaison")
         
@@ -25,19 +24,26 @@ class EtherInstanceLiaison:
         else:
             network_config = EtherNetworkConfig()
             self._logger.debug("No session found, using default network config")
+
+        if session_data and "public_ip" in session_data:
+            host = session_data["public_ip"]
+            self._logger.debug(f"Using public IP {host} from session")
+            my_ip = get_ip_address()
+            self._logger.debug(f"My IP is {my_ip}")
+            if my_ip == host:
+                host = "localhost"
+        else:
+            host = network_config.host
             
         # Connect to Redis using network config
-        self._logger.info(f"redis://{network_config.redis_host}:{network_config.redis_port}")
-        redis_url = f"redis://{network_config.redis_host}:{network_config.redis_port}"
+        self._logger.info(f"redis://{host}:{network_config.redis_port}")
+        redis_url = f"redis://{host}:{network_config.redis_port}"
         self._logger.debug(f"Connecting to Redis at {redis_url}")
         self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
         
         self.instance_key_prefix = "ether:instance:"
         self._ttl = 60  # seconds until instance considered dead
     
-    def __init__(self):
-        # __new__ handles initialization
-        pass
     
     @property
     def ttl(self) -> int:
