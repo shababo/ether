@@ -76,8 +76,8 @@ class EtherNetworkConfig(BaseModel):
     reqrep_backend_port: int = 5560
     redis_host: str = "0.0.0.0"  # Add separate Redis host config
     redis_port: int = 6379
-    session_discovery_port: int = 301309
-    session_query_port: int = 301310
+    session_discovery_port: int = 31309
+    session_query_port: int = 31310
 
 
 class EtherConfig(BaseModel):
