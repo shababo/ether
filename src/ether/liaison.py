@@ -68,6 +68,7 @@ class EtherInstanceLiaison:
     
     def register_instance(self, instance_id: str, metadata: Dict[str, Any]) -> None:
         """Register a new Ether instance"""
+        self._logger.debug(f"Registering instance {instance_id} with metadata: {metadata}")
         key = f"{self.instance_key_prefix}{instance_id}"
         metadata['registered_at'] = time.time()
         metadata['pid'] = os.getpid()  # Add process ID
