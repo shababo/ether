@@ -53,7 +53,7 @@ class EtherInstanceConfig(BaseModel):
         
         # Check Redis for registry configuration
         from ether.liaison import EtherInstanceLiaison
-        liaison = EtherInstanceLiaison()
+        liaison = EtherInstanceLiaison(network_config=self.network_config)
         registry_config = liaison.get_registry_config()
         
         # If this class has registry configuration, process it

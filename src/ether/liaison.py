@@ -12,7 +12,7 @@ from ether._internal._config import EtherNetworkConfig
 class EtherInstanceLiaison:
     """An interface for (de)registrations and process tracking for instances"""
     
-    def __init__(self):
+    def __init__(self, network_config: EtherNetworkConfig = None):
         """Initialize the instance (only called once)"""
         self._logger = get_ether_logger("EtherInstanceLiaison")
         
@@ -22,8 +22,8 @@ class EtherInstanceLiaison:
             network_config = EtherNetworkConfig.model_validate(session_data["network"])
             self._logger.debug(f"Using network config from session: {network_config}")
         else:
-            network_config = EtherNetworkConfig()
             self._logger.debug("No session found, using default network config")
+        network_config = network_config or EtherNetworkConfig()
 
         if session_data and "public_ip" in session_data:
             host = session_data["public_ip"]

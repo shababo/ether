@@ -16,8 +16,9 @@ class _EtherInstanceManager:
         self._instance_processes: dict[str, Process] = {}
         self._logger = get_ether_logger("EtherInstanceManager")
         self._logger.debug("Initializing EtherInstanceManager")
-        self._liaison = EtherInstanceLiaison()
-        self._config = config
+        self._config = config or EtherConfig()
+        self._liaison = EtherInstanceLiaison(network_config=self._config.network)
+        
         self._autolaunch = autolaunch
         
         if self._autolaunch:
@@ -77,7 +78,7 @@ class _EtherInstanceManager:
             config = EtherConfig.model_validate(config)
             
         # Check current instances
-        liaison = EtherInstanceLiaison()
+        liaison = EtherInstanceLiaison(network_config=self._config.network)
         current_instances = liaison.get_active_instances()
         self._logger.debug(f"Current active instances: {list(current_instances.keys())}")
         

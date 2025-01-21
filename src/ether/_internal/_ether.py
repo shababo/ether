@@ -62,10 +62,10 @@ def _run_pubsub(network_config: Optional[EtherNetworkConfig] = None):
     
     proxy.run()
 
-def _run_monitor():
+def _run_monitor(network_config: Optional[EtherNetworkConfig] = None):
     """Standalone function to run instance monitoring"""
     logger = get_ether_logger("EtherMonitor")
-    liaison = EtherInstanceLiaison()
+    liaison = EtherInstanceLiaison(network_config=network_config)
     
     while True:
         try:
@@ -264,12 +264,12 @@ class _Ether:
                 
                 # Start monitoring
                 self._logger.debug("Starting instance monitor...")
-                self._monitor_process = Process(target=_run_monitor)
+                self._monitor_process = Process(target=_run_monitor, args=(self._config.network,))
                 self._monitor_process.start()
                 
                 # Clean Redis state
                 self._logger.debug("Cleaning Redis state...")
-                liaison = EtherInstanceLiaison()
+                liaison = EtherInstanceLiaison(network_config=self._config.network)
                 liaison.deregister_all()
                 liaison.store_registry_config({})
 
@@ -286,7 +286,7 @@ class _Ether:
                         class_path: class_config.model_dump()
                         for class_path, class_config in self._config.registry.items()
                     }
-                    liaison = EtherInstanceLiaison()
+                    liaison = EtherInstanceLiaison(network_config=self._config.network)
                     liaison.store_registry_config(registry_dict)
                     EtherRegistry().process_registry_config(self._config.registry)
                 

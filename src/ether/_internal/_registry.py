@@ -177,7 +177,7 @@ def add_ether_functionality(cls):
         self.results_file = None
         
         # Register with instance tracker
-        self._instance_tracker = EtherInstanceLiaison()
+        self._instance_tracker = EtherInstanceLiaison(network_config=self.network_config)
         self._instance_tracker.register_instance(self.id, {
             'name': self.name,
             'process_name': name or self.id,  # Use ID if no name provided
