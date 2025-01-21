@@ -27,7 +27,8 @@ class EtherInstanceLiaison:
             self._logger.debug("No session found, using default network config")
             
         # Connect to Redis using network config
-        redis_url = f"redis://{network_config.host}:{network_config.redis_port}"
+        self._logger.info(f"redis://{network_config.redis_host}:{network_config.redis_port}")
+        redis_url = f"redis://{network_config.redis_host}:{network_config.redis_port}"
         self._logger.debug(f"Connecting to Redis at {redis_url}")
         self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
         
