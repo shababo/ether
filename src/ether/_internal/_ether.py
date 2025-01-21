@@ -218,10 +218,10 @@ class _Ether:
 
         try:
             session_metadata = EtherSession.get_current_session(network_config=self._config.network)
-            self._logger.debug(f"Session metadata: {session_metadata}")
+            self._logger.debug(f"Existing session metadata: {session_metadata}")
             
             if session_metadata and session_metadata.get("ether_id") == ether_id:
-                self._logger.info(f"Starting Ether session: {self._ether_id}...")
+                self._logger.info(f"Starting Ether session: session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}...")
                 self._is_main_session = True
 
                 # TODO: review restart logic below, not sure we need it, and if we do if it's in the right place
@@ -275,7 +275,7 @@ class _Ether:
                     self._start_instances()
 
             else:
-                self._logger.warning(f"No matching session found for ether_id {ether_id}. Session metadata: {session_metadata}")
+                self._logger.warning(f"Joining Ether session, session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}")
                 self._started = True
                 
                 # Store registry config in Redis if present
