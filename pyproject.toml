@@ -1,8 +1,13 @@
 [project]
-name = "ether"
+name = "ether_shababo"
 version = "0.1.0"
+authors = [
+  { name="Shababo", email="benshababo@gmail.com" }
+]
 description = "Developer focused framework for building distributed data acquisition and analysis systems."
 readme = "README.md"
+licencse = "Attribution-NonCommercial-ShareAlike 4.0 International"
+license-files=["LICEN[CS]E*"]
 requires-python = ">=3.10"
 dependencies = [
     "pyzmq>=26.2.0",
@@ -20,6 +25,10 @@ integrations = [
     "pyserial>=3.5",
     "open-ephys-python-tools>=0.1.12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/shababo/ether"
+Issues = "https://github.com/shababo/ether/issues"
 
 [dependency-groups]
 dev = [
