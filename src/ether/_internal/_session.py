@@ -48,6 +48,7 @@ class EtherSession:
     def _start_discovery_service(self):
         try:
             self.pub_socket = self.context.socket(zmq.PUB)
+            # Bind to all interfaces for remote connections
             self.pub_socket.bind(f"tcp://*:{self.network.session_discovery_port}")
             
             self.rep_socket = self.context.socket(zmq.REP)
@@ -60,7 +61,7 @@ class EtherSession:
             self.service_thread.daemon = True
             self.service_thread.start()
             
-            self._logger.debug(f"Process {os.getpid()}: Successfully started discovery service")
+            self._logger.debug(f"Started discovery service on ports {self.network.session_discovery_port}, {self.network.session_query_port}")
             
         except zmq.ZMQError as e:
             if e.errno == errno.EADDRINUSE:
@@ -124,23 +125,23 @@ class EtherSession:
             # print(f"Process {os.getpid()}: Connected to query port")
             
             req_socket.send_json({"type": "query"})
-            # print(f"Process {os.getpid()}: Sent query")
+            print(f"Process {os.getpid()}: Sent query")
             
             poller = zmq.Poller()
             poller.register(req_socket, zmq.POLLIN)
             
-            # print(f"Process {os.getpid()}: Waiting for response...")
+            print(f"Process {os.getpid()}: Waiting for response...")
             events = dict(poller.poll(timeout))
             if req_socket in events:
                 response = req_socket.recv_json()
                 # print(f"Process {os.getpid()}: Received response")
                 if response.get("type") == "response":
                     return response["data"]
-            # print(f"Process {os.getpid()}: No response received")
+            print(f"Process {os.getpid()}: No response received")
             return None
             
         except Exception as e:
-            # print(f"Process {os.getpid()}: Error in get_current_session: {e}")
+            print(f"Process {os.getpid()}: Error in get_current_session: {e}")
             return None
         finally:
             req_socket.close()

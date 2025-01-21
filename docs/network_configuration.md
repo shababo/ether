@@ -4,14 +4,16 @@
 Ether uses ZeroMQ (ZMQ) for network communication and Redis for state management. This guide explains how to configure networking for both local and remote connections.
 
 ## Port Requirements
-Ether requires 5 TCP ports for communication. The default ports are:
+Ether requires the following TCP ports for communication. Default ports are:
 - 5555: PubSub Frontend
 - 5556: PubSub Backend
 - 5559: ReqRep Frontend
 - 5560: ReqRep Backend
 - 6379: Redis
+- 301309: Session Discovery
+- 301310: Session Query
 
-> **Note:** These port numbers are defaults and can be changed. The key requirement is that all clients and servers in the same Ether network use the same port configuration and server host IP.
+> **Note:** All ports can be customized, but must match between server and clients.
 
 For example, you could use different ports:
 ```python
