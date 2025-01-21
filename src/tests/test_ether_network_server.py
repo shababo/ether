@@ -46,7 +46,7 @@ def run_server(host: str = None):
         instances={
             "network_test": EtherInstanceConfig(
                 class_path="tests.test_ether_network_server.NetworkTestService",
-                kwargs={"ether_name": "network_test"}
+                kwargs={"ether_name": "network_test_data_service"}
             )
         }
     )

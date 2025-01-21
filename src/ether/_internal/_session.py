@@ -125,23 +125,23 @@ class EtherSession:
             # print(f"Process {os.getpid()}: Connected to query port")
             
             req_socket.send_json({"type": "query"})
-            print(f"Process {os.getpid()}: Sent query")
+            # print(f"Process {os.getpid()}: Sent query")
             
             poller = zmq.Poller()
             poller.register(req_socket, zmq.POLLIN)
             
-            print(f"Process {os.getpid()}: Waiting for response...")
+            # print(f"Process {os.getpid()}: Waiting for response...")
             events = dict(poller.poll(timeout))
             if req_socket in events:
                 response = req_socket.recv_json()
                 # print(f"Process {os.getpid()}: Received response")
                 if response.get("type") == "response":
                     return response["data"]
-            print(f"Process {os.getpid()}: No response received")
+            # print(f"Process {os.getpid()}: No response received")
             return None
             
         except Exception as e:
-            print(f"Process {os.getpid()}: Error in get_current_session: {e}")
+            # print(f"Process {os.getpid()}: Error in get_current_session: {e}")
             return None
         finally:
             req_socket.close()
@@ -176,14 +176,14 @@ class EtherSession:
             poller.register(self.req_socket, zmq.POLLIN)
             events = dict(poller.poll(200))  # reduced timeout
             if self.req_socket in events:
-                print(f"Process {os.getpid()}: Found existing service via REQ")
+                # print(f"Process {os.getpid()}: Found existing service via REQ")
                 return True
 
             self._logger.debug(f"Process {os.getpid()}: No existing service found")
             return False
 
         except Exception as e:
-            print(f"Process {os.getpid()}: Error in connect_to_discovery: {e}")
+            # print(f"Process {os.getpid()}: Error in connect_to_discovery: {e}")
             return False
         finally:
             self.sub_socket.close()

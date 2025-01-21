@@ -1,30 +1,14 @@
-from ether import ether
-from ether._internal._config import EtherConfig, EtherNetworkConfig
+import time
+
+from ether import ether, ether_start
+from ether._internal._config import EtherConfig, EtherNetworkConfig, EtherInstanceConfig
 from ether.utils import get_ether_logger
 
-def run_client(server_host: str):
-    """Run the Ether client
-    
-    Args:
-        server_host: IP address of the Ether server
-    """
-    logger = get_ether_logger("EtherNetworkClient")
-    logger.info(f"Connecting to server at {server_host}")
-    
-    network_config = EtherNetworkConfig(
-        host=server_host,  # Connect to server for ZMQ
-        pubsub_frontend_port=5555,
-        pubsub_backend_port=5556,
-        reqrep_frontend_port=5559,
-        reqrep_backend_port=5560,
-        redis_port=6379
-    )
-    
-    config = EtherConfig(network=network_config)
-    
-    try:
-        ether.tap(config=config)
-        
+class NetworkClient:
+
+    @ether_start
+    def run(self):
+
         # Test connection by saving and retrieving data
         save_reply = ether.save(
             "NetworkTestService",
@@ -34,22 +18,46 @@ def run_client(server_host: str):
                 "value": "test_from_remote_client"
             }
         )
-        logger.info(f"Save reply: {save_reply}")
+        self._logger.info(f"Save reply: {save_reply}")
         
         get_reply = ether.get(
             "NetworkTestService",
             "get_item",
             params={"id": 1}
         )
-        logger.info(f"Get reply: {get_reply}")
+        self._logger.info(f"Get reply: {get_reply}")
         
         if get_reply and get_reply.get("value") == "test_from_remote_client":
-            logger.info("Network test successful!")
+            self._logger.info("Network test successful!")
         else:
-            logger.error("Network test failed!")
-            
-    finally:
-        ether.shutdown()
+            self._logger.error("Network test failed!")
+
+def run_client(server_host: str):
+    """Run the Ether client
+    
+    Args:
+        server_host: IP address of the Ether server
+    """
+    logger = get_ether_logger("TestNetworkClient")
+    logger.info(f"Connecting to server at {server_host}")
+    
+    network_config = EtherNetworkConfig(
+        host=server_host,  # Connect to server for ZMQ
+    )
+    
+    config = EtherConfig(
+        instances={
+            "network_test": EtherInstanceConfig(
+                class_path="tests.test_ether_network_client.NetworkClient",
+                kwargs={"ether_name": "network_test_client"}
+            )
+        },
+        network=network_config)
+    
+    ether.tap(config=config)
+    ether.start()    
+    
+    time.sleep(5.0)
 
 if __name__ == "__main__":
     import sys
