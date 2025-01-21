@@ -75,22 +75,26 @@ class EtherInstanceLiaison:
     
     def refresh_instance(self, instance_id: str) -> None:
         """Refresh instance TTL"""
+        self._logger.debug(f"Refreshing instance {instance_id} TTL")
         key = f"{self.instance_key_prefix}{instance_id}"
         if data := self.redis.get(key):
             self.redis.expire(key, self._ttl)
     
     def deregister_instance(self, instance_id: str) -> None:
         """Remove an instance registration"""
+        self._logger.debug(f"Deregistering instance {instance_id}")
         key = f"{self.instance_key_prefix}{instance_id}"
         self.redis.delete(key)
     
     def get_active_instances(self) -> Dict[str, Dict[str, Any]]:
         """Get all currently active instances"""
+        self._logger.debug("Getting active instances")
         instances = {}
         for key in self.redis.keys(f"{self.instance_key_prefix}*"):
             if data := self.redis.get(key):
                 instance_id = key.replace(self.instance_key_prefix, "")
                 instances[instance_id] = json.loads(data)
+        self._logger.debug(f"Active instances: {instances}")
         return instances
     
     def get_instance_data(self, instance_id: str) -> Dict[str, Any]:
@@ -98,6 +102,7 @@ class EtherInstanceLiaison:
         key = f"{self.instance_key_prefix}{instance_id}"
         data = self.redis.get(key)
         if data:
+            self._logger.debug(f"Instance data for {instance_id}: {data}")
             return json.loads(data)
         return {}
     
