@@ -13,12 +13,6 @@ class EtherInstanceLiaison:
     """An interface for (de)registrations and process tracking for instances"""
     _instance = None
     
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(EtherInstanceLiaison, cls).__new__(cls)
-            cls._instance._init()
-        return cls._instance
-    
     def _init(self):
         """Initialize the instance (only called once)"""
         self._logger = get_ether_logger("EtherInstanceLiaison")
@@ -33,7 +27,7 @@ class EtherInstanceLiaison:
             self._logger.debug("No session found, using default network config")
             
         # Connect to Redis using network config
-        redis_url = f"redis://{network_config.redis_host}:{network_config.redis_port}"
+        redis_url = f"redis://{network_config.host}:{network_config.redis_port}"
         self._logger.debug(f"Connecting to Redis at {redis_url}")
         self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
         

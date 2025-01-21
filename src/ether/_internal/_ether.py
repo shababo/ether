@@ -201,6 +201,7 @@ class _Ether:
                 config.network.host = local_ip
         except Exception as e:
             self._logger.warning(f"Error checking IP addresses: {e}, using original host")
+            
 
         self._logger.debug(f"Processed Config: {self._config}")
 
@@ -293,6 +294,9 @@ class _Ether:
                 EtherRegistry().process_pending_classes()
 
             if self._config and self._config.instances:
+                for instance_name, instance_cfg in self._config.instances.items():
+                    instance_cfg.network_config = self._config.network
+                    self._config.instances[instance_name] = instance_cfg
                 self._start_instances()
 
         except Exception as e:
