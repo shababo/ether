@@ -1,52 +1,11 @@
 from ether import ether
 from ether._internal._config import EtherConfig, EtherInstanceConfig, EtherNetworkConfig
 from ether import ether_save, ether_get
-from ether.utils import get_ether_logger
+from ether.utils import get_ether_logger, get_ip_address
 import socket
 import requests
 from typing import Optional
 
-def get_ip_address(use_public: bool = True) -> str:
-    """Get IP address
-    
-    Args:
-        use_public: If True, attempts to get public IP. Falls back to local IP if failed.
-    
-    Returns:
-        IP address as string
-    """
-    if use_public:
-        try:
-            # Try multiple IP lookup services in case one is down
-            services = [
-                "https://api.ipify.org",
-                "https://api.my-ip.io/ip",
-                "https://checkip.amazonaws.com",
-            ]
-            for service in services:
-                try:
-                    response = requests.get(service, timeout=2)
-                    if response.status_code == 200:
-                        return response.text.strip()
-                except:
-                    continue
-            
-            # If all services fail, fall back to local IP
-            logger.warning("Could not get public IP, falling back to local IP")
-        except Exception as e:
-            logger.warning(f"Error getting public IP: {e}, falling back to local IP")
-    
-    # Get local IP as fallback
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        # Doesn't need to be reachable
-        s.connect(('10.255.255.255', 1))
-        IP = s.getsockname()[0]
-    except Exception:
-        IP = '127.0.0.1'
-    finally:
-        s.close()
-    return IP
 
 class NetworkTestService:
     def __init__(self):
