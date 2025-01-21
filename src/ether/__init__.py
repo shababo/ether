@@ -55,7 +55,7 @@ class Ether:
             cls._instance = super(Ether, cls).__new__(cls)
         return cls._instance
 
-    def tap(self, config: Optional[Union[str, dict, EtherConfig]] = None, restart: bool = False):
+    def tap(self, config: Optional[Union[str, dict, EtherConfig]] = None, restart: bool = False, discovery: bool = True):
         """Initialize the Ether messaging system."""
         # Only set root logger level without adding a handler
         logging.getLogger().setLevel(logging.DEBUG)
@@ -67,7 +67,7 @@ class Ether:
             
         if not self._initialized:
             # Start ether
-            _ether.start(ether_id=self._ether_id, config=config, restart=restart)
+            _ether.start(ether_id=self._ether_id, config=config, restart=restart, discovery=discovery)
         
             # Mark as initialized
             self._initialized = True

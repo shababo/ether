@@ -12,7 +12,7 @@ import importlib
 
 from ..utils import get_ether_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
 from ether.liaison import EtherInstanceLiaison
-from ._config import EtherClassConfig
+from ._config import EtherClassConfig, EtherNetworkConfig, EtherConfig
 from ._reqrep import (
     W_READY, W_REQUEST, W_REPLY, MDPW_WORKER, MDPC_CLIENT,
     REQUEST_WORKER_INDEX, REQUEST_COMMAND_INDEX, REQUEST_CLIENT_ID_INDEX, REQUEST_DATA_INDEX,
@@ -140,9 +140,14 @@ def add_ether_functionality(cls):
     cls._ether_methods_info = ether_methods
     
     # Add core attributes
-    def init_ether_vars(self, name=None, log_level=logging.INFO):
+    def init_ether_vars(self, name=None, network_config: Optional[EtherNetworkConfig] = None, log_level=logging.INFO):
+        
         self.id = str(uuid.uuid4())
         self.name = name or self.id
+        self.network_config = network_config or EtherNetworkConfig()
+
+        from ether import ether
+        ether.tap(config=EtherConfig(network=self.network_config), discovery=False)
         # Pass log_level as both console and file level if specified
         self._logger = get_ether_logger(
             process_name=self.__class__.__name__,
@@ -151,8 +156,8 @@ def add_ether_functionality(cls):
             # file_level=log_level
         )
         self._logger.debug(f"Initializing {self.name}")
-        self._sub_address = f"tcp://localhost:{_ETHER_SUB_PORT}"
-        self._pub_address = f"tcp://localhost:{_ETHER_PUB_PORT}"
+        self._sub_address = f"tcp://{network_config.host}:{network_config.pubsub_frontend_port}"
+        self._pub_address = f"tcp://{network_config.host}:{network_config.pubsub_backend_port}"
         
         # Socket handling
         self._zmq_context = zmq.Context()
@@ -254,7 +259,7 @@ def add_ether_functionality(cls):
             self._worker_socket = self._zmq_context.socket(zmq.DEALER)
             self._worker_socket.linger = 0
             self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
-            self._worker_socket.connect("tcp://localhost:5560")
+            self._worker_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_backend_port}")
             self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
             
             # Register all services
@@ -277,7 +282,7 @@ def add_ether_functionality(cls):
         self._request_socket = self._zmq_context.socket(zmq.REQ)
         self._request_socket.linger = 0  # Don't wait for unsent messages on close
         self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)  # 2.5 sec timeout
-        self._request_socket.connect("tcp://localhost:5559")
+        self._request_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_frontend_port}")
         
         # Add poller for request socket
         self._request_poller = zmq.Poller()
@@ -457,7 +462,7 @@ def add_ether_functionality(cls):
         self._worker_socket = self._zmq_context.socket(zmq.DEALER)
         self._worker_socket.linger = 0  # Don't wait on close
         self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
-        self._worker_socket.connect("tcp://localhost:5560")
+        self._worker_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_backend_port}")
         self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
         
         # Re-register all services
@@ -484,7 +489,7 @@ def add_ether_functionality(cls):
         self._request_socket = self._zmq_context.socket(zmq.REQ)
         self._request_socket.linger = 0
         self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
-        self._request_socket.connect("tcp://localhost:5559")
+        self._request_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_frontend_port}")
         self._request_poller.register(self._request_socket, zmq.POLLIN)
 
     # Add message tracking
@@ -601,9 +606,12 @@ def add_ether_functionality(cls):
     original_init = cls.__init__
     def new_init(self, *args, **kwargs):
         # Initialize Ether functionality first
+        network_config = kwargs.pop('ether_network_config', None)
+        network_config = EtherNetworkConfig() if network_config is None else EtherNetworkConfig.model_validate(network_config)
         self.init_ether(
-            name=kwargs.pop('name', None),
-            log_level=kwargs.pop('log_level', logging.DEBUG), # TODO: use ether global log level
+            name=kwargs.pop('ether_name', None),
+            network_config=network_config,
+            log_level=kwargs.pop('ether_log_level', logging.DEBUG), # TODO: use ether global log level
         )
         # Call original init with remaining args
         original_init(self, *args, **kwargs)
