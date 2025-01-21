@@ -1,4 +1,5 @@
 # Ether
+![ether_logo_idea](https://github.com/user-attachments/assets/dc108544-90d4-42a1-ab06-bfebb3893edf)
 
 ## What is Ether?
 
