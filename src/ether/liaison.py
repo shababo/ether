@@ -4,22 +4,15 @@ import json
 import time
 import os
 
-from ether.utils import get_ether_logger
+from ether.utils import get_ether_logger, get_ip_address
 from ether._internal._session import EtherSession
 from ether._internal._config import EtherNetworkConfig
 
 
 class EtherInstanceLiaison:
     """An interface for (de)registrations and process tracking for instances"""
-    _instance = None
     
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(EtherInstanceLiaison, cls).__new__(cls)
-            cls._instance._init()
-        return cls._instance
-    
-    def _init(self):
+    def __init__(self, network_config: EtherNetworkConfig = None):
         """Initialize the instance (only called once)"""
         self._logger = get_ether_logger("EtherInstanceLiaison")
         
@@ -29,20 +22,37 @@ class EtherInstanceLiaison:
             network_config = EtherNetworkConfig.model_validate(session_data["network"])
             self._logger.debug(f"Using network config from session: {network_config}")
         else:
-            network_config = EtherNetworkConfig()
             self._logger.debug("No session found, using default network config")
+        network_config = network_config or EtherNetworkConfig()
+
+        if session_data and "public_ip" in session_data:
+            host = session_data["public_ip"]
+            self._logger.debug(f"Using public IP {host} from session")
+            my_ip = get_ip_address()
+            self._logger.debug(f"My IP is {my_ip}")
+            if my_ip == host:
+                host = "localhost"
+        else:
+            host = network_config.host
             
         # Connect to Redis using network config
-        redis_url = f"redis://{network_config.redis_host}:{network_config.redis_port}"
+        self._logger.info(f"redis://{host}:{network_config.redis_port}")
+        redis_url = f"redis://{host}:{network_config.redis_port}"
         self._logger.debug(f"Connecting to Redis at {redis_url}")
-        self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
+        pool = redis.ConnectionPool(
+            host = host,
+            port = network_config.redis_port,
+            decode_responses = True,
+            health_check_interval=30
+        )
+        self.redis = redis.Redis(connection_pool=pool)
+        # self.redis = redis.Redis.from_url(redis_url, decode_responses=True, health_check_interval=10,
+        #     socket_timeout=10, socket_keepalive=True,
+        #     socket_connect_timeout=10, retry_on_timeout=True)
         
         self.instance_key_prefix = "ether:instance:"
         self._ttl = 60  # seconds until instance considered dead
     
-    def __init__(self):
-        # __new__ handles initialization
-        pass
     
     @property
     def ttl(self) -> int:
@@ -58,6 +68,7 @@ class EtherInstanceLiaison:
     
     def register_instance(self, instance_id: str, metadata: Dict[str, Any]) -> None:
         """Register a new Ether instance"""
+        self._logger.debug(f"Registering instance {instance_id} with metadata: {metadata}")
         key = f"{self.instance_key_prefix}{instance_id}"
         metadata['registered_at'] = time.time()
         metadata['pid'] = os.getpid()  # Add process ID
@@ -65,22 +76,26 @@ class EtherInstanceLiaison:
     
     def refresh_instance(self, instance_id: str) -> None:
         """Refresh instance TTL"""
+        self._logger.debug(f"Refreshing instance {instance_id} TTL")
         key = f"{self.instance_key_prefix}{instance_id}"
         if data := self.redis.get(key):
             self.redis.expire(key, self._ttl)
     
     def deregister_instance(self, instance_id: str) -> None:
         """Remove an instance registration"""
+        self._logger.debug(f"Deregistering instance {instance_id}")
         key = f"{self.instance_key_prefix}{instance_id}"
         self.redis.delete(key)
     
     def get_active_instances(self) -> Dict[str, Dict[str, Any]]:
         """Get all currently active instances"""
+        self._logger.debug("Getting active instances")
         instances = {}
         for key in self.redis.keys(f"{self.instance_key_prefix}*"):
             if data := self.redis.get(key):
                 instance_id = key.replace(self.instance_key_prefix, "")
                 instances[instance_id] = json.loads(data)
+        self._logger.debug(f"Active instances: {instances}")
         return instances
     
     def get_instance_data(self, instance_id: str) -> Dict[str, Any]:
@@ -88,6 +103,7 @@ class EtherInstanceLiaison:
         key = f"{self.instance_key_prefix}{instance_id}"
         data = self.redis.get(key)
         if data:
+            self._logger.debug(f"Instance data for {instance_id}: {data}")
             return json.loads(data)
         return {}
     

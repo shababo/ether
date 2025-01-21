@@ -22,6 +22,19 @@ class EtherMethodConfig(BaseModel):
 class EtherClassConfig(BaseModel):
     """Configuration for a class's methods"""
     methods: Dict[str, EtherMethodConfig] = Field(default_factory=dict)
+    
+class EtherNetworkConfig(BaseModel):
+    """Network configuration for Ether"""
+    host: str = "localhost"
+    pubsub_frontend_port: int = 5555
+    pubsub_backend_port: int = 5556
+    reqrep_frontend_port: int = 5559
+    reqrep_backend_port: int = 5560
+    redis_host: str = "0.0.0.0"  # Add separate Redis host config
+    redis_port: int = 6379
+    session_discovery_port: int = 31309
+    session_query_port: int = 31310
+
 
 
 class EtherInstanceConfig(BaseModel):
@@ -30,6 +43,7 @@ class EtherInstanceConfig(BaseModel):
     args: list[Any] = Field(default_factory=list)
     kwargs: dict[str, Any] = Field(default_factory=dict)
     autorun: bool = True  # Whether to automatically launch this instance
+    network_config: Optional[EtherNetworkConfig] = None
     
     def get_class(self):
         """Get the class from its path"""
@@ -39,7 +53,7 @@ class EtherInstanceConfig(BaseModel):
         
         # Check Redis for registry configuration
         from ether.liaison import EtherInstanceLiaison
-        liaison = EtherInstanceLiaison()
+        liaison = EtherInstanceLiaison(network_config=self.network_config)
         registry_config = liaison.get_registry_config()
         
         # If this class has registry configuration, process it
@@ -62,22 +76,11 @@ class EtherInstanceConfig(BaseModel):
         # Override name if not explicitly set in kwargs
         if 'ether_name' not in kwargs:
             kwargs['ether_name'] = instance_name
+        kwargs['ether_network_config'] = self.network_config
         instance = cls(*self.args, **kwargs)
         instance.run()
 
 
-# Add new NetworkConfig class
-class EtherNetworkConfig(BaseModel):
-    """Network configuration for Ether"""
-    host: str = "localhost"
-    pubsub_frontend_port: int = 5555
-    pubsub_backend_port: int = 5556
-    reqrep_frontend_port: int = 5559
-    reqrep_backend_port: int = 5560
-    redis_host: str = "0.0.0.0"  # Add separate Redis host config
-    redis_port: int = 6379
-    session_discovery_port: int = 31309
-    session_query_port: int = 31310
 
 
 class EtherConfig(BaseModel):

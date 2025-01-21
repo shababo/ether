@@ -9,7 +9,7 @@ import multiprocessing
 import errno
 from time import sleep
 
-from ether.utils import get_ether_logger
+from ether.utils import get_ether_logger, get_ip_address
 from ether._internal._config import EtherNetworkConfig
 
 class EtherSession: 
@@ -32,6 +32,7 @@ class EtherSession:
             "ether_id": ether_id,
             "start_time": time.time(),
             "pid": os.getpid(),
+            "public_ip": get_ip_address(),
             "network": self.network.model_dump()  # Add network config to metadata
         }
         
