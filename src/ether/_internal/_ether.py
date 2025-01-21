@@ -82,16 +82,6 @@ def _run_monitor(network_config: Optional[EtherNetworkConfig] = None):
             logger.error(f"Error monitoring instances: {e}")
             time.sleep(1)
 
-def _run_pubsub_proxy(frontend_port: int, backend_port: int):
-    """Run the pubsub proxy in a separate process"""
-    proxy = _EtherPubSubProxy(frontend_port=frontend_port, backend_port=backend_port)
-    try:
-        proxy.run()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        proxy.cleanup()
-
 def _run_reqrep_broker(frontend_port: int = 5559, backend_port: int = 5560):
     """Run the request-reply broker in a separate process"""
     broker = EtherReqRepBroker(frontend_port=frontend_port, backend_port=backend_port)
@@ -385,13 +375,12 @@ class _Ether:
             [
                 'redis-server',
                 '--port', str(self._config.network.redis_port),
-                '--bind', self._config.network.redis_host if self._config.network.redis_host != "0.0.0.0" else "*",
+                '--bind', self._config.network.redis_host,
                 '--dir', tempfile.gettempdir(),  # Use temp dir for dump.rdb
                 '--save', "", 
-                '--appendonly', 'no'
+                '--appendonly', 'no',
+                '--protected-mode', 'no'
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
         )
         # Save PID
         with open(self._redis_pidfile, 'w') as f:
@@ -537,30 +526,6 @@ class _Ether:
                     for handler in self._logger.handlers[:]:
                         handler.close()
                         self._logger.removeHandler(handler)
-
-    # def _start_pubsub_proxy(self, frontend_port: int = 5555, backend_port: int = 5556):
-    #     """Start the pubsub proxy process"""
-    #     self._logger.debug("Starting PubSub proxy")
-    #     self._pubsub_proxy_process = multiprocessing.Process(
-    #         target=_run_pubsub_proxy,
-    #         args=(frontend_port, backend_port),
-    #         name="PubSubProxy"
-    #     )
-    #     self._pubsub_proxy_process.daemon = True
-    #     self._pubsub_proxy_process.start()
-    #     time.sleep(0.1)  # Allow proxy to initialize
-        
-    # def _start_reqrep_broker(self, frontend_port: int = 5559, backend_port: int = 5560):
-    #     """Start the request-reply broker process"""
-    #     self._logger.debug("Starting ReqRep broker")
-    #     self._reqrep_broker_process = multiprocessing.Process(
-    #         target=_run_reqrep_broker,
-    #         args=(frontend_port, backend_port),
-    #         name="ReqRepBroker"
-    #     )
-    #     self._reqrep_broker_process.daemon = True
-    #     self._reqrep_broker_process.start()
-    #     time.sleep(0.1)  # Allow broker to initialize
         
     def cleanup(self):
         """Clean up Ether resources"""
