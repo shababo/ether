@@ -39,7 +39,16 @@ class EtherInstanceLiaison:
         self._logger.info(f"redis://{host}:{network_config.redis_port}")
         redis_url = f"redis://{host}:{network_config.redis_port}"
         self._logger.debug(f"Connecting to Redis at {redis_url}")
-        self.redis = redis.Redis.from_url(redis_url, decode_responses=True)
+        pool = redis.ConnectionPool(
+            host = host,
+            port = network_config.redis_port,
+            decode_responses = True,
+            health_check_interval=30
+        )
+        self.redis = redis.Redis(connection_pool=pool)
+        # self.redis = redis.Redis.from_url(redis_url, decode_responses=True, health_check_interval=10,
+        #     socket_timeout=10, socket_keepalive=True,
+        #     socket_connect_timeout=10, retry_on_timeout=True)
         
         self.instance_key_prefix = "ether:instance:"
         self._ttl = 60  # seconds until instance considered dead
