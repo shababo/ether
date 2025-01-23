@@ -21,6 +21,7 @@ external_stylesheets = [
 ]
 
 
+def get_webapp(layout_config: LayoutConfig):
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
 demo_layout = demo_layout_config.get_layout()

@@ -1,6 +1,6 @@
 [project]
 name = "ether-python"
-version = "2025.1.1a1"
+version = "2025.1.2a1"
 authors = [
   { name="Shababo", email="benshababo@gmail.com" }
 ]
