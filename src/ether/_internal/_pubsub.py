@@ -81,7 +81,7 @@ class _EtherPubSubProxy:
                     
                     if self.capture_socket in events:
                         message = self.capture_socket.recv_multipart()
-                        topic = message[0].decode()
+                        topic = message[0].decode(encoding="unicode_escape")
                         self._logger.debug(f"Forwarding from publisher: Topic={topic}")
                         self.broadcast_socket.send_multipart(message)
                     
@@ -89,7 +89,7 @@ class _EtherPubSubProxy:
                         message = self.broadcast_socket.recv_multipart()
                         # First byte indicates subscription: 1=subscribe, 0=unsubscribe
                         is_subscribe = message[0][0] == 1
-                        topic = message[0][1:].decode()  # Topic follows the first byte
+                        topic = message[0][1:].decode(encoding="unicode_escape")  # Topic follows the first byte
                         self._logger.debug(
                             f"{'Subscription' if is_subscribe else 'Unsubscription'} "
                             f"received for topic: {topic}"

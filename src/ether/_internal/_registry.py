@@ -10,7 +10,7 @@ import json
 import sys
 import importlib
 
-from ..utils import get_ether_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT
+from ..utils import get_ether_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT, get_ip_address
 from ether.liaison import EtherInstanceLiaison
 from ._config import EtherClassConfig, EtherNetworkConfig, EtherConfig
 from ._reqrep import (
@@ -134,10 +134,31 @@ def add_ether_functionality(cls):
            hasattr(method, '_sub_metadata') or
            hasattr(method, '_reqrep_metadata')  # Add get methods
     }
-    logger.debug(f"Found {len(ether_methods)} Ether methods in {cls.__name__}")
+    logger.debug(f"Found {len(ether_methods)} Ether methods in {cls.__name__}: {ether_methods}")
     
     # Store Ether method information (even if empty)
     cls._ether_methods_info = ether_methods
+
+    def get_metadata(self):
+
+        session_metadata = self.ether.get_session_metadata()
+        return {
+            'name': self.name,
+            'process_name': self.name or self.id,  # Use ID if no name provided
+            'class': self.__class__.__name__,
+            'pub_topics': [m._pub_metadata.topic for m in self._ether_methods_info.values() 
+                          if hasattr(m, '_pub_metadata')],
+            'sub_topics': [m._sub_metadata.topic for m in self._ether_methods_info.values() 
+                          if hasattr(m, '_sub_metadata')],
+            'id': self.id,
+            'ether_id': self.ether._ether_id,
+            'session_id': session_metadata['session_id'],
+            'session_ip': session_metadata['public_ip'],
+            'instance_public_ip': get_ip_address(),
+            'instance_local_ip': get_ip_address(use_public=False),
+            'class': self.__class__.__name__,
+            
+        }
     
     # Add core attributes
     def init_ether_vars(self, name=None, network_config: Optional[EtherNetworkConfig] = None, log_level=logging.INFO):
@@ -147,7 +168,9 @@ def add_ether_functionality(cls):
         self.network_config = network_config or EtherNetworkConfig()
 
         from ether import ether
-        ether.tap(config=EtherConfig(network=self.network_config), discovery=False)
+        self.ether = ether
+
+        self.ether.tap(config=EtherConfig(network=self.network_config), discovery=False)
         # Pass log_level as both console and file level if specified
         self._logger = get_ether_logger(
             process_name=self.__class__.__name__,
@@ -178,15 +201,7 @@ def add_ether_functionality(cls):
         
         # Register with instance tracker
         self._instance_tracker = EtherInstanceLiaison(network_config=self.network_config)
-        self._instance_tracker.register_instance(self.id, {
-            'name': self.name,
-            'process_name': name or self.id,  # Use ID if no name provided
-            'class': self.__class__.__name__,
-            'pub_topics': [m._pub_metadata.topic for m in self._ether_methods_info.values() 
-                          if hasattr(m, '_pub_metadata')],
-            'sub_topics': [m._sub_metadata.topic for m in self._ether_methods_info.values() 
-                          if hasattr(m, '_sub_metadata')]
-        })
+        self._instance_tracker.register_instance(f"{self.name}-{self.id}", self.get_metadata())
         
         # Add reqrep worker socket
         self._worker_socket = None
@@ -198,6 +213,8 @@ def add_ether_functionality(cls):
             if hasattr(method, '_reqrep_metadata'):
                 metadata = method._reqrep_metadata
                 self._worker_metadata[metadata.service_name] = metadata
+
+    
     
     def setup_sockets(self):
         """Set up all required sockets"""
@@ -592,6 +609,7 @@ def add_ether_functionality(cls):
     
     # Add methods to class
     cls.init_ether = init_ether_vars
+    cls.get_metadata = get_metadata
     cls.setup_sockets = setup_sockets
     cls._handle_subscriber_message = _handle_subscriber_message
     cls._handle_worker_message = _handle_worker_message

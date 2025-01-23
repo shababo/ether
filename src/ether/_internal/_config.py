@@ -88,7 +88,7 @@ class EtherConfig(BaseModel):
     registry: Dict[str, EtherClassConfig] = Field(default_factory=dict)
     instances: Dict[str, EtherInstanceConfig] = Field(default_factory=dict)
     network: EtherNetworkConfig = Field(default_factory=EtherNetworkConfig)  # Add network config
-    
+
     @classmethod
     def from_yaml(cls, path: str) -> "EtherConfig":
         """Load configuration from YAML file"""
