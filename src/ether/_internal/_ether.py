@@ -323,6 +323,9 @@ class _Ether:
     def session_metadata(self):
         return self._session_metadata
     
+    def get_session_metadata(self):
+        return self._session_metadata
+    
     def _ensure_redis_running(self) -> bool:
         """Ensure Redis server is running, start if not"""
         if self._redis_pidfile.exists():

@@ -46,7 +46,7 @@ class Ether:
     start = staticmethod(functools.partial(_pub, {}, topic="Ether.start"))
     cleanup = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
     shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
-    session_metadata = property(lambda: _ether.session_metadata)
+    get_session_metadata = _ether.get_session_metadata
     
     _initialized = False
     _instance = None

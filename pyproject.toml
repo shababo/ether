@@ -34,6 +34,7 @@ integrations-airtable = [
 ]
 webapp = [
     "dash>=2.18.2",
+    "dash-ag-grid>=31.3.0",
     "dash-iconify>=0.1.2",
     "dash-lumino-components>=0.0.20",
     "dash-mantine-components>=0.15.1",
