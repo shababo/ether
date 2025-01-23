@@ -104,6 +104,7 @@ class _Ether:
     _monitor_process = None
     _instance_manager = None
     _ether_session_process = None
+    _session_metadata = None
     _started = False
     _is_main_session = False
     _pub_socket = None
@@ -166,6 +167,9 @@ class _Ether:
     
     def start(self, ether_id: str, config = None, restart: bool = False, discovery = True):
         """Start all daemon services"""
+
+        session_metadata = None
+
         self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}")
         self._ether_id = ether_id
 
@@ -312,6 +316,12 @@ class _Ether:
         
         self._started = True
         self._logger.info("Ether system started successfully")
+
+        self._session_metadata = session_metadata
+
+    @property
+    def session_metadata(self):
+        return self._session_metadata
     
     def _ensure_redis_running(self) -> bool:
         """Ensure Redis server is running, start if not"""
