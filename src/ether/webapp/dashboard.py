@@ -7,6 +7,7 @@ import random
 
 
 from ether import ether
+from ether._internal._config import EtherConfig
 from ether.webapp.components.core import LayoutConfig
 
 # use font-awesome for icons and boostrap for main style
@@ -28,8 +29,9 @@ class _EtherDashboard:
             self._instance.layout_config = layout_config or LayoutConfig()
         return self._instance
     
-    def tap(self, config: LayoutConfig = None, **kwargs):
-        self.layout_config = config or self.layout_config
+    def tap(self, config: EtherConfig = None, layout_config: LayoutConfig = None, **kwargs):
+        config = config or EtherConfig()
+        self.layout_config = layout_config or self.layout_config
 
         ether.tap(config=config)
         self._app = self._get_dashboard()
@@ -38,6 +40,8 @@ class _EtherDashboard:
     def _get_dashboard(self):
         """Get the Dash app"""
         layout_config = self.layout_config
+
+        app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
         # demo_layout = demo_layout_config.get_layout()
         new_layout = dmc.Flex([layout_config.get_navbar_layout(),layout_config.get_core_layout()], direction="column")
@@ -107,7 +111,7 @@ class _EtherDashboard:
         
         return app
 
-ether_dashboard = _EtherDashboard()
+
 
 # @app.callback(
 #     Output("appshell", "navbar"),
@@ -122,14 +126,3 @@ ether_dashboard = _EtherDashboard()
 #     }
 #     return navbar
 
-#start the app
-if __name__ == '__main__':
-
-    config = {
-        "instances": {
-            "experiment_data_service": {
-                "class_path": "ether_demo.my_project.experiment_data.ExperimentDataService",
-            }
-        }
-    }
-    ether_dashboard.tap(config=config)

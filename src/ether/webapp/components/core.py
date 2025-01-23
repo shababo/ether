@@ -8,8 +8,8 @@ from dash_iconify import DashIconify
 import dash_lumino_components as dlc
 
 class WidgetConfig(BaseModel):
-    id: str
-    title: str
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str = Field(default="Widget")
     icon: Optional[str] = Field(default="mdi:question-mark-box")
     width: Optional[int] = Field(default=20)
     props: Optional[dict] = Field(default_factory=dict)
@@ -42,8 +42,8 @@ class WidgetConfig(BaseModel):
         return dlc.BoxPanel(id=f"{self.id}-custom-component")
 
 class WidgetGroupConfig(BaseModel):
-    id: str
-    widget_buttons: list[WidgetConfig]
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    widget_buttons: list[WidgetConfig] = Field(default_factory=list)
     icon: Optional[str] = Field(default="mdi:question-mark-box")
     icon_width: Optional[int] = Field(default=20)
     
@@ -78,8 +78,8 @@ class WidgetGroupConfig(BaseModel):
 
 
 class LayoutConfig(BaseModel):
-    title: str
-    widget_group_configs: list[WidgetGroupConfig]
+    title: str = Field(default="Ether Dashboard")
+    widget_group_configs: list[WidgetGroupConfig] = Field(default_factory=list)
 
     def get_navbar_layout(self):
 
