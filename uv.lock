@@ -229,8 +229,8 @@ wheels = [
 ]
 
 [[package]]
-name = "ether"
-version = "0.1.0"
+name = "ether-python"
+version = "2025.1.1a1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
