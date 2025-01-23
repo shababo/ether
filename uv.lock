@@ -8,6 +8,19 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "airtable"
+version = "0.4.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6c/e6/da9c7438fbb4100eb915fca9c431df5c60614a1debf5da899c9d2d7adb68/airtable-0.4.8.tar.gz", hash = "sha256:fb667e55da3af1341e0f2946014cc29e7d0613e69f3ee20528051c4075aee75c", size = 13036 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/2b/e5885493796ae222eac6d15ffab093cce8fe63bf10ee920ac205fa65e279/airtable-0.4.8-py2.py3-none-any.whl", hash = "sha256:d653e1b3b92297e3f0cc4226215d43d7fa99c72f38918e9371e445abf0baa70c", size = 8139 },
+]
+
+[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -330,11 +343,13 @@ wheels = [
 ]
 
 [[package]]
-name = "ether-python"
+name = "ether-medium"
 version = "2025.1.2a1"
 source = { editable = "." }
 dependencies = [
+    { name = "airtable" },
     { name = "click" },
+    { name = "ether-python", extra = ["webapp"] },
     { name = "pandas" },
     { name = "psutil" },
     { name = "pydantic" },
@@ -371,12 +386,14 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "airtable", extras = ["webapp"], specifier = ">=0.4.8" },
     { name = "click", specifier = ">=8.1.7" },
     { name = "dash", marker = "extra == 'webapp'", specifier = ">=2.18.2" },
     { name = "dash-ag-grid", marker = "extra == 'webapp'", specifier = ">=31.3.0" },
     { name = "dash-iconify", marker = "extra == 'webapp'", specifier = ">=0.1.2" },
     { name = "dash-lumino-components", marker = "extra == 'webapp'", specifier = ">=0.0.20" },
     { name = "dash-mantine-components", marker = "extra == 'webapp'", specifier = ">=0.15.1" },
+    { name = "ether-python", extras = ["airtable", "all", "webapp"], specifier = ">=2025.1.2a1" },
     { name = "open-ephys-python-tools", marker = "extra == 'integrations-oephys'", specifier = ">=0.1.12" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "psutil", specifier = ">=6.1.0" },
@@ -395,6 +412,35 @@ dev = [
     { name = "pytest" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "twine" },
+]
+
+[[package]]
+name = "ether-python"
+version = "2025.1.2a1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "pandas" },
+    { name = "psutil" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "pyzmq" },
+    { name = "redis" },
+    { name = "requests" },
+    { name = "sqlalchemy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1e/94/66b3b9e418863e3b7b21a219c297e310d0cbe5af5603e57e639e6d5245c2/ether_python-2025.1.2a1.tar.gz", hash = "sha256:b4e61e19a2fb47e2c95549f1e143df9979f51adea39038f67f3edae67780aecb", size = 67281 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/37/13/960d93aab32134a5bc93fe2cfe67427d98704adbb397527e957b1d0fb7a6/ether_python-2025.1.2a1-py3-none-any.whl", hash = "sha256:0021725e57d860b3788ccdff56fe3faa64371f44b154844a2b717cabe6bb3ca7", size = 50127 },
+]
+
+[package.optional-dependencies]
+webapp = [
+    { name = "dash" },
+    { name = "dash-ag-grid" },
+    { name = "dash-iconify" },
+    { name = "dash-lumino-components" },
+    { name = "dash-mantine-components" },
 ]
 
 [[package]]

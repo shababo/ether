@@ -1,5 +1,5 @@
 [project]
-name = "ether-python"
+name = "ether-medium"
 version = "2025.1.2a1"
 authors = [
   { name="Shababo", email="benshababo@gmail.com" }
@@ -19,6 +19,8 @@ dependencies = [
     "click>=8.1.7",
     "requests>=2.32.3",
     "pandas>=2.2.3",
+    "ether-python[airtable,all,webapp]>=2025.1.2a1",
+    "airtable[webapp]>=0.4.8",
 ]
 
 [project.optional-dependencies]
