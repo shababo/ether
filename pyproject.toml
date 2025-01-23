@@ -18,12 +18,25 @@ dependencies = [
     "pyyaml>=6.0.2",
     "click>=8.1.7",
     "requests>=2.32.3",
+    "pandas>=2.2.3",
 ]
 
 [project.optional-dependencies]
-integrations = [
+integrations-base = [
     "pyserial>=3.5",
+    
+]
+integrations-oephys = [
     "open-ephys-python-tools>=0.1.12",
+]
+integrations-airtable = [
+    "pyairtable>=1.1.0",
+]
+webapp = [
+    "dash>=2.18.2",
+    "dash-iconify>=0.1.2",
+    "dash-lumino-components>=0.0.20",
+    "dash-mantine-components>=0.15.1",
 ]
 
 [project.urls]

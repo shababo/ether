@@ -1,5 +1,3 @@
-import os
-
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
 
@@ -9,9 +7,7 @@ import random
 
 
 from ether import ether
-
-
-from ether_demo.my_project.webapp.components import demo_layout_config
+from ether.webapp.components.core import LayoutConfig
 
 # use font-awesome for icons and boostrap for main style
 external_stylesheets = [
@@ -21,74 +17,80 @@ external_stylesheets = [
 ]
 
 
-def get_webapp(layout_config: LayoutConfig):
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
-demo_layout = demo_layout_config.get_layout()
-new_layout = dmc.Flex([demo_layout_config.get_navbar_layout(),demo_layout_config.get_core_layout()], direction="column")
-app.layout = dmc.MantineProvider([new_layout])
+def get_app(layout_config: LayoutConfig = None):
+    """Get the Dash app"""
+    if layout_config is None:
+        layout_config = LayoutConfig()
 
-widget_button_configs = [button_config for group_config in demo_layout_config.widget_group_configs for button_config in group_config.widget_buttons]
+    # demo_layout = demo_layout_config.get_layout()
+    new_layout = dmc.Flex([layout_config.get_navbar_layout(),layout_config.get_core_layout()], direction="column")
+    app.layout = dmc.MantineProvider([new_layout])
 
-# a single callback creates different the different plot widgets
-@app.callback(#[
-        Output('dock-panel', 'children'),
-        # Output('config-json', 'children'),
-    # ],
-    [
-        *[Input(f"{button.id}-button", "n_clicks") for button in widget_button_configs],
-        # Input("com:closeAll", "n_called"),
-        # Input("com:closeRandom", "n_called"),
-        Input('dock-panel', 'widgetEvent')
-    ],
-    [State('dock-panel', 'children')])
-def handle_widget(*argv):
+    widget_button_configs = [button_config for group_config in layout_config.widget_group_configs for button_config in group_config.widget_buttons]
 
-    # the last argument is the current state of the dock-panel
-    widgets_state = argv[-1]
-    if not isinstance(widgets_state, list):
-        widgets_state = [widgets_state]
+    # a single callback creates different the different plot widgets
+    @app.callback(#[
+            Output('dock-panel', 'children'),
+            # Output('config-json', 'children'),
+        # ],
+        [
+            *[Input(f"{button.id}-button", "n_clicks") for button in widget_button_configs],
+            # Input("com:closeAll", "n_called"),
+            # Input("com:closeRandom", "n_called"),
+            Input('dock-panel', 'widgetEvent')
+        ],
+        [State('dock-panel', 'children')])
+    def handle_widget(*argv):
 
-    # the second last is the widget event
-    event = argv[-2]
+        # the last argument is the current state of the dock-panel
+        widgets_state = argv[-1]
+        if not isinstance(widgets_state, list):
+            widgets_state = [widgets_state]
 
-    # remove all closed widgets
-    live_widgets = [w for w in widgets_state if not(
-        "props" in w and "deleted" in w["props"] and w["props"]["deleted"])]
+        # the second last is the widget event
+        event = argv[-2]
 
-    # get which component made the callback
-    ctx = dash.callback_context
+        # remove all closed widgets
+        live_widgets = [w for w in widgets_state if not(
+            "props" in w and "deleted" in w["props"] and w["props"]["deleted"])]
 
-    # check which widget needs to be created
-    matching_widget_configs = [config for config in widget_button_configs if ctx.triggered[0]["prop_id"].startswith(f"{config.id}")]
+        # get which component made the callback
+        ctx = dash.callback_context
 
-    # create the widget 
-    if len(matching_widget_configs) > 0:
+        # check which widget needs to be created
+        matching_widget_configs = [config for config in widget_button_configs if ctx.triggered[0]["prop_id"].startswith(f"{config.id}")]
 
-        new_widget = matching_widget_configs[0].get_widget_component(id_suffix=str(ctx.triggered[0]["value"]))
-        live_widgets.append(new_widget)
+        # create the widget 
+        if len(matching_widget_configs) > 0:
 
-    # new_widget = dlc.Widget(dlc.BoxPanel([],id=f"new-box-panel-{random.randint(0, 1000000)}"),id=f"new-widget-f{random.randint(0, 1000000)}", title="test")
-    # live_widgets.append(new_widget)
-    # import time
-    # time.sleep(5)
-    # close all widgets
-    if "prop_id" in ctx.triggered[0] and ctx.triggered[0]["prop_id"] == "com:closeAll.n_called":
-        live_widgets = []
+            new_widget = matching_widget_configs[0].get_widget_component(id_suffix=str(ctx.triggered[0]["value"]))
+            live_widgets.append(new_widget)
 
-    # close a random widget
-    if "prop_id" in ctx.triggered[0] and ctx.triggered[0]["prop_id"] == "com:closeRandom.n_called" and len(live_widgets) > 0:
-        del_idx = random.randint(0, len(live_widgets)-1)
-        del live_widgets[del_idx]
+        # new_widget = dlc.Widget(dlc.BoxPanel([],id=f"new-box-panel-{random.randint(0, 1000000)}"),id=f"new-widget-f{random.randint(0, 1000000)}", title="test")
+        # live_widgets.append(new_widget)
+        # import time
+        # time.sleep(5)
+        # close all widgets
+        if "prop_id" in ctx.triggered[0] and ctx.triggered[0]["prop_id"] == "com:closeAll.n_called":
+            live_widgets = []
 
-    status = {
-        "event": event,
-        "open": [
-            {k:v for k,v in w["props"].items() if k not in ["children"]} for w in live_widgets if "props" in w and "id" in w["props"]
-        ]
-    }
+        # close a random widget
+        if "prop_id" in ctx.triggered[0] and ctx.triggered[0]["prop_id"] == "com:closeRandom.n_called" and len(live_widgets) > 0:
+            del_idx = random.randint(0, len(live_widgets)-1)
+            del live_widgets[del_idx]
 
-    return live_widgets #, json.dumps(status, indent=2)
+        status = {
+            "event": event,
+            "open": [
+                {k:v for k,v in w["props"].items() if k not in ["children"]} for w in live_widgets if "props" in w and "id" in w["props"]
+            ]
+        }
+
+        return live_widgets #, json.dumps(status, indent=2)
+    
+    return app
 
 # @app.callback(
 #     Output("appshell", "navbar"),
@@ -113,4 +115,6 @@ if __name__ == '__main__':
         }
     }
     ether.tap(config=config)
+
+    app = get_app()
     app.run_server(debug=True)
