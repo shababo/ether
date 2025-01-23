@@ -4,14 +4,12 @@
 
 ## Installation
 ```
-# full ether package
 pip install ether-medium
-
-# circuitpython/small compute version (coming soon)
-# pip install ether-lite
-
 ```
-Planned CircuitPython compatible package
+Coming soon: Circuitpython/small compute compatible package
+```
+# pip install ether-lite 
+```
 ## What is Ether?
 ### User perspective
 Ether provides an ultra-lightweight interface for scientists and engineers to orchestrate hardware and software resources for complex data acquisition and analysis goals. It's designed to be useful at every phase of a project; but in particular, the early phases, when resources and designs can change rapidly and are often discovered through a process of exploration and trial-and-error rather than immutable, a priori decisions.
