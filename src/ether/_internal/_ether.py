@@ -207,93 +207,102 @@ class _Ether:
             except Exception as e:
                 self._logger.error(f"Failed to start session discovery process: {e}", exc_info=True)
                 raise
+        
+        retries = 5
+        connected_to_session = False
+        while retries > 0 and not connected_to_session:
+            try:
+                session_metadata = EtherSession.get_current_session(network_config=self._config.network)
+                self._logger.debug(f"Existing session metadata: {session_metadata}")
+                
+                if session_metadata and session_metadata.get("ether_id") == ether_id:
+                    self._logger.info(f"Starting Ether session: session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}...")
+                    self._is_main_session = True
 
-        try:
-            session_metadata = EtherSession.get_current_session(network_config=self._config.network)
-            self._logger.debug(f"Existing session metadata: {session_metadata}")
-            
-            if session_metadata and session_metadata.get("ether_id") == ether_id:
-                self._logger.info(f"Starting Ether session: session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}...")
-                self._is_main_session = True
-
-                # TODO: review restart logic below, not sure we need it, and if we do if it's in the right place
-                if self._started:
-                    if restart:
-                        self._logger.info("Restarting Ether session...")
-                        self.shutdown()
-                    else:
-                        self._logger.debug("Ether session already started, skipping start")
-                        return
-                
-                # Start Redis
-                self._logger.debug("Starting Redis server...")
-                try:
-                    if not self._ensure_redis_running():
-                        raise RuntimeError("Redis server failed to start")
-                except Exception as e:
-                    self._logger.error(f"Redis startup failed: {e}", exc_info=True)
-                    raise
-                
-                # Start Messaging
-                self._logger.debug("Starting PubSub proxy...")
-                try:
-                    if not self._ensure_pubsub_running():
-                        raise RuntimeError("PubSub proxy failed to start")
-                except Exception as e:
-                    self._logger.error(f"PubSub startup failed: {e}", exc_info=True)
-                    raise
-                
-                # Start ReqRep broker
-                self._logger.debug("Starting ReqRep broker...")
-                try:
-                    if not self._ensure_reqrep_running():
-                        raise RuntimeError("ReqRep broker failed to start")
-                except Exception as e:
-                    self._logger.error(f"ReqRep broker startup failed: {e}", exc_info=True)
-                    raise
-                
-                # Start monitoring
-                self._logger.debug("Starting instance monitor...")
-                self._monitor_process = Process(target=_run_monitor, args=(self._config.network,))
-                self._monitor_process.start()
-                
-                # Clean Redis state
-                self._logger.debug("Cleaning Redis state...")
-                liaison = EtherInstanceLiaison(network_config=self._config.network)
-                liaison.deregister_all()
-                liaison.store_registry_config({})
-
-                
-
-            else:
-                self._logger.warning(f"Joining Ether session, session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}")
-                self._started = True
-                
-                # Store registry config in Redis if present
-                if self._config and self._config.registry:
-                    # Convert the entire registry config to a dict
-                    registry_dict = {
-                        class_path: class_config.model_dump()
-                        for class_path, class_config in self._config.registry.items()
-                    }
+                    # TODO: review restart logic below, not sure we need it, and if we do if it's in the right place
+                    if self._started:
+                        if restart:
+                            self._logger.info("Restarting Ether session...")
+                            self.shutdown()
+                        else:
+                            self._logger.debug("Ether session already started, skipping start")
+                            return
+                    
+                    # Start Redis
+                    self._logger.debug("Starting Redis server...")
+                    try:
+                        if not self._ensure_redis_running():
+                            raise RuntimeError("Redis server failed to start")
+                    except Exception as e:
+                        self._logger.error(f"Redis startup failed: {e}", exc_info=True)
+                        raise
+                    
+                    # Start Messaging
+                    self._logger.debug("Starting PubSub proxy...")
+                    try:
+                        if not self._ensure_pubsub_running():
+                            raise RuntimeError("PubSub proxy failed to start")
+                    except Exception as e:
+                        self._logger.error(f"PubSub startup failed: {e}", exc_info=True)
+                        raise
+                    
+                    # Start ReqRep broker
+                    self._logger.debug("Starting ReqRep broker...")
+                    try:
+                        if not self._ensure_reqrep_running():
+                            raise RuntimeError("ReqRep broker failed to start")
+                    except Exception as e:
+                        self._logger.error(f"ReqRep broker startup failed: {e}", exc_info=True)
+                        raise
+                    
+                    # Start monitoring
+                    self._logger.debug("Starting instance monitor...")
+                    self._monitor_process = Process(target=_run_monitor, args=(self._config.network,))
+                    self._monitor_process.start()
+                    
+                    # Clean Redis state
+                    self._logger.debug("Cleaning Redis state...")
                     liaison = EtherInstanceLiaison(network_config=self._config.network)
-                    liaison.store_registry_config(registry_dict)
-                    EtherRegistry().process_registry_config(self._config.registry)
-                
-                # Process any pending classes
-                EtherRegistry().process_pending_classes()
+                    liaison.deregister_all()
+                    liaison.store_registry_config({})
 
-            if self._config and self._config.instances:
-                for instance_name, instance_cfg in self._config.instances.items():
-                    instance_cfg.network_config = self._config.network
-                    self._config.instances[instance_name] = instance_cfg
-                self._start_instances()
 
-        except Exception as e:
-            self._logger.error(f"Error during Ether startup: {e}", exc_info=True)
-            # Clean up any started processes
-            self.shutdown()
-            raise
+                else:
+                    self._logger.warning(f"Joining Ether session, session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}")
+                    
+                    
+                    # Store registry config in Redis if present
+                    if self._config and self._config.registry:
+                        # Convert the entire registry config to a dict
+                        registry_dict = {
+                            class_path: class_config.model_dump()
+                            for class_path, class_config in self._config.registry.items()
+                        }
+                        liaison = EtherInstanceLiaison(network_config=self._config.network)
+                        liaison.store_registry_config(registry_dict)
+                        EtherRegistry().process_registry_config(self._config.registry)
+                    
+                    # Process any pending classes
+                    EtherRegistry().process_pending_classes()
+
+                if self._config and self._config.instances:
+                    for instance_name, instance_cfg in self._config.instances.items():
+                        instance_cfg.network_config = self._config.network
+                        self._config.instances[instance_name] = instance_cfg
+                    self._start_instances()
+
+                self._started = True
+                connected_to_session = True
+
+            except Exception as e:
+                self._logger.error(f"Error during Ether startup: {e}", exc_info=True)
+                retries -= 1
+                if retries > 0:
+                    time.sleep(1.0)
+                    continue
+                # Clean up any started processes
+                self.shutdown()
+                raise
         
         self._logger.debug("Setting up publisher...")
         self._setup_publisher()
