@@ -182,6 +182,8 @@ class _Ether:
                     self._config = config
                 else:
                     self._config = EtherConfig()
+            else:
+                self._config = EtherConfig()
         except Exception as e:
             self._logger.error(f"Failed to process configuration: {e}", exc_info=True)
             raise
@@ -299,12 +301,13 @@ class _Ether:
                 connected_to_session = True
 
             except Exception as e:
-                self._logger.error(f"Error during Ether startup: {e}", exc_info=True)
+                self._logger.debug(f"Error during Ether startup: {e}")
                 retries -= 1
                 if retries > 0:
                     time.sleep(1.0)
                     continue
                 # Clean up any started processes
+                self._logger.error(f"Error during Ether startup after all retries: {e}")
                 self.shutdown()
                 raise
         

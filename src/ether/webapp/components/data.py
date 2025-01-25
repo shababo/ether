@@ -8,8 +8,8 @@ class TableWidgetConfig(WidgetConfig):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     table_df_func: Callable
     icon: Optional[str] = Field(default="ph:table-duotone")
-    include_cols: Optional[list[str]] = Field(default=list)
-    exclude_cols: Optional[list[str]] = Field(default=list)
+    include_cols: Optional[list] = Field(default_factory=list)
+    exclude_cols: Optional[list] = Field(default_factory=list)
     
 
     def _get_custom_component(self):

@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Union
 from pyairtable import Api, Base, Table
 from pyairtable.formulas import match
 import pandas as pd
-
+import uuid
 class AirtableClient:
     """Base client for interacting with Airtable tables.
     
@@ -72,7 +72,7 @@ class AirtableClient:
             
         return self._base.table(table_name, **kwargs)
 
-    def get_record(self, record_id: str) -> Optional[Dict[str, Any]]:
+    def get_record(self, table_name: str, record_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve a single record by its ID.
         
         Args:
@@ -82,7 +82,7 @@ class AirtableClient:
             Dict containing the record data if found, None if not found
         """
         try:
-            return self.table.get(record_id)
+            return self.get_table(table_name).get(record_id)
         except:  # If record not found or other error
             return None
 
@@ -104,7 +104,7 @@ class AirtableClient:
         Returns:
             List of record dictionaries matching the query parameters
         """
-        return self.table.all(
+        return self._base.table.all(
             formula=formula,
             fields=fields,
             max_records=max_records,
@@ -128,6 +128,7 @@ class AirtableClient:
 
     def create_record(
         self, 
+        table_name: str,
         fields: Dict[str, Any],
         typecast: bool = False
     ) -> Dict[str, Any]:
@@ -140,7 +141,8 @@ class AirtableClient:
         Returns:
             Dict containing the created record data
         """
-        return self.table.create(fields, typecast=typecast)
+        {"measurement_id": uuid.uuid4()}
+        return self._base.table(table_name).create(fields)
 
     def create_records(
         self, 
@@ -156,10 +158,11 @@ class AirtableClient:
         Returns:
             List of created record dictionaries
         """
-        return self.table.batch_create(records, typecast=typecast)
+        return self._base.table.batch_create(records, typecast=typecast)
 
     def update_record(
         self,
+        table_name: str,
         record_id: str,
         fields: Dict[str, Any],
         typecast: bool = False
@@ -174,7 +177,7 @@ class AirtableClient:
         Returns:
             Dict containing the updated record data
         """
-        return self.table.update(record_id, fields, typecast=typecast)
+        return self._base.table(table_name).update(record_id, fields, typecast=typecast)
 
     def update_records(
         self,
@@ -190,7 +193,7 @@ class AirtableClient:
         Returns:
             List of updated record dictionaries
         """
-        return self.table.batch_update(records, typecast=typecast)
+        return self._base.table.batch_update(records, typecast=typecast)
 
     def delete_record(self, record_id: str) -> bool:
         """Delete a single record.
@@ -202,7 +205,7 @@ class AirtableClient:
             True if deletion was successful
         """
         try:
-            result = self.table.delete(record_id)
+            result = self._base.table.delete(record_id)
             return bool(result and result.get('deleted'))
         except:
             return False
@@ -217,7 +220,7 @@ class AirtableClient:
             True if all deletions were successful
         """
         try:
-            results = self.table.batch_delete(record_ids)
+            results = self._base.table.batch_delete(record_ids)
             return all(r.get('deleted', False) for r in results)
         except:
             return False
@@ -254,7 +257,7 @@ class AirtableClient:
         Returns:
             Dict containing the table schema including fields and views
         """
-        return self.table.schema()
+        return self._base.table.schema()
 
     def batch_upsert(
         self,
@@ -272,7 +275,7 @@ class AirtableClient:
         Returns:
             Dict containing created/updated record information
         """
-        return self.table.batch_upsert(
+        return self._base.table.batch_upsert(
             records=records,
             key_fields=key_fields,
             typecast=typecast
@@ -294,5 +297,6 @@ class AirtableClient:
         table = cls.clean_table(table)
 
         return pd.DataFrame(table)
+
         
         
