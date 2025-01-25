@@ -1,18 +1,21 @@
-from typing import Optional
+from typing import Optional, Callable
 from abc import abstractmethod
-from pydantic import BaseModel, Field
-
+from pydantic import BaseModel, Field, ConfigDict
+import pandas as pd
+import uuid
 from dash import html
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 import dash_lumino_components as dlc
+import dash_ag_grid as dag
+
 
 class WidgetConfig(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str = Field(default="Widget")
     icon: Optional[str] = Field(default="mdi:question-mark-box")
     width: Optional[int] = Field(default=20)
-    props: Optional[dict] = Field(default_factory=dict)
+
 
     def get_button_component(self):
         return dmc.ActionIcon(
@@ -147,3 +150,15 @@ class LayoutConfig(BaseModel):
             padding="md",
             id="appshell",
         )
+    
+class TextWidgetConfig(WidgetConfig):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    text_func: Callable
+    icon: Optional[str] = Field(default="ph:table-duotone")
+    
+
+    def _get_custom_component(self):
+
+        text = str(self.text_func())
+        
+        return dmc.Text(text)

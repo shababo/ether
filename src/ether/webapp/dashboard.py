@@ -78,11 +78,17 @@ class _EtherDashboard:
             # get which component made the callback
             ctx = dash.callback_context
 
+            # matchign open widgets
+            matching_repeat_widgets_ids = [config.id for config in widget_button_configs for w in live_widgets if w["props"]["id"].startswith(f"{config.id}-widget-")]
+
             # check which widget needs to be created
             matching_widget_configs = [config for config in widget_button_configs if ctx.triggered[0]["prop_id"].startswith(f"{config.id}")]
 
-            # create the widget 
-            if len(matching_widget_configs) > 0:
+            # new_widget_configs = [config for config in matching_widget_configs if config.id not in matching_repeat_widgets_ids]    
+            new_widget_configs = matching_widget_configs
+ 
+            if len(new_widget_configs) > 0:
+
 
                 new_widget = matching_widget_configs[0].get_widget_component(id_suffix=str(ctx.triggered[0]["value"]))
                 live_widgets.append(new_widget)

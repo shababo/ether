@@ -171,3 +171,6 @@ redis-server.conf
 # UV
 .venv/
 uv.lock
+
+# SpecStory - saves Cursor composer and chat history
+.specstory/

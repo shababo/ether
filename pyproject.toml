@@ -1,13 +1,13 @@
 [project]
 name = "ether-medium"
-version = "2025.1.2a1"
+version = "2025.1.4a1"
 authors = [
   { name="Shababo", email="benshababo@gmail.com" }
 ]
 description = "Developer focused framework for building distributed data acquisition and analysis systems."
 readme = "README.md"
 licencse = "Attribution-NonCommercial-ShareAlike 4.0 International"
-license-files=["LICEN[CS]E*"]
+license-files=["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
     "pyzmq>=26.2.0",
@@ -19,14 +19,11 @@ dependencies = [
     "click>=8.1.7",
     "requests>=2.32.3",
     "pandas>=2.2.3",
-    "ether-python[airtable,all,webapp]>=2025.1.2a1",
-    "airtable[webapp]>=0.4.8",
 ]
 
 [project.optional-dependencies]
 integrations-base = [
     "pyserial>=3.5",
-    
 ]
 integrations-oephys = [
     "open-ephys-python-tools>=0.1.12",

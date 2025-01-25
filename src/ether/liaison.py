@@ -36,7 +36,6 @@ class EtherInstanceLiaison:
             host = network_config.host
             
         # Connect to Redis using network config
-        self._logger.info(f"redis://{host}:{network_config.redis_port}")
         redis_url = f"redis://{host}:{network_config.redis_port}"
         self._logger.debug(f"Connecting to Redis at {redis_url}")
         pool = redis.ConnectionPool(

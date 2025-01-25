@@ -91,25 +91,38 @@ class EtherSession:
         poller = zmq.Poller()
         poller.register(self.rep_socket, zmq.POLLIN)
 
-        self._logger.debug(f"Running discovery service, ether_id: {self.ether_id}")
+        self._logger.debug(f"Running discovery service, ether_id: {self.ether_id}, metadata: {self.metadata}")
         while self.running:
             try:
+                # Announce metadata
+                self._logger.debug(f"Broadcasting session announcement with metadata: {self.metadata}")
                 self.pub_socket.send_json({
                     "type": "announcement",
                     "data": self.metadata
                 })
 
+                # Handle queries
                 events = dict(poller.poll(1000))
                 if self.rep_socket in events:
+                    self._logger.debug("Received query request")
                     msg = self.rep_socket.recv_json()
                     if msg.get("type") == "query":
+                        self._logger.debug(f"Sending response with metadata: {self.metadata}")
                         self.rep_socket.send_json({
                             "type": "response",
                             "data": self.metadata
                         })
+                    else:
+                        self._logger.warning(f"Received unknown message type: {msg}")
+                else:
+                    self._logger.debug("No query requests received in this cycle")
+
             except Exception as e:
-                self._logger.debug(f"Process {os.getpid()}: Service error: {e}")
+                self._logger.error(f"Error in discovery service: {e}", exc_info=True)
                 break
+
+        self._logger.debug("Discovery service loop ended")
+        self.running = False  # Update our own record
 
     @classmethod
     def get_current_session(cls, timeout: int = 200, network_config: Optional[EtherNetworkConfig] = None) -> Optional[Dict[str, Any]]:  # reduced timeout
