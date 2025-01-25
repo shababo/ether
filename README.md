@@ -6,7 +6,7 @@
 ```
 pip install ether-medium
 ```
-Coming soon: Circuitpython/small compute compatible package
+Coming soon: Small compute compatible package and CircuitPython distributions
 ```
 # pip install ether-lite 
 ```
