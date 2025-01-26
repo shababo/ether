@@ -22,7 +22,7 @@ Ether dynamically facilitates direct, local, and remote function calling between
 - Transform existing classes into distributed system components via decorators and/or yaml configuration
 - Automatic session discovery, lifecycle management, and monitoring of processes (locally or over IP)
 - Guarantees on data saving and provenance tracing
-- System-wide logging of events and execution
+- System-wide logging of messages, errors, etc.
 - Configuration complexity scales with use case complexity
 - Session-wide security and encrypted communication (currently in development!)
 - Pydantic type validation for messages based on type hints 
