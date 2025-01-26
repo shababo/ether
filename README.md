@@ -2,15 +2,8 @@
     <img src="https://github.com/user-attachments/assets/dc108544-90d4-42a1-ab06-bfebb3893edf">
 </p>
 
-## Installation
-```
-pip install ether-medium
-```
-Coming soon: Small compute compatible package and CircuitPython distributions
-```
-# pip install ether-lite 
-```
 ## What is Ether?
+
 ### User perspective
 Ether provides an ultra-lightweight interface for scientists and engineers to orchestrate hardware and software resources for complex data acquisition and analysis goals. It's designed to be useful at every phase of a project; but in particular, the early phases, when resources and designs can change rapidly and are often discovered through a process of exploration and trial-and-error rather than immutable, a priori decisions.
 
@@ -24,15 +17,23 @@ Ether dynamically facilitates direct, local, and remote function calling between
 - An operations engineer needs to add remote monitoring to existing industrial control systems
 - A behavioral scientist wants to turn a Gymnasium environment into an interactive game with joystick control and real-time display
 
-
 ## Features
 
 - Transform existing classes into distributed system components via decorators and/or yaml configuration
-- Automatic lifecycle management and monitoring of components
-- Configuration-based integration and launching
-- System-wide logging of events and execution
-- Type validation for messages using Pydantic
+- Automatic session discovery, lifecycle management, and monitoring of processes (locally or over IP)
 - Guarantees on data saving and annotation/metadata
+- System-wide logging of events and execution
+- Session-wide security and encrypted communication
+- Pydantic type validation for messages based on type hints 
+
+## Installation
+```
+pip install ether-medium
+```
+CircuitPython distribution (Coming soon!)
+```
+circup install ether-lite 
+```
 
 ## Quick Start
 
@@ -227,8 +228,6 @@ instances:
 
 - No modification of source code required
 - Works with third-party classes
-- Configuration can be changed without code changes
-- Same functionality as manual decoration
 
 ## Real-World Example: Automated Lab Equipment
 
