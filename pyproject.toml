@@ -42,7 +42,7 @@ webapp = [
 [project.urls]
 Homepage = "https://github.com/shababo/ether"
 Issues = "https://github.com/shababo/ether/issues"
-
+ 
 [dependency-groups]
 dev = [
   "pytest",
