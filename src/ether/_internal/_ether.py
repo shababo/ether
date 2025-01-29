@@ -82,7 +82,7 @@ def _run_monitor(network_config: Optional[EtherNetworkConfig] = None):
             logger.error(f"Error monitoring instances: {e}")
             time.sleep(1)
 
-def _run_reqrep_broker(frontend_port: int = 5559, backend_port: int = 5560):
+def _run_reqrep_broker(frontend_port: int = 13313, backend_port: int = 13314):
     """Run the request-reply broker in a separate process"""
     broker = EtherReqRepBroker(frontend_port=frontend_port, backend_port=backend_port)
     try:
@@ -360,7 +360,10 @@ class _Ether:
     def _ensure_reqrep_running(self) -> bool:
         """Ensure ReqRep broker is running"""
         if self._reqrep_broker_process is None:
-            self._reqrep_broker_process = Process(target=_run_reqrep_broker)
+            self._reqrep_broker_process = Process(
+                target=_run_reqrep_broker,
+                args=(self._config.network.reqrep_frontend_port, self._config.network.reqrep_backend_port)
+            )
             self._reqrep_broker_process.daemon = True
             self._reqrep_broker_process.start()
         return self._test_reqrep_connection()

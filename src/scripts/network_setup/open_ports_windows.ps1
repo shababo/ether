@@ -6,11 +6,11 @@ if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 # Array of port configurations
 $ports = @(
-    @{Port = 5555; Name = "Ether PubSub Frontend"},
-    @{Port = 5556; Name = "Ether PubSub Backend"},
-    @{Port = 5559; Name = "Ether ReqRep Frontend"},
-    @{Port = 5560; Name = "Ether ReqRep Backend"},
-    @{Port = 6379; Name = "Ether Redis"}
+    @{Port = 13311; Name = "Ether PubSub Frontend"},
+    @{Port = 13312; Name = "Ether PubSub Backend"},
+    @{Port = 13313; Name = "Ether ReqRep Frontend"},
+    @{Port = 13314; Name = "Ether ReqRep Backend"},
+    @{Port = 13315; Name = "Ether Redis"}
 )
 
 # Add firewall rules for each port

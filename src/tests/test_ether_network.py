@@ -48,20 +48,20 @@ def test_ether_network_communication():
     # Create network configs for "server" and "client"
     server_network = EtherNetworkConfig(
         host=local_ip,  # Use actual IP for server
-        # pubsub_frontend_port=5555,
-        # pubsub_backend_port=5556,
-        # reqrep_frontend_port=5559,
-        # reqrep_backend_port=5560,
-        # redis_port=6379
+        # pubsub_frontend_port=13311,
+        # pubsub_backend_port=13312,
+        # reqrep_frontend_port=13313,
+        # reqrep_backend_port=13314,
+        # redis_port=13315
     )
     
     client_network = EtherNetworkConfig(
         host=local_ip,  # Connect to server IP
-        # pubsub_frontend_port=5555,
-        # pubsub_backend_port=5556,
-        # reqrep_frontend_port=5559,
-        # reqrep_backend_port=5560,
-        # redis_port=6379
+        # pubsub_frontend_port=13311,
+        # pubsub_backend_port=13312,
+        # reqrep_frontend_port=13313,
+        # reqrep_backend_port=13314,
+        # redis_port=13315
     )
     
     # Create server config
