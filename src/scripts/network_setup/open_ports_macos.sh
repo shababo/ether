@@ -20,11 +20,11 @@ echo "Configuring firewall for Python at: $PYTHON_PATH"
 /usr/libexec/ApplicationFirewall/socketfilter --unblock "$PYTHON_PATH"
 
 echo "Firewall configured for Python. The following ports should now be accessible:"
-echo "- 5555 (PubSub frontend)"
-echo "- 5556 (PubSub backend)"
-echo "- 5559 (ReqRep frontend)"
-echo "- 5560 (ReqRep backend)"
-echo "- 6379 (Redis)"
+echo "- 13311 (PubSub frontend)"
+echo "- 13312 (PubSub backend)"
+echo "- 13313 (ReqRep frontend)"
+echo "- 13314 (ReqRep backend)"
+echo "- 13315 (Redis)"
 
 # Restart firewall to apply changes
 pfctl -F all -f /etc/pf.conf 2>/dev/null

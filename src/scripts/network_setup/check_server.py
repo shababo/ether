@@ -32,11 +32,11 @@ def main():
         
     host = sys.argv[1]
     ports = {
-        5555: "PubSub Frontend",
-        5556: "PubSub Backend",
-        5559: "ReqRep Frontend",
-        5560: "ReqRep Backend",
-        6379: "Redis"
+        13311: "PubSub Frontend",
+        13312: "PubSub Backend",
+        13313: "ReqRep Frontend",
+        13314: "ReqRep Backend",
+        13315: "Redis"
     }
     
     print(f"\nChecking Ether ports on {host}...")

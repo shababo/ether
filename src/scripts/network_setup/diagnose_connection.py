@@ -29,7 +29,7 @@ def get_network_info():
 
 def test_local_ports(host):
     """Test if ports are in use locally"""
-    ports = [5555, 5556, 5559, 5560, 6379]
+    ports = [13311, 13312, 13313, 13314, 13315]
     results = {}
     
     for port in ports:

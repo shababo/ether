@@ -4,8 +4,8 @@ import os
 import socket
 import requests
 # Standard ports for Ether communication
-_ETHER_SUB_PORT = 5555  # subscribe to this port
-_ETHER_PUB_PORT = 5556  # publish to this port
+_ETHER_SUB_PORT = 13311  # subscribe to this port
+_ETHER_PUB_PORT = 13312  # publish to this port
 
 # Log directory structure
 _LOG_DIR = Path("logs")
