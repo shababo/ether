@@ -104,6 +104,104 @@ class KeyManager:
             if key_file.is_file():
                 key_file.rename(archive_dir / key_file.name)
 
+class SessionManager:
+    def start_key_rotation(self, socket, peer_id):
+        """Periodically rotate session keys while maintaining connection"""
+        def rotate_keys():
+            while True:
+                new_keys = self.generate_session_keys()
+                self.signal_key_rotation(socket, peer_id, new_keys)
+                time.sleep(KEY_ROTATION_INTERVAL)
+                
+        threading.Thread(target=rotate_keys, daemon=True).start()
+
+
+
+class SessionManager4:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        if not hasattr(self, 'initialized'):
+            self.group_key = None
+            self.security_level = SecurityLevel.BASIC
+            self.roles = {}
+            self.is_host = False
+            self.session_keys = {}  # For HIGH security with key rotation
+            self.initialized = True
+    
+    def set_group_key(self, key: str):
+        self.group_key = key
+        # Derive base keys for all ZMQ connections
+        self.base_public_key, self.base_secret_key = derive_keys(key)
+
+class SessionManager3:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        if not hasattr(self, 'initialized'):
+            self.session_key = None
+            self.host_key = None
+            self.security_level = SecurityLevel.STANDARD
+            self.initialized = True
+    
+    def create_session(self, security_level: SecurityLevel = SecurityLevel.STANDARD) -> str:
+        """Host creates a new session"""
+        self.session_key = generate_session_key()  # Strong random key
+        self.host_key = generate_host_key()  # Host's admin key
+        self.security_level = security_level
+        return self.session_key
+
+    def join_session(self, session_key: str):
+        """Clients join existing session"""
+        self.session_key = session_key
+
+class SecureMessaging3:
+    def __init__(self):
+        self.context = zmq.Context()
+        self.session = SessionManager()
+    
+    def create_secure_socket(self, socket_type: int) -> zmq.Socket:
+        socket = self.context.socket(socket_type)
+        
+        # Use session key for encryption
+        if self.session.session_key:
+            public_key, secret_key = derive_keys(self.session.session_key)
+            socket.curve_secretkey = secret_key
+            socket.curve_publickey = public_key
+            socket.curve_server = True
+            
+        return socket
+
+class SecureMessaging2:
+    def __init__(self):
+        self.context = zmq.Context()
+        self.key_manager = KeyManager()
+        self.session_manager = SessionManager()
+
+    def create_secure_socket(self, socket_type: int, peer_id: str = None):
+        socket = self.context.socket(socket_type)
+        
+        # Base security with CurveZMQ
+        public_key, secret_key = self.key_manager.keys
+        socket.curve_secretkey = secret_key
+        socket.curve_publickey = public_key
+        
+        # Add session key rotation for long-term connections
+        if peer_id:
+            self.session_manager.start_key_rotation(socket, peer_id)
+            
+        return socket
+
 class SecureMessaging:
     def __init__(self, app_name: str = "myapp"):
         self.context = zmq.Context()
@@ -145,3 +243,117 @@ class SecureMessaging:
         socket.curve_serverkey = server_public_key
         
         return socket
+
+# Access Control and Method Security 
+class ServiceDecorator:
+    def __call__(self, func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Verify caller has permission to execute this method
+            if not self.verify_caller_permissions(func.__name__):
+                raise SecurityError("Unauthorized method call")
+            
+            # Validate input parameters
+            if not self.validate_parameters(func, args, kwargs):
+                raise SecurityError("Invalid parameters")
+            
+            # Log access for audit
+            self.log_method_access(func.__name__)
+            
+            return func(*args, **kwargs)
+        return wrapper
+
+    def verify_caller_permissions(self, method_name):
+        """Check if caller is allowed to execute this method"""
+        # Implement role-based access control
+        return True
+    
+# Equipment/Resource Protection
+class ResourceManager:
+    def __init__(self):
+        self.protected_resources = set()
+        self.resource_locks = {}
+
+    def protect_resource(self, resource_name, allowed_operations):
+        """Register protected lab equipment/resources"""
+        self.protected_resources.add({
+            'name': resource_name,
+            'allowed_ops': allowed_operations,
+            'lock': threading.Lock()
+        })
+
+    def validate_operation(self, resource, operation):
+        """Ensure operation is safe and allowed"""
+        if resource not in self.protected_resources:
+            return False
+        return operation in resource['allowed_ops']
+    
+# Message Privacy and Integrity
+class MessageHandler:
+    def __init__(self):
+        self.security_level = SecurityLevel.STANDARD
+        
+    def send_message(self, socket, message, security_level=None):
+        """Send message with appropriate security"""
+        level = security_level or self.security_level
+        
+        if level == SecurityLevel.HIGH:
+            # Use additional encryption for sensitive data
+            message = self.encrypt_sensitive_data(message)
+            
+        # Add message integrity check
+        message['hmac'] = self.generate_hmac(message)
+        
+        socket.send_json(message)
+
+# System Hardening
+class SystemSecurity:
+    def harden_environment(self):
+        """Implement system-level security measures"""
+        # Restrict file system access
+        self.set_working_directory()
+        
+        # Monitor system resources
+        self.start_resource_monitor()
+        
+        # Set up network isolation
+        self.configure_network_restrictions()
+        
+    def set_working_directory(self):
+        """Restrict file system access to specific directories"""
+        os.chdir(self.safe_working_dir)
+        
+    def start_resource_monitor(self):
+        """Monitor CPU, memory, disk usage for anomalies"""
+        ResourceMonitor().start()
+
+
+"""
+
+Example usage:
+
+# Decorating a lab equipment method
+@service(security_level=SecurityLevel.HIGH)
+@requires_permission('equipment_control')
+def control_microscope(self, parameters):
+    if not resource_manager.validate_operation('microscope', parameters['operation']):
+        raise SecurityError("Operation not allowed")
+    
+    # Proceed with microscope control
+    return self._execute_microscope_command(parameters)
+
+# Long-running data acquisition
+@service(security_level=SecurityLevel.STANDARD)
+@requires_permission('data_acquisition')
+def acquire_data(self, duration_hours):
+    session = SessionManager().create_session()
+    
+    try:
+        while session.running:
+            data = self._collect_data_point()
+            self.send_secure_message(data, session)
+            time.sleep(collection_interval)
+    finally:
+        session.close()
+
+"""

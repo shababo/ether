@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 import yaml
@@ -26,14 +27,26 @@ class EtherClassConfig(BaseModel):
 class EtherNetworkConfig(BaseModel):
     """Network configuration for Ether"""
     host: str = "localhost"
-    pubsub_frontend_port: int = 5555
-    pubsub_backend_port: int = 5556
-    reqrep_frontend_port: int = 5559
-    reqrep_backend_port: int = 5560
+    pubsub_frontend_port: int = 13311
+    pubsub_backend_port: int = 13312
+    reqrep_frontend_port: int = 13313
+    reqrep_backend_port: int = 13314
     redis_host: str = "0.0.0.0"  # Add separate Redis host config
-    redis_port: int = 13311
-    session_discovery_port: int = 31309
-    session_query_port: int = 31310
+    redis_port: int = 13315
+    session_discovery_port: int = 13309
+    session_query_port: int = 13310
+
+class EtherSecurityLevel(Enum):
+    BASIC = "basic"      # Just group isolation
+    STANDARD = "standard"  # + role-based access
+    HIGH = "high"        # + session key rotation, logging
+
+
+class EtherSecurityConfig(BaseModel):
+    """Security configuration for Ether"""
+    security_level: EtherSecurityLevel = EtherSecurityLevel.STANDARD
+    group_key: Optional[str] = None
+    user_key: Optional[str] = None
 
 
 
