@@ -200,8 +200,8 @@ def add_ether_functionality(cls):
         self.results_file = None
         
         # Register with instance tracker
-        self._instance_tracker = EtherInstanceLiaison(network_config=self.network_config)
-        self._instance_tracker.register_instance(f"{self.name}-{self.id}", self.get_metadata())
+        self._instance_liaison = EtherInstanceLiaison(network_config=self.network_config)
+        self._instance_liaison.register_instance(f"{self.name}-{self.id}", self.get_metadata())
         
         # Add reqrep worker socket
         self._worker_socket = None
@@ -567,8 +567,8 @@ def add_ether_functionality(cls):
             try:
                 # Refresh TTL periodically
                 now = time.time()
-                if now - last_refresh >= (self._instance_tracker.ttl / 2):
-                    self._instance_tracker.refresh_instance(self.id)
+                if now - last_refresh >= (self._instance_liaison.ttl / 2):
+                    self._instance_liaison.refresh_instance(f"{self.name}-{self.id}")
                     last_refresh = now
                 
                 # Create a poller to handle both sub and worker sockets
@@ -596,8 +596,8 @@ def add_ether_functionality(cls):
     
     # Add cleanup
     def cleanup(self):
-        if hasattr(self, '_instance_tracker'):
-            self._instance_tracker.deregister_instance(self.id)
+        if hasattr(self, '_instance_liaison'):
+            self._instance_liaison.deregister_instance(f"{self.name}-{self.id}")
         if hasattr(self, '_sub_socket') and self._sub_socket:
             self._sub_socket.close()
         if hasattr(self, '_pub_socket') and self._pub_socket:
