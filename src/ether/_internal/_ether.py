@@ -170,7 +170,7 @@ class _Ether:
 
         session_metadata = None
 
-        self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}")
+        self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}, discovery={discovery}")
         self._ether_id = ether_id
 
         # Process configuration
@@ -188,6 +188,7 @@ class _Ether:
             self._logger.error(f"Failed to process configuration: {e}", exc_info=True)
             raise
 
+        # If we are running on the same machine as the session host, replace the public IP with the local IP
         try:
             public_ip = get_ip_address(use_public=True)
             if config.network.host == public_ip:
@@ -203,6 +204,7 @@ class _Ether:
 
         # Start session with network config
         if discovery:
+            self._logger.debug("Starting session discovery process...")
             try:
                 self._ether_session_process = Process(
                     target=session_discovery_launcher, 

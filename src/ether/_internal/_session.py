@@ -214,7 +214,7 @@ class EtherSession:
         if hasattr(self, 'context'):
             self.context.term()
 
-def session_discovery_launcher(process_id: str, network_config: Optional[EtherNetworkConfig] = None):
+def session_discovery_launcher(ether_id: str, network_config: Optional[EtherNetworkConfig] = None, retries: int = 5):
     """Launch an Ether session process
     
     Args:
@@ -224,13 +224,13 @@ def session_discovery_launcher(process_id: str, network_config: Optional[EtherNe
     try:
         # First try to find existing session
         # print(f"Process {process_id}: Checking for existing session...")
-        current_session = EtherSession.get_current_session(timeout=200)
+        current_session = EtherSession.get_current_session(timeout=200, network_config=network_config)
         
         if current_session is None:
             # print(f"Process {process_id}: No session found, attempting to create new one...")
             try:
                 session_mgr = EtherSession(
-                    ether_id=process_id,
+                    ether_id=ether_id,
                     network_config=network_config
                 )
                 while True:
