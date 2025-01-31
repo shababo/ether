@@ -224,7 +224,12 @@ def session_discovery_launcher(ether_id: str, network_config: Optional[EtherNetw
     try:
         # First try to find existing session
         # print(f"Process {process_id}: Checking for existing session...")
-        current_session = EtherSession.get_current_session(timeout=200, network_config=network_config)
+        while retries > 0:
+            current_session = EtherSession.get_current_session(timeout=200, network_config=network_config)
+            if current_session is not None:
+                break
+            retries -= 1
+            time.sleep(0.5)
         
         if current_session is None:
             # print(f"Process {process_id}: No session found, attempting to create new one...")

@@ -208,7 +208,7 @@ class _Ether:
             try:
                 self._ether_session_process = Process(
                     target=session_discovery_launcher, 
-                    args=(self._ether_id, self._config.network)
+                    kwargs={"ether_id": self._ether_id, "network_config": self._config.network}
                 )
                 self._ether_session_process.start()
                 time.sleep(1.0)
