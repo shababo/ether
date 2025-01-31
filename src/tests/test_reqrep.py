@@ -15,7 +15,7 @@ from ether.utils import get_ether_logger
 
 def run_broker():
     """Run the broker in a separate process"""
-    broker = EtherReqRepBroker(frontend_port=5559, backend_port=5560)
+    broker = EtherReqRepBroker(frontend_port=13313, backend_port=13314)
     try:
         broker.run()
     except KeyboardInterrupt:
@@ -29,7 +29,7 @@ def run_worker(service_name):
     context = zmq.Context()
     socket = context.socket(zmq.DEALER)
     socket.setsockopt(zmq.RCVTIMEO, 2500)
-    socket.connect("tcp://localhost:5560")
+    socket.connect("tcp://localhost:13314")
     
     try:
         # Register with broker
@@ -86,7 +86,7 @@ def run_client(service_name, client_id):
     context = zmq.Context()
     socket = context.socket(zmq.DEALER)
     socket.setsockopt(zmq.RCVTIMEO, 2500)
-    socket.connect("tcp://localhost:5559")
+    socket.connect("tcp://localhost:13313")
     
     try:
         replies_received = set()

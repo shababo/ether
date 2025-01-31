@@ -8,13 +8,13 @@ Ether uses ZeroMQ (ZMQ) for network communication and Redis for state management
 
 ## Port Requirements
 Ether requires the following TCP ports for communication. Default ports are:
-- 5555: PubSub Frontend
-- 5556: PubSub Backend
-- 5559: ReqRep Frontend
-- 5560: ReqRep Backend
-- 6379: Redis
-- 301309: Session Discovery
-- 301310: Session Query
+- 13311: PubSub Frontend
+- 13312: PubSub Backend
+- 13313: ReqRep Frontend
+- 13314: ReqRep Backend
+- 13315: Redis
+- 13309: Session Discovery
+- 13310: Session Query
 
 > **Note:** All ports can be customized, but must match between server and clients.
 
@@ -47,13 +47,13 @@ To allow remote connections to an Ether server:
    - Note the server's public IP address
 
 2. **Router Configuration**
-   - Configure port forwarding for all required ports:
+   - Configure port forwarding for all required ports (defaults shown below):
      ```
-     TCP 5555 -> Server Local IP  (PubSub Frontend)
-     TCP 5556 -> Server Local IP  (PubSub Backend)
-     TCP 5559 -> Server Local IP  (ReqRep Frontend)
-     TCP 5560 -> Server Local IP  (ReqRep Backend)
-     TCP 6379 -> Server Local IP  (Redis)
+     TCP 13311 -> Server Local IP  (PubSub Frontend)
+     TCP 13312 -> Server Local IP  (PubSub Backend)
+     TCP 13313 -> Server Local IP  (ReqRep Frontend)
+     TCP 13314 -> Server Local IP  (ReqRep Backend)
+     TCP 13315 -> Server Local IP  (Redis)
      ```
 
 3. **Server Configuration**
@@ -64,11 +64,11 @@ To allow remote connections to an Ether server:
    # Configure server with public IP
    network_config = EtherNetworkConfig(
        host="your.public.ip",  # Server's public IP
-       pubsub_frontend_port=5555,
-       pubsub_backend_port=5556,
-       reqrep_frontend_port=5559,
-       reqrep_backend_port=5560,
-       redis_port=6379
+      #  pubsub_frontend_port=13311,
+      #  pubsub_backend_port=13312,
+      #  reqrep_frontend_port=13313,
+      #  reqrep_backend_port=13314,
+      #  redis_port=13315
    )
 
    config = EtherConfig(network=network_config)
@@ -89,10 +89,10 @@ To allow remote connections to an Ether server:
 1. **Basic Port Test**
    ```bash
    # On server
-   nc -l 5555
+   nc -l 13311
 
    # On client
-   nc -v server.public.ip 5555
+   nc -v server.public.ip 13311
    ```
 
 2. **Network Diagnostics**

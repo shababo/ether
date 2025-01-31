@@ -82,7 +82,7 @@ def _run_monitor(network_config: Optional[EtherNetworkConfig] = None):
             logger.error(f"Error monitoring instances: {e}")
             time.sleep(1)
 
-def _run_reqrep_broker(frontend_port: int = 5559, backend_port: int = 5560):
+def _run_reqrep_broker(frontend_port: int = 13313, backend_port: int = 13314):
     """Run the request-reply broker in a separate process"""
     broker = EtherReqRepBroker(frontend_port=frontend_port, backend_port=backend_port)
     try:
@@ -170,7 +170,7 @@ class _Ether:
 
         session_metadata = None
 
-        self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}")
+        self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}, discovery={discovery}")
         self._ether_id = ether_id
 
         # Process configuration
@@ -188,6 +188,7 @@ class _Ether:
             self._logger.error(f"Failed to process configuration: {e}", exc_info=True)
             raise
 
+        # If we are running on the same machine as the session host, replace the public IP with the local IP
         try:
             public_ip = get_ip_address(use_public=True)
             if config.network.host == public_ip:
@@ -203,10 +204,11 @@ class _Ether:
 
         # Start session with network config
         if discovery:
+            self._logger.debug("Starting session discovery process...")
             try:
                 self._ether_session_process = Process(
                     target=session_discovery_launcher, 
-                    args=(self._ether_id, self._config.network)
+                    kwargs={"ether_id": self._ether_id, "network_config": self._config.network}
                 )
                 self._ether_session_process.start()
                 time.sleep(1.0)
@@ -360,7 +362,10 @@ class _Ether:
     def _ensure_reqrep_running(self) -> bool:
         """Ensure ReqRep broker is running"""
         if self._reqrep_broker_process is None:
-            self._reqrep_broker_process = Process(target=_run_reqrep_broker)
+            self._reqrep_broker_process = Process(
+                target=_run_reqrep_broker,
+                args=(self._config.network.reqrep_frontend_port, self._config.network.reqrep_backend_port)
+            )
             self._reqrep_broker_process.daemon = True
             self._reqrep_broker_process.start()
         return self._test_reqrep_connection()

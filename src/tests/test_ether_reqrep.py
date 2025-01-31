@@ -26,7 +26,7 @@ def run_worker(service_name):
     context = zmq.Context()
     socket = context.socket(zmq.DEALER)
     socket.setsockopt(zmq.RCVTIMEO, 2500)
-    socket.connect("tcp://localhost:5560")
+    socket.connect("tcp://localhost:13314")
     
     try:
         # Register with broker
@@ -83,7 +83,7 @@ def run_client(service_name, client_id):
     context = zmq.Context()
     socket = context.socket(zmq.DEALER)
     socket.setsockopt(zmq.RCVTIMEO, 2500)
-    socket.connect("tcp://localhost:5559")
+    socket.connect("tcp://localhost:13313")
     
     try:
         replies_received = set()

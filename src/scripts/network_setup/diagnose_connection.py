@@ -29,7 +29,7 @@ def get_network_info():
 
 def test_local_ports(host):
     """Test if ports are in use locally"""
-    ports = [5555, 5556, 5559, 5560, 6379]
+    ports = [13311, 13312, 13313, 13314, 13315]
     results = {}
     
     for port in ports:
@@ -78,7 +78,7 @@ def main():
         print(f"Port {port}: {status}")
     
     print("\n3. Connection Test to Target:")
-    ports = [5555, 5556, 5559, 5560, 6379]
+    ports = [13311, 13312, 13313, 13314, 13315]
     for port in ports:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(2)
@@ -109,7 +109,7 @@ def main():
     
     print("\n7. Active Network Connections:")
     if platform.system() in ["Linux", "Darwin"]:
-        print(run_command("netstat -an | grep -E '5555|5556|5559|5560|6379'"))
+        print(run_command("netstat -an | grep -E '13311|13312|13313|13314|13315'"))
 
 if __name__ == "__main__":
     main() 

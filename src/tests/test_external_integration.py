@@ -13,7 +13,7 @@ def test_external_integration():
     # Setup ZMQ subscriber to listen for messages
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
-    socket.connect("tcp://localhost:5555")
+    socket.connect("tcp://localhost:13311")
     socket.subscribe("test_processed")  # Subscribe to processor output topic
     
     config_dict = {

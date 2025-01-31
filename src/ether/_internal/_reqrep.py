@@ -50,7 +50,7 @@ class EtherReqRepBroker:
     HEARTBEAT_INTERVAL = 2500  # msecs
     HEARTBEAT_LIVENESS = 3    # 3-5 is reasonable
 
-    def __init__(self, frontend_port: int = 5559, backend_port: int = 5560):
+    def __init__(self, frontend_port: int = 13313, backend_port: int = 13314):
         self.id = str(uuid.uuid4())
         self._logger = get_ether_logger("EtherReqRepBroker")
         self._logger.debug("Initializing MDP broker")
