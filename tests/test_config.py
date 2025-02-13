@@ -4,8 +4,10 @@ import multiprocessing
 from ether import ether
 from ether._internal._config import EtherConfig
 from ether.liaison import EtherInstanceLiaison
+    
 
-def run_mixed_autorun_test():
+def test_mixed_autorun():
+    """Test configuration with mixed autorun settings"""
     """Test mixed autorun configuration"""
     tracker = EtherInstanceLiaison()
     
@@ -13,12 +15,10 @@ def run_mixed_autorun_test():
         "instances": {
             "test_generator": {
                 "class_path": "examples.simple_data_processing.DataGenerator",
-                "args": [1],
                 "autorun": True
             },
             "test_processor": {
                 "class_path": "examples.simple_data_processing.DataProcessor",
-                "args": [1],
                 "autorun": False
             }
         }
@@ -36,7 +36,7 @@ def run_mixed_autorun_test():
     
     # launch processor
     config["instances"]["test_processor"]["autorun"] = True
-    processes = ether.tap(restart=True, config=config)
+    ether.tap(config=config, restart=True)
     time.sleep(1)
     
     # Check both are running
@@ -45,11 +45,3 @@ def run_mixed_autorun_test():
     instance_names = {i['name'] for i in instances.values()}
     assert "test_generator" in instance_names
     assert "test_processor" in instance_names
-
-def test_mixed_autorun():
-    """Test configuration with mixed autorun settings"""
-    ctx = multiprocessing.get_context('spawn')
-    process = ctx.Process(target=run_mixed_autorun_test)
-    process.start()
-    process.join()
-    assert process.exitcode == 0

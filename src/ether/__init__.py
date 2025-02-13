@@ -38,6 +38,9 @@ def _request(service_class: str, method_name: str, params=None, request_type="ge
 
 # Public singleton instance of Ether API
 class Ether:
+
+    # ether public API
+    # just some sugar to make the UX better and to codify common actions into topics
     pub = staticmethod(_pub)
     request = staticmethod(_request)
     get = staticmethod(functools.partial(_request, request_type="get"))
@@ -46,6 +49,8 @@ class Ether:
     start = staticmethod(functools.partial(_pub, {}, topic="Ether.start"))
     cleanup = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
     shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
+    pause = staticmethod(functools.partial(_pub, {}, topic="Ether.pause"))
+    resume = staticmethod(functools.partial(_pub, {}, topic="Ether.resume"))
     get_session_metadata = _ether.get_session_metadata
     
     _initialized = False

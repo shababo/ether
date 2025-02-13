@@ -229,12 +229,12 @@ class _Ether:
 
                     # TODO: review restart logic below, not sure we need it, and if we do if it's in the right place
                     if self._started:
-                        if restart:
-                            self._logger.info("Restarting Ether session...")
-                            self.shutdown()
-                        else:
-                            self._logger.debug("Ether session already started, skipping start")
-                            return
+                        # if restart:
+                        #     self._logger.info("Restarting Ether session...")
+                        #     self.shutdown()
+                        # else:
+                        self._logger.debug("Ether session already started, skipping start")
+                        return
                     
                     # Start Redis
                     self._logger.debug("Starting Redis server...")
@@ -473,6 +473,13 @@ class _Ether:
                     self._logger.debug("Stopping all instances...")
                     self._instance_manager.stop_all_instances()
 
+                # stop session discovery process
+                if self._ether_session_process:
+                    self._logger.debug("Stopping session discovery process...")
+                    self._ether_session_process.terminate()
+                    self._ether_session_process.join(timeout=2)
+                    self._ether_session_process = None
+
                 # close request socket
                 if self._request_socket:
                     self._logger.debug("Closing request socket...")
@@ -544,7 +551,7 @@ class _Ether:
                 except Exception as e:
                     self._logger.error(f"Error cleaning up Redis: {e}")
                     
-                self._ether_session_process.terminate()
+                # self._ether_session_process.terminate()
                 self._started = False
                 self._logger.info("Ether system shutdown complete")
             
