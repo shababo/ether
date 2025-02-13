@@ -5,10 +5,10 @@
 ## What is Ether?
 
 ### User perspective
-Ether provides an ultra-lightweight interface for scientists and engineers to orchestrate hardware and software resources for complex data acquisition and analysis goals. It's designed to be useful at every phase of a project; but in particular, the early phases, when resources and designs can change rapidly and are often discovered through a process of exploration and trial-and-error rather than immutable, a priori decisions.
+Ether provides an ultra-lightweight Python interface for scientists and engineers to orchestrate hardware and software resources for complex data acquisition and analysis goals. In fact, you can run the components of lab without even touching your code! When components are connected to the same Ether Session, they can communicate with each other within the same machine or over the Internet. When you run your lab with Ether, everything that happens is logged and traceable without the need to provide any schema or information ahead of time. This allows Ether to be useful even during the early stages of a project when plans can change rapidly and decisions are sometimes made on the fly.
 
 ### Developer perspective
-Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions.
+Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions. It achieves these goals by launching instances of Python classes in their own processes and dynamically turning decorated methods of those classses into microservices. Ether supports both Pub-Sub and Request-Reply messaging patterns.
 
 ## Example Use Cases
 
