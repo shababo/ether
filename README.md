@@ -6,10 +6,9 @@
 
 ### User perspective
 Ether provides an ultra-lightweight, Python interface for scientists and engineers to integrate the components of their lab. A core goal of Ether is to be useful even during the early stages of a project when plans can change rapidly and decisions are sometimes made on the fly.
-
-With Ether,
+With Ether
 - you can integrate the components of your lab without touching your source code. (Though Ether also provides a decorator-based interface if you prefer.)
-- components communicate with each other automatically, both within the same machine or over the Internet.
+- components communicate with each other automatically, whether on the same machine or over the Internet.
 - everything that happens is logged and traceable without the need to provide any schema or information ahead of time.
 
 ### Developer perspective
