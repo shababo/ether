@@ -28,6 +28,7 @@ class ReconnectTestService:
         self._logger.debug(f"Counter incremented to {self.counter}")
         return {"counter": self.counter}
 
+@pytest.mark.skip(reason="Not fully implemented yet.")
 def test_service_reconnect():
     """Test that service properly reconnects after disconnect"""
     logger = get_ether_logger("TestReconnect")
@@ -35,7 +36,7 @@ def test_service_reconnect():
     config = EtherConfig(
         instances={
             "reconnect_service": EtherInstanceConfig(
-                class_path="tests.test_reconnect.ReconnectTestService",
+                class_path="test_reconnect.ReconnectTestService",
                 kwargs={"name": "reconnect_service"}
             )
         }

@@ -69,7 +69,7 @@ def test_ether_network_communication():
         network=server_network,
         instances={
             "network_test": EtherInstanceConfig(
-                class_path="tests.test_ether_network.NetworkTestService",
+                class_path="test_ether_network.NetworkTestService",
                 kwargs={"ether_name": "network_test"}
             )
         }
