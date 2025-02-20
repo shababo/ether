@@ -174,3 +174,6 @@ uv.lock
 
 # SpecStory - saves Cursor composer and chat history
 .specstory/
+
+# macos
+.DS_Store
