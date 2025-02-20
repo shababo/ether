@@ -2,20 +2,17 @@
     <img src="https://github.com/user-attachments/assets/dc108544-90d4-42a1-ab06-bfebb3893edf">
 </p>
 
-## Installation
-```
-pip install ether-medium
-```
-Coming soon: Small compute compatible package and CircuitPython distributions
-```
-# pip install ether-lite 
-```
 ## What is Ether?
+
 ### User perspective
-Ether provides an ultra-lightweight interface for scientists and engineers to orchestrate hardware and software resources for complex data acquisition and analysis goals. It's designed to be useful at every phase of a project; but in particular, the early phases, when resources and designs can change rapidly and are often discovered through a process of exploration and trial-and-error rather than immutable, a priori decisions.
+Ether provides an ultra-lightweight, Python interface for scientists and engineers to integrate the components of their lab. A core goal of Ether is to be useful even during the early stages of a project when plans can change rapidly and decisions are sometimes made on the fly.
+With Ether
+- you can integrate the components of your lab without touching your source code. (Though Ether also provides a decorator-based interface if you prefer.)
+- components communicate with each other automatically, whether on the same machine or over the Internet.
+- everything that happens is logged and traceable without the need to provide any schema or information ahead of time.
 
 ### Developer perspective
-Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions.
+Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions. It achieves these goals by launching instances of Python classes in their own processes and dynamically turning decorated methods of those classses into microservices. Ether supports both Pub-Sub and Request-Reply messaging patterns.
 
 ## Example Use Cases
 
@@ -24,15 +21,24 @@ Ether dynamically facilitates direct, local, and remote function calling between
 - An operations engineer needs to add remote monitoring to existing industrial control systems
 - A behavioral scientist wants to turn a Gymnasium environment into an interactive game with joystick control and real-time display
 
-
 ## Features
 
 - Transform existing classes into distributed system components via decorators and/or yaml configuration
-- Automatic lifecycle management and monitoring of components
-- Configuration-based integration and launching
-- System-wide logging of events and execution
-- Type validation for messages using Pydantic
-- Guarantees on data saving and annotation/metadata
+- Automatic session discovery, lifecycle management, and monitoring of processes (locally or over IP)
+- Guarantees on data saving and provenance tracing
+- System-wide logging of messages, errors, etc.
+- Configuration complexity scales with use case complexity
+- Session-wide security and encrypted communication (currently in development!)
+- Pydantic type validation for messages based on type hints 
+
+## Installation
+```
+pip install ether-medium
+```
+CircuitPython distribution (Coming soon!)
+```
+circup install ether-lite 
+```
 
 ## Quick Start
 
@@ -227,8 +233,6 @@ instances:
 
 - No modification of source code required
 - Works with third-party classes
-- Configuration can be changed without code changes
-- Same functionality as manual decoration
 
 ## Real-World Example: Automated Lab Equipment
 

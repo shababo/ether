@@ -1,5 +1,8 @@
 # Ether Network Configuration Guide
 
+## NB:
+**This is stale. Will update after implementing security/encryption and even simpler configuration!**
+
 ## Overview
 Ether uses ZeroMQ (ZMQ) for network communication and Redis for state management. This guide explains how to configure networking for both local and remote connections.
 
