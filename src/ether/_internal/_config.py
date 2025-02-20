@@ -5,6 +5,7 @@ import yaml
 import importlib
 
 # from ._registry import EtherRegistry
+from ether.utils import get_ether_logger
 
 
 class EtherDecoratorConfig(BaseModel):
@@ -84,14 +85,20 @@ class EtherInstanceConfig(BaseModel):
     
     def run(self, instance_name: str):
         """Run a single instance with the configured args and kwargs"""
-        cls = self.get_class()
-        kwargs = self.kwargs.copy()
-        # Override name if not explicitly set in kwargs
-        if 'ether_name' not in kwargs:
-            kwargs['ether_name'] = instance_name
-        kwargs['ether_network_config'] = self.network_config
-        instance = cls(*self.args, **kwargs)
-        instance.run()
+        logger = get_ether_logger("EtherInstanceConfig")
+        logger.info(f"Running instance {instance_name} with class {self.class_path}\n\targs: {self.args}\n\tkwargs: {self.kwargs}")
+        try:
+            cls = self.get_class()
+            kwargs = self.kwargs.copy()
+            # Override name if not explicitly set in kwargs
+            if 'ether_name' not in kwargs:
+                kwargs['ether_name'] = instance_name
+            kwargs['ether_network_config'] = self.network_config
+            instance = cls(*self.args, **kwargs)
+            instance.run()
+        except Exception as e:
+            logger.error(f"Error running instance {instance_name}: {e}")
+            raise e
 
 
 

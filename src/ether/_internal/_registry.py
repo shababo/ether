@@ -126,18 +126,6 @@ def add_ether_functionality(cls):
     if hasattr(cls, '_ether_methods_info'):
         logger.debug(f"Class {cls.__name__} already has Ether functionality")
         return cls
-    
-    # Collect Ether methods
-    ether_methods = {
-        name: method for name, method in cls.__dict__.items()
-        if hasattr(method, '_pub_metadata') or 
-           hasattr(method, '_sub_metadata') or
-           hasattr(method, '_reqrep_metadata')  # Add get methods
-    }
-    logger.debug(f"Found {len(ether_methods)} Ether methods in {cls.__name__}: {ether_methods}")
-    
-    # Store Ether method information (even if empty)
-    cls._ether_methods_info = ether_methods
 
     def get_metadata(self):
 
@@ -199,9 +187,7 @@ def add_ether_functionality(cls):
         self.subscription_time = None
         self.results_file = None
         
-        # Register with instance tracker
-        self._instance_liaison = EtherInstanceLiaison(network_config=self.network_config)
-        self._instance_liaison.register_instance(f"{self.name}-{self.id}", self.get_metadata())
+        
         
         # Add reqrep worker socket
         self._worker_socket = None
@@ -213,6 +199,10 @@ def add_ether_functionality(cls):
             if hasattr(method, '_reqrep_metadata'):
                 metadata = method._reqrep_metadata
                 self._worker_metadata[metadata.service_name] = metadata
+
+        # Register with instance tracker
+        self._instance_liaison = EtherInstanceLiaison(network_config=self.network_config)
+        self._instance_liaison.register_instance(f"{self.name}-{self.id}", self.get_metadata())
 
     
     
@@ -244,6 +234,7 @@ def add_ether_functionality(cls):
                 self._sub_socket.connect(self._sub_address)
             self._sub_socket.setsockopt(zmq.RCVHWM, 1000000)
             self._sub_socket.setsockopt(zmq.RCVBUF, 65536)
+            self._sub_socket.setsockopt(zmq.LINGER, 0)
             self.subscription_time = time.time()
             
             # Setup subscriptions
@@ -262,7 +253,7 @@ def add_ether_functionality(cls):
                 self._pub_socket.connect(self._pub_address)
             self._pub_socket.setsockopt(zmq.SNDHWM, 1000000)
             self._pub_socket.setsockopt(zmq.SNDBUF, 65536)
-
+            self._pub_socket.setsockopt(zmq.LINGER, 0)
 
         time.sleep(0.1)
         
@@ -327,14 +318,18 @@ def add_ether_functionality(cls):
                     
                     # If using root model, pass the entire data as 'root'
                     if isinstance(metadata.args_model, type) and issubclass(metadata.args_model, RootModel):
-                        args = {'root': metadata.args_model(data).root}
+                        kwargs = {'root': metadata.args_model(data).root}
                     else:
                         # Validate data with the model
                         model_instance = metadata.args_model(**data)
                         validated_data = model_instance.model_dump()
-                        args = {k: v for k, v in validated_data.items() if k in valid_params}
+                        kwargs = {k: v for k, v in validated_data.items() if k in valid_params}
                     
-                    metadata.func(self, **args)
+                    # if this func has a pub decorator
+                    if hasattr(metadata.func, '_pub_metadata'):
+                        metadata.func(self, publish_result=True, **kwargs)
+                    else:
+                        metadata.func(self, **kwargs)
 
     def _handle_worker_message(self, timeout=1000):
         """Handle a message from the worker socket"""
@@ -597,16 +592,28 @@ def add_ether_functionality(cls):
     # Add cleanup
     def cleanup(self):
         if hasattr(self, '_instance_liaison'):
-            self._instance_liaison.deregister_instance(f"{self.name}-{self.id}")
+            # if instance is not run in its own process this can happen after redis is shutdown
+            # and for now the instance manager doesn't access this type of instance
+            try:
+                self._instance_liaison.deregister_instance(f"{self.name}-{self.id}")
+            except Exception as e:
+                pass
         if hasattr(self, '_sub_socket') and self._sub_socket:
             self._sub_socket.close()
+            self._sub_socket = None
         if hasattr(self, '_pub_socket') and self._pub_socket:
             self._pub_socket.close()
-        if hasattr(self, '_zmq_context') and self._zmq_context:
-            self._zmq_context.term()
+            self._pub_socket = None
+
         if hasattr(self, '_worker_socket') and self._worker_socket:
             self._worker_socket.close()
-    
+            self._worker_socket = None
+
+        if hasattr(self, '_zmq_context') and self._zmq_context:
+            self._zmq_context.term()
+            self._zmq_context = None
+        
+
     # Add methods to class
     cls.init_ether = init_ether_vars
     cls.get_metadata = get_metadata
@@ -623,74 +630,48 @@ def add_ether_functionality(cls):
     # Modify __init__ to initialize attributes
     original_init = cls.__init__
     def new_init(self, *args, **kwargs):
-        # Initialize Ether functionality first
-        network_config = kwargs.pop('ether_network_config', None)
-        network_config = EtherNetworkConfig() if network_config is None else EtherNetworkConfig.model_validate(network_config)
-        self.init_ether(
-            name=kwargs.pop('ether_name', None),
-            network_config=network_config,
-            log_level=kwargs.pop('ether_log_level', logging.DEBUG), # TODO: use ether global log level
-        )
+        # Initialize Ether functionality, but don't break
+        try:
+            network_config = kwargs.pop('ether_network_config', None)
+            network_config = EtherNetworkConfig() if network_config is None else EtherNetworkConfig.model_validate(network_config)
+            self.init_ether(
+                name=kwargs.pop('ether_name', None),
+                network_config=network_config,
+                log_level=kwargs.pop('ether_log_level', logging.DEBUG), # TODO: use ether global log level
+            )
+            # Setup sockets after initialization
+            self.setup_sockets()
+        except Exception as e:
+            self._logger.debug(f"Error initializing Ether: {e}")
+            pass
         # Call original init with remaining args
         original_init(self, *args, **kwargs)
-        # Setup sockets after initialization
-        self.setup_sockets()
+        
     cls.__init__ = new_init
     
     # Add cleanup on deletion
+    if hasattr(cls, '__del__'):
+        original_del = cls.__del__
+    else:
+        original_del = lambda self: None
+        
     def new_del(self):
+        original_del(self)
         self.cleanup()
     cls.__del__ = new_del
     
+    cls.cleanup = _ether_sub(func=cls.cleanup, topic="Ether.cleanup")
+    # Collect Ether methods
+    ether_methods = {
+        name: method for name, method in cls.__dict__.items()
+        if hasattr(method, '_pub_metadata') or 
+           hasattr(method, '_sub_metadata') or
+           hasattr(method, '_reqrep_metadata')  # Add get methods
+    }
+    logger.debug(f"Found {len(ether_methods)} Ether methods in {cls.__name__}: {ether_methods}")
     
-
-    # def request(self, service_name: str, method: str, params=None, request_type="get", timeout=2500):
-    #     """Make a request to a service with improved error handling"""
-    #     if not self._request_socket:
-    #         self.setup_sockets()
-        
-    #     # Build full service name: ServiceName.method.get/save
-    #     service = f"{service_name}.{method}.{request_type}".encode()
-        
-    #     request_data = {
-    #         "timestamp": time.time(),
-    #         "type": request_type,
-    #         "params": params or {}
-    #     }
-        
-    #     retries = 3
-    #     while retries > 0:
-    #         try:
-    #             # Send request with MDP client protocol
-    #             self._request_socket.send_multipart([
-    #                 MDPC_CLIENT,  # Protocol identifier
-    #                 service,      # Service name
-    #                 json.dumps(request_data).encode()  # Request data
-    #             ])
-                
-    #             # Wait for reply with timeout
-    #             if self._request_poller.poll(timeout):
-    #                 msg = self._request_socket.recv_multipart()
-    #                 # Verify protocol and service
-    #                 assert msg[0] == MDPC_CLIENT
-    #                 assert msg[1] == service
-    #                 reply = json.loads(msg[2].decode())
-    #                 return reply
-    #             else:
-    #                 self._logger.warning("No reply, reconnecting...")
-    #                 self._reconnect_request_socket()
-    #                 retries -= 1
-                    
-    #         except zmq.error.Again:
-    #             self._logger.warning(f"Request timed out, retries left: {retries}")
-    #             self._reconnect_request_socket()
-    #             retries -= 1
-    #         except Exception as e:
-    #             self._logger.error(f"Request error: {e}")
-    #             self._reconnect_request_socket()
-    #             retries -= 1
-                
-    #     raise TimeoutError("Request failed after all retries")
+    # Store Ether method information (even if empty)
+    cls._ether_methods_info = ether_methods
     
     return cls
 
@@ -763,32 +744,37 @@ def _ether_pub(func=None, *, topic: Optional[str] = None):
         return_type = dict
     
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self, *args, publish_result=False, **kwargs):
         result = func(self, *args, **kwargs)
         try:
             self._logger.debug(f"Inside pub wrapper for {func.__name__}")
-            if not hasattr(self, '_pub_socket'):
-                raise RuntimeError("Cannot publish: no publisher socket configured")
-            
-            if result is None:
-                result = {}
-            
-            # Validate and serialize result
-            if isinstance(return_type, type) and issubclass(return_type, BaseModel):
-                validated_result = return_type(**result).model_dump_json()
-            else:
-                ResultModel = RootModel[return_type]
-                validated_result = ResultModel(result).model_dump_json()
-            
-            actual_topic = topic or f"{func.__qualname__}"
-            self._logger.debug(f"Publishing to topic: {actual_topic}")
-            
-            self._pub_socket.send_multipart([
-                actual_topic.encode(),
-                validated_result.encode()
-            ])
+            self._logger.debug(f"Input args: {args}")
+            self._logger.debug(f"Input kwargs: {kwargs}")
+            self._logger.debug(f"Publish result: {publish_result}")
+
+            if publish_result:
+                if not hasattr(self, '_pub_socket'):
+                    raise RuntimeError("Cannot publish: no publisher socket configured")
+                
+                if result is None:
+                    result = {}
+                
+                # Validate and serialize result
+                if isinstance(return_type, type) and issubclass(return_type, BaseModel):
+                    validated_result = result.model_dump_json()
+                else:
+                    ResultModel = RootModel[return_type]
+                    validated_result = ResultModel(result).model_dump_json()
+                
+                actual_topic = topic or f"{func.__qualname__}"
+                self._logger.debug(f"Publishing to topic: {actual_topic}")
+                
+                self._pub_socket.send_multipart([
+                    actual_topic.encode(),
+                    validated_result.encode()
+                ])
         except Exception as e:
-            pass
+            self._logger.debug(f"Error in Ether wrapper in {func.__name__}: {e}")
         
         return result
     

@@ -110,8 +110,7 @@ class _Ether:
     _pub_socket = None
     _request_socket = None
     _zmq_context = None
-    _pubsub_proxy_process: Optional[multiprocessing.Process] = None
-    _reqrep_broker_process: Optional[multiprocessing.Process] = None
+    _reqrep_broker_process = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -245,6 +244,9 @@ class _Ether:
                         self._logger.error(f"Redis startup failed: {e}", exc_info=True)
                         raise
                     
+                    # Clean up any existing ZMQ contexts
+                    # zmq.Context.instance().term()
+
                     # Start Messaging
                     self._logger.debug("Starting PubSub proxy...")
                     try:
@@ -290,8 +292,8 @@ class _Ether:
                         liaison.store_registry_config(registry_dict)
                         EtherRegistry().process_registry_config(self._config.registry)
                     
-                    # Process any pending classes
-                    EtherRegistry().process_pending_classes()
+                # Process any pending classes
+                EtherRegistry().process_pending_classes()
 
                 if self._config and self._config.instances:
                     for instance_name, instance_cfg in self._config.instances.items():
@@ -347,8 +349,7 @@ class _Ether:
     
     def _ensure_pubsub_running(self) -> bool:
         """Ensure PubSub proxy is running"""
-        # Clean up any existing ZMQ contexts
-        zmq.Context.instance().term()
+        
         if self._pubsub_process is None:
             self._pubsub_process = Process(
                 target=_run_pubsub,
@@ -563,30 +564,6 @@ class _Ether:
                     for handler in self._logger.handlers[:]:
                         handler.close()
                         self._logger.removeHandler(handler)
-        
-    def cleanup(self):
-        """Clean up Ether resources"""
-        self._logger.debug("Cleaning up Ether")
-        
-        # Terminate proxy process
-        if self._pubsub_proxy_process and self._pubsub_proxy_process.is_alive():
-            self._logger.debug("Terminating PubSub proxy")
-            self._pubsub_proxy_process.terminate()
-            self._pubsub_proxy_process.join(timeout=1)
-            if self._pubsub_proxy_process.is_alive():
-                self._logger.warning("PubSub proxy didn't terminate, killing")
-                self._pubsub_proxy_process.kill()
-                self._pubsub_proxy_process.join(timeout=1)
-                
-        # Terminate broker process
-        if self._reqrep_broker_process and self._reqrep_broker_process.is_alive():
-            self._logger.debug("Terminating ReqRep broker")
-            self._reqrep_broker_process.terminate()
-            self._reqrep_broker_process.join(timeout=1)
-            if self._reqrep_broker_process.is_alive():
-                self._logger.warning("ReqRep broker didn't terminate, killing")
-                self._reqrep_broker_process.kill()
-                self._reqrep_broker_process.join(timeout=1)
 
     def _setup_request_socket(self):
         """Set up the ZMQ request socket"""

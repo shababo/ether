@@ -48,30 +48,40 @@ def main(config_name):
     DataCollector[PID 51475]: Collected result - 16968
     DataCollector[PID 51475]: Summarizing results - mean: 12726.0, max: 16968, min: 8484
     """
-
+    
     # init ether
     config_path = _get_config_path(config_name)
     ether.tap(config=config_path)
 
-    # use ether's start method to publish to the "start" topic
-    # this will call any method decorated with @ether_start
-    ether.start()
-    time.sleep(1.002)
+    try:
+        # use ether's start method to publish to the "start" topic
+        # this will call any method decorated with @ether_start
+        ether.start()
+        time.sleep(5.0)
 
-    # ether.shutdown()
+        # ether.shutdown()
 
-    # you can still use your code normally when ether is not running
-    # in other words, if your code is still used other places, it will still work
-    generator = DataGenerator()
-    processor2x = DataProcessor(multiplier=2)
-    processor4x = DataProcessor(multiplier=4)
-    collector = DataCollector()
-    generated_data = generator.generate_data(data=4242)
-    processed2x_result = processor2x.process_data(**generated_data)
-    processed4x_result = processor4x.process_data(**generated_data)
-    collector.collect_result(**processed2x_result)
-    collector.collect_result(**processed4x_result)
-    collector.summarize()
+        # you can still use your code normally when ether is not running
+        # in other words, if your code is still used other places, it will still work
+        # generator = DataGenerator()
+        # processor2x = DataProcessor(multiplier=2)
+        # processor4x = DataProcessor(multiplier=4)
+        # collector = DataCollector()
+        # generated_data = generator.generate_data(data=42)
+        # processed2x_result = processor2x.process_data(**generated_data)
+        # processed4x_result = processor4x.process_data(**generated_data)
+        # collector.collect_result(**processed2x_result)
+        # collector.collect_result(**processed4x_result)
+        # collector.summarize()
+
+        time.sleep(5.0)
+    except Exception as e:
+        print(e)
+    finally:
+        # ether.shutdown()
+        pass
+
+
     
 
 
