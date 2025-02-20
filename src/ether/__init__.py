@@ -56,16 +56,14 @@ class Ether:
     _initialized = False
     _instance = None
     _ether_id = str(uuid.uuid4())
-    
+    _within_process_instances = []
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Ether, cls).__new__(cls)
         return cls._instance
 
-    def tap(self, config: Optional[Union[str, dict, EtherConfig]] = None, restart: bool = False, discovery: bool = True):
+    def tap(self, config: Optional[Union[str, dict, EtherConfig]] = None, restart: bool = False, allow_host: bool = True, ether_run: bool = False):
         """Initialize the Ether messaging system."""
-        # Only set root logger level without adding a handler
-        logging.getLogger().setLevel(logging.DEBUG)
 
         if self._initialized and restart:
             print("Force reinitializing Ether system...")
@@ -74,7 +72,7 @@ class Ether:
             
         if not self._initialized:
             # Start ether
-            _ether.start(ether_id=self._ether_id, config=config, restart=restart, discovery=discovery)
+            _ether.start(ether_id=self._ether_id, config=config, restart=restart, allow_host=allow_host, ether_run=ether_run)
         
             # Mark as initialized
             self._initialized = True
@@ -86,8 +84,14 @@ class Ether:
 
     def shutdown(self):
         self.cleanup()
+        for instance in self._within_process_instances:
+            # self._logger.debug(f"Shutting down instance: {instance.name}-{instance.id}")
+            instance.cleanup()
+
         self.save_all()
+        time.sleep(2.0)
         _ether.shutdown()
+        self._initialized = False
  
 
 ## Export public interface

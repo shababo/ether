@@ -53,33 +53,52 @@ def main(config_name):
     config_path = _get_config_path(config_name)
     ether.tap(config=config_path)
 
-    try:
+    # try:
         # use ether's start method to publish to the "start" topic
         # this will call any method decorated with @ether_start
-        ether.start()
-        time.sleep(5.0)
+    ether.start()
+    time.sleep(1.0)
 
-        # ether.shutdown()
+    # ether.shutdown()
 
-        # you can still use your code normally when ether is not running
-        # in other words, if your code is still used other places, it will still work
-        # generator = DataGenerator()
-        # processor2x = DataProcessor(multiplier=2)
-        # processor4x = DataProcessor(multiplier=4)
-        # collector = DataCollector()
-        # generated_data = generator.generate_data(data=42)
-        # processed2x_result = processor2x.process_data(**generated_data)
-        # processed4x_result = processor4x.process_data(**generated_data)
-        # collector.collect_result(**processed2x_result)
-        # collector.collect_result(**processed4x_result)
-        # collector.summarize()
+    # if you run your code normally while ether is still running,
+    # you get logging but you don't tap into ether messaging so your
+    # instnaces behave like a normal instance
+    generator = DataGenerator()
+    processor2x = DataProcessor(multiplier=2)
+    processor4x = DataProcessor(multiplier=4)
+    collector = DataCollector()
+    generated_data = generator.generate_data(data=42)
+    processed2x_result = processor2x.process_data(**generated_data)
+    processed4x_result = processor4x.process_data(**generated_data)
+    collector.collect_result(**processed2x_result)
+    collector.collect_result(**processed4x_result)
+    collector.summarize()
 
-        time.sleep(5.0)
-    except Exception as e:
-        print(e)
-    finally:
-        # ether.shutdown()
-        pass
+    time.sleep(1.0)
+
+    ether.shutdown()
+
+    time.sleep(1.0)
+    # you can still use your code normally when ether is not running
+    # in other words, if your code is still used other places, it will still work
+    print("Starting normal code execution at", time.strftime("%Y-%m-%d %H:%M:%S"))
+    generator = DataGenerator()
+    processor2x = DataProcessor(multiplier=2)
+    processor4x = DataProcessor(multiplier=4)
+    collector = DataCollector()
+    generated_data = generator.generate_data(data=42)
+    processed2x_result = processor2x.process_data(**generated_data)
+    processed4x_result = processor4x.process_data(**generated_data)
+    collector.collect_result(**processed2x_result)
+    collector.collect_result(**processed4x_result)
+    collector.summarize()
+    print("Ending normal code execution at", time.strftime("%Y-%m-%d %H:%M:%S"))
+    # except Exception as e:
+    #     print(e)
+    # finally:
+    #     # ether.shutdown()
+    #     pass
 
 
     

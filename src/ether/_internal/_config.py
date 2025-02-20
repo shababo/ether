@@ -94,6 +94,7 @@ class EtherInstanceConfig(BaseModel):
             if 'ether_name' not in kwargs:
                 kwargs['ether_name'] = instance_name
             kwargs['ether_network_config'] = self.network_config
+            kwargs['ether_run'] = True
             instance = cls(*self.args, **kwargs)
             instance.run()
         except Exception as e:

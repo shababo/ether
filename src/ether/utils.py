@@ -18,7 +18,7 @@ def get_ether_logger(
     process_name: str, 
     run_id: str = None,
     instance_name: str = None, 
-    console_level=logging.DEBUG,
+    console_level=logging.INFO,
     file_level=logging.DEBUG,
 ) -> logging.Logger:
     """Get or create a logger with file and console handlers"""
@@ -27,11 +27,11 @@ def get_ether_logger(
     logger_name = f"{process_name}:{instance_name}" if instance_name else process_name
     logger_name = f"{logger_name}:{os.getpid()}"
     logger = logging.getLogger(logger_name)
-    # logger.setLevel(min(console_level, file_level))
+    logger.setLevel(min(console_level, file_level))
     
     # Don't add handlers if they already exist
-    # if logger.handlers:
-    #     return logger
+    if logger.handlers:
+        return logger
     
     # Create formatters with timestamps
     formatter = logging.Formatter(

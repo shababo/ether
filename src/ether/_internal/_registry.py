@@ -153,12 +153,7 @@ def add_ether_functionality(cls):
         
         self.id = str(uuid.uuid4())
         self.name = name or self.id
-        self.network_config = network_config or EtherNetworkConfig()
-
-        from ether import ether
-        self.ether = ether
-
-        self.ether.tap(config=EtherConfig(network=self.network_config), discovery=False)
+        
         # Pass log_level as both console and file level if specified
         self._logger = get_ether_logger(
             process_name=self.__class__.__name__,
@@ -167,7 +162,7 @@ def add_ether_functionality(cls):
             # file_level=log_level
         )
         self._logger.debug(f"Initializing {self.name}")
-        self._sub_address = f"tcp://{network_config.host}:{network_config.pubsub_frontend_port}"
+        self._sub_address = f"tcp://{self.network_config.host}:{network_config.pubsub_frontend_port}"
         self._pub_address = f"tcp://{network_config.host}:{network_config.pubsub_backend_port}"
         
         # Socket handling
@@ -267,6 +262,7 @@ def add_ether_functionality(cls):
             self._worker_socket = self._zmq_context.socket(zmq.DEALER)
             self._worker_socket.linger = 0
             self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
+            self._worker_socket.setsockopt(zmq.LINGER, 0)
             self._worker_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_backend_port}")
             self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
             
@@ -283,18 +279,18 @@ def add_ether_functionality(cls):
                 self._logger.debug(f"Service registered: {service_name}")
     
         # Setup request socket with better connection management
-        if self._request_socket:
-            self._zmq_context.destroy()
-            self._zmq_context = zmq.Context()
+        # if self._request_socket:
+        #     self._zmq_context.destroy()
+        #     self._zmq_context = zmq.Context()
         
-        self._request_socket = self._zmq_context.socket(zmq.REQ)
-        self._request_socket.linger = 0  # Don't wait for unsent messages on close
-        self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)  # 2.5 sec timeout
-        self._request_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_frontend_port}")
+        # self._request_socket = self._zmq_context.socket(zmq.REQ)
+        # self._request_socket.linger = 0  # Don't wait for unsent messages on close
+        # self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)  # 2.5 sec timeout
+        # self._request_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_frontend_port}")
         
-        # Add poller for request socket
-        self._request_poller = zmq.Poller()
-        self._request_poller.register(self._request_socket, zmq.POLLIN)
+        # # Add poller for request socket
+        # self._request_poller = zmq.Poller()
+        # self._request_poller.register(self._request_socket, zmq.POLLIN)
     
     def _handle_subscriber_message(self, timeout=1000):
         """Handle a message from the subscriber socket"""
@@ -491,18 +487,18 @@ def add_ether_functionality(cls):
                 metadata.heartbeat_liveness = 3
                 metadata.last_heartbeat = time.time()
     
-    def _reconnect_request_socket(self):
-        """Reconnect the request socket to the broker"""
-        self._logger.debug("Reconnecting request socket")
-        if self._request_socket:
-            self._request_poller.unregister(self._request_socket)
-            self._request_socket.close()
+    # def _reconnect_request_socket(self):
+    #     """Reconnect the request socket to the broker"""
+    #     self._logger.debug("Reconnecting request socket")
+    #     if self._request_socket:
+    #         self._request_poller.unregister(self._request_socket)
+    #         self._request_socket.close()
         
-        self._request_socket = self._zmq_context.socket(zmq.REQ)
-        self._request_socket.linger = 0
-        self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
-        self._request_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_frontend_port}")
-        self._request_poller.register(self._request_socket, zmq.POLLIN)
+    #     self._request_socket = self._zmq_context.socket(zmq.REQ)
+    #     self._request_socket.linger = 0
+    #     self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
+    #     self._request_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_frontend_port}")
+    #     self._request_poller.register(self._request_socket, zmq.POLLIN)
 
     # Add message tracking
     def track_message(self, publisher_id: str, sequence: int, timestamp: float):
@@ -591,27 +587,31 @@ def add_ether_functionality(cls):
     
     # Add cleanup
     def cleanup(self):
-        if hasattr(self, '_instance_liaison'):
-            # if instance is not run in its own process this can happen after redis is shutdown
-            # and for now the instance manager doesn't access this type of instance
-            try:
-                self._instance_liaison.deregister_instance(f"{self.name}-{self.id}")
-            except Exception as e:
-                pass
-        if hasattr(self, '_sub_socket') and self._sub_socket:
-            self._sub_socket.close()
-            self._sub_socket = None
-        if hasattr(self, '_pub_socket') and self._pub_socket:
-            self._pub_socket.close()
-            self._pub_socket = None
+        self._logger.debug(f"Cleaning up instance {self.name}-{self.id}")
+        try:
+            if hasattr(self, '_instance_liaison'):
+                # if instance is not run in its own process this can happen after redis is shutdown
+                # and for now the instance manager doesn't access this type of instance
+                try:
+                    self._instance_liaison.deregister_instance(f"{self.name}-{self.id}")
+                except Exception as e:
+                    pass
+            if hasattr(self, '_sub_socket') and self._sub_socket:
+                self._sub_socket.close()
+                self._sub_socket = None
+            if hasattr(self, '_pub_socket') and self._pub_socket:
+                self._pub_socket.close()
+                self._pub_socket = None
 
-        if hasattr(self, '_worker_socket') and self._worker_socket:
-            self._worker_socket.close()
-            self._worker_socket = None
+            if hasattr(self, '_worker_socket') and self._worker_socket:
+                self._worker_socket.close()
+                self._worker_socket = None
 
-        if hasattr(self, '_zmq_context') and self._zmq_context:
-            self._zmq_context.term()
-            self._zmq_context = None
+            if hasattr(self, '_zmq_context') and self._zmq_context:
+                self._zmq_context.term()
+                self._zmq_context = None
+        except Exception as e:
+            self._logger.debug(f"Error cleaning up instance {self.name}-{self.id}: {e}")
         
 
     # Add methods to class
@@ -621,32 +621,53 @@ def add_ether_functionality(cls):
     cls._handle_subscriber_message = _handle_subscriber_message
     cls._handle_worker_message = _handle_worker_message
     cls._reconnect_worker_socket = _reconnect_worker_socket
-    cls._reconnect_request_socket = _reconnect_request_socket
+    # cls._reconnect_request_socket = _reconnect_request_socket
     cls.track_message = track_message
     cls.save_results = save_results
     cls.run = run
     cls.cleanup = cleanup
     
-    # Modify __init__ to initialize attributes
+    # Modify __init__ to initialize ether related instance attributes
     original_init = cls.__init__
     def new_init(self, *args, **kwargs):
         # Initialize Ether functionality, but don't break
         try:
+            from ether import ether
+            self.ether = ether
+
+            ether_run = kwargs.pop('ether_run', False)
             network_config = kwargs.pop('ether_network_config', None)
-            network_config = EtherNetworkConfig() if network_config is None else EtherNetworkConfig.model_validate(network_config)
-            self.init_ether(
-                name=kwargs.pop('ether_name', None),
-                network_config=network_config,
-                log_level=kwargs.pop('ether_log_level', logging.DEBUG), # TODO: use ether global log level
-            )
-            # Setup sockets after initialization
-            self.setup_sockets()
-        except Exception as e:
-            self._logger.debug(f"Error initializing Ether: {e}")
-            pass
-        # Call original init with remaining args
-        original_init(self, *args, **kwargs)
+            self.network_config = EtherNetworkConfig() if network_config is None else EtherNetworkConfig.model_validate(network_config)
         
+            if ether_run:
+                self.ether.tap(config=EtherConfig(network=self.network_config), allow_host=False, ether_run = ether_run)
+            
+            if self.ether._initialized:
+                
+                self.init_ether(
+                    name=kwargs.pop('ether_name', None),
+                    network_config=network_config,
+                    log_level=kwargs.pop('ether_log_level', logging.DEBUG), # TODO: use ether global log level
+                )
+                # Setup sockets after initialization
+                self.setup_sockets()
+        except Exception as e:
+            # self._logger.debug(f"Error initializing Ether: {e}")
+            pass # don't fail init if ether is not running
+
+        # Call original init with remaining args
+        try:
+            original_init(self, *args, **kwargs)
+        except Exception as e:
+            original_init(self)
+
+        # add process
+        try:
+            if self.ether._initialized:
+                self.ether._within_process_instances.append(self)
+        except Exception as e:
+            pass # don't fail init if ether is not running
+
     cls.__init__ = new_init
     
     # Add cleanup on deletion
@@ -656,8 +677,13 @@ def add_ether_functionality(cls):
         original_del = lambda self: None
         
     def new_del(self):
+        try:
+            if self.ether._initialized:
+                self.cleanup()
+        except Exception as e:
+            pass # don't fail cleanup if ether is not running
         original_del(self)
-        self.cleanup()
+        
     cls.__del__ = new_del
     
     cls.cleanup = _ether_sub(func=cls.cleanup, topic="Ether.cleanup")
@@ -774,7 +800,8 @@ def _ether_pub(func=None, *, topic: Optional[str] = None):
                     validated_result.encode()
                 ])
         except Exception as e:
-            self._logger.debug(f"Error in Ether wrapper in {func.__name__}: {e}")
+            if hasattr(self, '_logger'):
+                self._logger.debug(f"Error in Ether wrapper in {func.__name__}: {e}")
         
         return result
     

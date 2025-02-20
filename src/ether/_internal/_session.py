@@ -5,7 +5,6 @@ import threading
 import os
 from typing import Optional, Dict, Any
 import atexit
-import multiprocessing
 import errno
 from time import sleep
 
@@ -58,11 +57,12 @@ class EtherSession:
             self.is_discovery_service = True
             self.running = True
             
-            self.service_thread = threading.Thread(target=self._run_discovery_service)
-            self.service_thread.daemon = True
-            self.service_thread.start()
+            # self.service_thread = threading.Thread(target=self._run_discovery_service)
+            # self.service_thread.daemon = True
+            # self.service_thread.start()
+            self._run_discovery_service()
             
-            self._logger.debug(f"Started discovery service on ports {self.network.session_discovery_port}, {self.network.session_query_port}")
+            
             
         except zmq.ZMQError as e:
             if e.errno == errno.EADDRINUSE:
@@ -88,6 +88,9 @@ class EtherSession:
                 raise
 
     def _run_discovery_service(self):
+
+        self._logger.debug(f"Started discovery service on ports {self.network.session_discovery_port}, {self.network.session_query_port}")
+
         poller = zmq.Poller()
         poller.register(self.rep_socket, zmq.POLLIN)
 
@@ -204,15 +207,16 @@ class EtherSession:
             self.req_socket.close()
 
     def cleanup(self):
-        self.running = False
-        if hasattr(self, 'service_thread') and self.service_thread.is_alive():
-            self.service_thread.join(timeout=1.0)
+        
+        # if hasattr(self, 'service_thread') and self.service_thread.is_alive():
+        #     self.service_thread.join(timeout=1.0)
         if hasattr(self, 'pub_socket'):
             self.pub_socket.close()
         if hasattr(self, 'rep_socket'):
             self.rep_socket.close()
         if hasattr(self, 'context'):
             self.context.term()
+        self.running = False
 
 def session_discovery_launcher(ether_id: str, network_config: Optional[EtherNetworkConfig] = None, retries: int = 5):
     """Launch an Ether session process
