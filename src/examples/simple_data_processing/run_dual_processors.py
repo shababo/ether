@@ -48,30 +48,59 @@ def main(config_name):
     DataCollector[PID 51475]: Collected result - 16968
     DataCollector[PID 51475]: Summarizing results - mean: 12726.0, max: 16968, min: 8484
     """
-
+    
     # init ether
     config_path = _get_config_path(config_name)
     ether.tap(config=config_path)
 
-    # use ether's start method to publish to the "start" topic
-    # this will call any method decorated with @ether_start
+    # try:
+        # use ether's start method to publish to the "start" topic
+        # this will call any method decorated with @ether_start
     ether.start()
-    time.sleep(1.002)
+    time.sleep(1.0)
 
     # ether.shutdown()
 
-    # you can still use your code normally when ether is not running
-    # in other words, if your code is still used other places, it will still work
+    # if you run your code normally while ether is still running,
+    # you get logging but you don't tap into ether messaging so your
+    # instnaces behave like a normal instance
     generator = DataGenerator()
     processor2x = DataProcessor(multiplier=2)
     processor4x = DataProcessor(multiplier=4)
     collector = DataCollector()
-    generated_data = generator.generate_data(data=4242)
+    generated_data = generator.generate_data(data=42)
     processed2x_result = processor2x.process_data(**generated_data)
     processed4x_result = processor4x.process_data(**generated_data)
     collector.collect_result(**processed2x_result)
     collector.collect_result(**processed4x_result)
     collector.summarize()
+
+    time.sleep(1.0)
+
+    ether.shutdown()
+
+    time.sleep(1.0)
+    # you can still use your code normally when ether is not running
+    # in other words, if your code is still used other places, it will still work
+    print("Starting normal code execution at", time.strftime("%Y-%m-%d %H:%M:%S"))
+    generator = DataGenerator()
+    processor2x = DataProcessor(multiplier=2)
+    processor4x = DataProcessor(multiplier=4)
+    collector = DataCollector()
+    generated_data = generator.generate_data(data=42)
+    processed2x_result = processor2x.process_data(**generated_data)
+    processed4x_result = processor4x.process_data(**generated_data)
+    collector.collect_result(**processed2x_result)
+    collector.collect_result(**processed4x_result)
+    collector.summarize()
+    print("Ending normal code execution at", time.strftime("%Y-%m-%d %H:%M:%S"))
+    # except Exception as e:
+    #     print(e)
+    # finally:
+    #     # ether.shutdown()
+    #     pass
+
+
     
 
 

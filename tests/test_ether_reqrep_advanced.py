@@ -54,7 +54,7 @@ def test_heartbeat_and_reconnect():
     config = EtherConfig(
         instances={
             "heartbeat_service": EtherInstanceConfig(
-                class_path="tests.test_ether_reqrep_advanced.HeartbeatService",
+                class_path="test_ether_reqrep_advanced.HeartbeatService",
                 kwargs={"name": "heartbeat_service"}
             )
         }
@@ -92,7 +92,7 @@ def test_heartbeat_and_reconnect():
         reply = ether.get(
             "HeartbeatService",
             "set_slow",
-            params={"duration": 1.0},
+            params={"duration": 5.0},
             request_type="save"
         )
         assert reply["status"] == "success"

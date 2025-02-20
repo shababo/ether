@@ -153,7 +153,7 @@ def test_multiple_services():
     logger.debug("Starting multi-service test")
     
     # Initialize Ether (this starts the broker)
-    ether.tap()
+    ether.tap(restart=True)
     
     services = [b"service1", b"service2"]
     processes = []

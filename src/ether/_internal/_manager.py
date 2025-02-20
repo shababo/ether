@@ -1,6 +1,6 @@
 from typing import Union
 from multiprocessing import Process
-
+import time
 from ..utils import get_ether_logger
 from ._config import EtherConfig
 from ether.liaison import EtherInstanceLiaison
@@ -105,6 +105,11 @@ class _EtherInstanceManager:
             )
             process.daemon = True
             process.start()
+            time.sleep(1.0)
+            # confirm process is running
+            if not process.is_alive():
+                self._logger.error(f"Instance {instance_name} failed to start")
+                raise RuntimeError(f"Instance {instance_name} failed to start")
             processes[instance_name] = process
             self._logger.debug(f"Instance {instance_name} launched with PID {process.pid}")
 

@@ -11,7 +11,6 @@ from typing import Union, Dict, Optional
 from pydantic import BaseModel
 import json
 import signal
-import multiprocessing
 
 from ..utils import get_ether_logger, get_ip_address
 from ._session import EtherSession, session_discovery_launcher
@@ -110,8 +109,7 @@ class _Ether:
     _pub_socket = None
     _request_socket = None
     _zmq_context = None
-    _pubsub_proxy_process: Optional[multiprocessing.Process] = None
-    _reqrep_broker_process: Optional[multiprocessing.Process] = None
+    _reqrep_broker_process = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -165,12 +163,12 @@ class _Ether:
         ])
         self._logger.debug(f"Published to {topic}: {json_data}")
     
-    def start(self, ether_id: str, config = None, restart: bool = False, discovery = True):
+    def start(self, ether_id: str, config = None, restart: bool = False, allow_host: bool = True, ether_run: bool = False):
         """Start all daemon services"""
 
         session_metadata = None
 
-        self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}, discovery={discovery}")
+        self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}, allow_host={allow_host}")
         self._ether_id = ether_id
 
         # Process configuration
@@ -203,7 +201,7 @@ class _Ether:
         self._logger.debug(f"Processed Config: {self._config}")
 
         # Start session with network config
-        if discovery:
+        if allow_host:
             self._logger.debug("Starting session discovery process...")
             try:
                 self._ether_session_process = Process(
@@ -211,74 +209,84 @@ class _Ether:
                     kwargs={"ether_id": self._ether_id, "network_config": self._config.network}
                 )
                 self._ether_session_process.start()
-                time.sleep(1.0)
+                self._logger.info("Session discovery process started")
+                time.sleep(5.0)
             except Exception as e:
                 self._logger.error(f"Failed to start session discovery process: {e}", exc_info=True)
                 raise
         
-        retries = 5
+        if ether_run:
+            retries = 5
+        else:
+            retries = 1
+            
         connected_to_session = False
         while retries > 0 and not connected_to_session:
             try:
                 session_metadata = EtherSession.get_current_session(network_config=self._config.network)
                 self._logger.debug(f"Existing session metadata: {session_metadata}")
                 
-                if session_metadata and session_metadata.get("ether_id") == ether_id:
-                    self._logger.info(f"Starting Ether session: session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}...")
-                    self._is_main_session = True
+                assert session_metadata
+                if session_metadata:
+                    if session_metadata.get("ether_id") == ether_id:
+                        self._logger.info(f"Starting Ether session: session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}...")
+                        self._is_main_session = True
 
-                    # TODO: review restart logic below, not sure we need it, and if we do if it's in the right place
-                    if self._started:
-                        if restart:
-                            self._logger.info("Restarting Ether session...")
-                            self.shutdown()
-                        else:
+                        # TODO: review restart logic below, not sure we need it, and if we do if it's in the right place
+                        if self._started:
+                            # if restart:
+                            #     self._logger.info("Restarting Ether session...")
+                            #     self.shutdown()
+                            # else:
                             self._logger.debug("Ether session already started, skipping start")
                             return
-                    
-                    # Start Redis
-                    self._logger.debug("Starting Redis server...")
-                    try:
-                        if not self._ensure_redis_running():
-                            raise RuntimeError("Redis server failed to start")
-                    except Exception as e:
-                        self._logger.error(f"Redis startup failed: {e}", exc_info=True)
-                        raise
-                    
-                    # Start Messaging
-                    self._logger.debug("Starting PubSub proxy...")
-                    try:
-                        if not self._ensure_pubsub_running():
-                            raise RuntimeError("PubSub proxy failed to start")
-                    except Exception as e:
-                        self._logger.error(f"PubSub startup failed: {e}", exc_info=True)
-                        raise
-                    
-                    # Start ReqRep broker
-                    self._logger.debug("Starting ReqRep broker...")
-                    try:
-                        if not self._ensure_reqrep_running():
-                            raise RuntimeError("ReqRep broker failed to start")
-                    except Exception as e:
-                        self._logger.error(f"ReqRep broker startup failed: {e}", exc_info=True)
-                        raise
-                    
-                    # Start monitoring
-                    self._logger.debug("Starting instance monitor...")
-                    self._monitor_process = Process(target=_run_monitor, args=(self._config.network,))
-                    self._monitor_process.start()
-                    
-                    # Clean Redis state
-                    self._logger.debug("Cleaning Redis state...")
-                    liaison = EtherInstanceLiaison(network_config=self._config.network)
-                    liaison.deregister_all()
-                    liaison.store_registry_config({})
+                        
+                        # Start Redis
+                        self._logger.debug("Starting Redis server...")
+                        try:
+                            if not self._ensure_redis_running():
+                                raise RuntimeError("Redis server failed to start")
+                        except Exception as e:
+                            self._logger.error(f"Redis startup failed: {e}", exc_info=True)
+                            raise
+                        
+                        # Clean up any existing ZMQ contexts
+                        # zmq.Context.instance().term()
+
+                        # Start Messaging
+                        self._logger.debug("Starting PubSub proxy...")
+                        try:
+                            if not self._ensure_pubsub_running():
+                                raise RuntimeError("PubSub proxy failed to start")
+                        except Exception as e:
+                            self._logger.error(f"PubSub startup failed: {e}", exc_info=True)
+                            raise
+                        
+                        # Start ReqRep broker
+                        self._logger.debug("Starting ReqRep broker...")
+                        try:
+                            if not self._ensure_reqrep_running():
+                                raise RuntimeError("ReqRep broker failed to start")
+                        except Exception as e:
+                            self._logger.error(f"ReqRep broker startup failed: {e}", exc_info=True)
+                            raise
+                        
+                        # Start monitoring
+                        self._logger.debug("Starting instance monitor...")
+                        self._monitor_process = Process(target=_run_monitor, args=(self._config.network,))
+                        self._monitor_process.start()
+                        
+                        # Clean Redis state
+                        self._logger.debug("Cleaning Redis state...")
+                        liaison = EtherInstanceLiaison(network_config=self._config.network)
+                        liaison.deregister_all()
+                        liaison.store_registry_config({})
 
 
-                else:
-                    self._logger.warning(f"Joining Ether session, session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}")
-                    
-                    
+                    else:
+                        self._logger.warning(f"Joining Ether session, session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}")
+                        
+                        
                     # Store registry config in Redis if present
                     if self._config and self._config.registry:
                         # Convert the entire registry config to a dict
@@ -289,9 +297,10 @@ class _Ether:
                         liaison = EtherInstanceLiaison(network_config=self._config.network)
                         liaison.store_registry_config(registry_dict)
                         EtherRegistry().process_registry_config(self._config.registry)
-                    
+                        
                     # Process any pending classes
                     EtherRegistry().process_pending_classes()
+                
 
                 if self._config and self._config.instances:
                     for instance_name, instance_cfg in self._config.instances.items():
@@ -303,15 +312,14 @@ class _Ether:
                 connected_to_session = True
 
             except Exception as e:
-                self._logger.debug(f"Error during Ether startup: {e}")
                 retries -= 1
                 if retries > 0:
                     time.sleep(1.0)
                     continue
                 # Clean up any started processes
-                self._logger.error(f"Error during Ether startup after all retries: {e}")
-                self.shutdown()
-                raise
+                # self._logger.error(f"Error during Ether startup after all retries: {e}")
+                # self.shutdown()
+                # raise
         
         self._logger.debug("Setting up publisher...")
         self._setup_publisher()
@@ -347,8 +355,7 @@ class _Ether:
     
     def _ensure_pubsub_running(self) -> bool:
         """Ensure PubSub proxy is running"""
-        # Clean up any existing ZMQ contexts
-        zmq.Context.instance().term()
+        
         if self._pubsub_process is None:
             self._pubsub_process = Process(
                 target=_run_pubsub,
@@ -473,6 +480,13 @@ class _Ether:
                     self._logger.debug("Stopping all instances...")
                     self._instance_manager.stop_all_instances()
 
+                # stop session discovery process
+                if self._ether_session_process:
+                    self._logger.debug("Stopping session discovery process...")
+                    self._ether_session_process.terminate()
+                    self._ether_session_process.join(timeout=2)
+                    self._ether_session_process = None
+
                 # close request socket
                 if self._request_socket:
                     self._logger.debug("Closing request socket...")
@@ -544,7 +558,7 @@ class _Ether:
                 except Exception as e:
                     self._logger.error(f"Error cleaning up Redis: {e}")
                     
-                self._ether_session_process.terminate()
+                # self._ether_session_process.terminate()
                 self._started = False
                 self._logger.info("Ether system shutdown complete")
             
@@ -556,30 +570,6 @@ class _Ether:
                     for handler in self._logger.handlers[:]:
                         handler.close()
                         self._logger.removeHandler(handler)
-        
-    def cleanup(self):
-        """Clean up Ether resources"""
-        self._logger.debug("Cleaning up Ether")
-        
-        # Terminate proxy process
-        if self._pubsub_proxy_process and self._pubsub_proxy_process.is_alive():
-            self._logger.debug("Terminating PubSub proxy")
-            self._pubsub_proxy_process.terminate()
-            self._pubsub_proxy_process.join(timeout=1)
-            if self._pubsub_proxy_process.is_alive():
-                self._logger.warning("PubSub proxy didn't terminate, killing")
-                self._pubsub_proxy_process.kill()
-                self._pubsub_proxy_process.join(timeout=1)
-                
-        # Terminate broker process
-        if self._reqrep_broker_process and self._reqrep_broker_process.is_alive():
-            self._logger.debug("Terminating ReqRep broker")
-            self._reqrep_broker_process.terminate()
-            self._reqrep_broker_process.join(timeout=1)
-            if self._reqrep_broker_process.is_alive():
-                self._logger.warning("ReqRep broker didn't terminate, killing")
-                self._reqrep_broker_process.kill()
-                self._reqrep_broker_process.join(timeout=1)
 
     def _setup_request_socket(self):
         """Set up the ZMQ request socket"""

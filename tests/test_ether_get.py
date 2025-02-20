@@ -52,14 +52,14 @@ def test_ether_get_with_params():
     config = EtherConfig(
         instances={
             "data_service": EtherInstanceConfig(
-                class_path="tests.test_ether_get.DataService",
+                class_path="test_ether_get.DataService",
                 kwargs={"ether_name": "data_service"}
             )
         }
     )
     
     # Initialize Ether with config
-    ether.tap(config=config)
+    ether.tap(config=config, restart=True)
     
     try:
         

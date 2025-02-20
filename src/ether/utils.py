@@ -19,7 +19,7 @@ def get_ether_logger(
     run_id: str = None,
     instance_name: str = None, 
     console_level=logging.INFO,
-    file_level=logging.DEBUG
+    file_level=logging.DEBUG,
 ) -> logging.Logger:
     """Get or create a logger with file and console handlers"""
 
@@ -52,7 +52,7 @@ def get_ether_logger(
     class_name = process_name.split('.')[-1]  # Get last part of process name
     
     # Determine log directory structure within run directory
-    if class_name.startswith('Ether'):
+    if class_name.startswith('Ether') or class_name.startswith('_Ether'):
         # All Ether classes go in Ether directory
         log_dir = run_log_dir / "Ether" / class_name
     else:

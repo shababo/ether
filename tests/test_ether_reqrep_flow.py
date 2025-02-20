@@ -44,7 +44,7 @@ def test_message_flow_control():
     config = EtherConfig(
         instances={
             "flow_service": EtherInstanceConfig(
-                class_path="tests.test_ether_reqrep_flow.FlowControlService",
+                class_path="test_ether_reqrep_flow.FlowControlService",
                 kwargs={"name": "flow_service"}
             )
         }
