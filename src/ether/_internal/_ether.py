@@ -287,16 +287,16 @@ class _Ether:
                         self._logger.warning(f"Joining Ether session, session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}")
                         
                         
-                        # Store registry config in Redis if present
-                        if self._config and self._config.registry:
-                            # Convert the entire registry config to a dict
-                            registry_dict = {
-                                class_path: class_config.model_dump()
-                                for class_path, class_config in self._config.registry.items()
-                            }
-                            liaison = EtherInstanceLiaison(network_config=self._config.network)
-                            liaison.store_registry_config(registry_dict)
-                            EtherRegistry().process_registry_config(self._config.registry)
+                    # Store registry config in Redis if present
+                    if self._config and self._config.registry:
+                        # Convert the entire registry config to a dict
+                        registry_dict = {
+                            class_path: class_config.model_dump()
+                            for class_path, class_config in self._config.registry.items()
+                        }
+                        liaison = EtherInstanceLiaison(network_config=self._config.network)
+                        liaison.store_registry_config(registry_dict)
+                        EtherRegistry().process_registry_config(self._config.registry)
                         
                     # Process any pending classes
                     EtherRegistry().process_pending_classes()

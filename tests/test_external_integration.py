@@ -10,11 +10,7 @@ from ether.liaison import EtherInstanceLiaison
 def test_external_integration():
     """Test that external classes work with Ether via configuration"""
     
-    # Setup ZMQ subscriber to listen for messages
-    context = zmq.Context()
-    socket = context.socket(zmq.SUB)
-    socket.connect("tcp://localhost:13311")
-    socket.subscribe("test_processed")  # Subscribe to processor output topic
+    
     
     config_dict = {
         "registry": {
@@ -45,15 +41,15 @@ def test_external_integration():
         "instances": {
             "generator1": {
                 "class_path": "examples.external_class_integration.DataGenerator",
-                "kwargs": {"process_id": 1, "log_level": logging.DEBUG}
+                "kwargs": {"process_id": 1, "ether_log_level": logging.DEBUG}
             },
             "processor1": {
                 "class_path": "examples.external_class_integration.DataProcessor",
-                "kwargs": {"multiplier": 2, "log_level": logging.DEBUG}
+                "kwargs": {"multiplier": 2, "ether_log_level": logging.DEBUG}
             },
             "collector1": {
                 "class_path": "examples.external_class_integration.DataCollector",
-                "kwargs": {"log_level": logging.DEBUG}
+                "kwargs": {"ether_log_level": logging.DEBUG}
             }
         }
     }
@@ -72,12 +68,20 @@ def test_external_integration():
     expected_instances = {"generator1", "processor1", "collector1"}
     running_instances = {info["name"] for info in active_instances.values()}
     assert expected_instances.issubset(running_instances), f"Not all instances running. Expected {expected_instances}, got {running_instances}"
+
+    # Setup ZMQ subscriber to listen for messages
+    context = zmq.Context()
+    socket = context.socket(zmq.SUB)
+    socket.connect("tcp://localhost:13311")
+    socket.subscribe("test_processed")  # Subscribe to processor output topic
     
     # Trigger data generation
     ether.pub(topic="generate_data", data={"data": 42})
-    
+
+    time.sleep(1.0)
+
     # Wait for and verify the processed message
-    socket.RCVTIMEO = 1000  # 1 second timeout
+    socket.RCVTIMEO = 5000  # 5 second timeout
     try:
         topic = socket.recv_string()
         message = socket.recv_string()

@@ -54,7 +54,7 @@ def test_heartbeat_and_reconnect():
     config = EtherConfig(
         instances={
             "heartbeat_service": EtherInstanceConfig(
-                class_path="tests.test_ether_reqrep_advanced.HeartbeatService",
+                class_path="test_ether_reqrep_advanced.HeartbeatService",
                 kwargs={"name": "heartbeat_service"}
             )
         }
