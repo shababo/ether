@@ -92,7 +92,7 @@ def test_heartbeat_and_reconnect():
         reply = ether.get(
             "HeartbeatService",
             "set_slow",
-            params={"duration": 1.0},
+            params={"duration": 5.0},
             request_type="save"
         )
         assert reply["status"] == "success"

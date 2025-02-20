@@ -677,6 +677,7 @@ def add_ether_functionality(cls):
         
     def new_del(self):
         try:
+            self._logger.debug(f"Cleaning up instance {self.name}-{self.id}")
             if self.ether._initialized:
                 self.cleanup()
         except Exception as e:
