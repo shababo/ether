@@ -33,7 +33,7 @@ def test_ether_save():
     config = EtherConfig(
         instances={
             "data_service": EtherInstanceConfig(
-                class_path="tests.test_ether_save.DataService",
+                class_path="test_ether_save.DataService",
                 kwargs={"ether_name": "data_service"}
             )
         }
