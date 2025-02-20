@@ -108,6 +108,7 @@ class EtherInstanceLiaison:
     
     def update_instance_data(self, instance_id: str, data: Dict[str, Any]) -> None:
         """Update data for a specific instance"""
+        self._logger.debug(f"Updating instance data for {instance_id}: {data}")
         key = f"{self.instance_key_prefix}{instance_id}"
         existing_data = self.get_instance_data(instance_id)
         existing_data.update(data)

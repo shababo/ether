@@ -19,8 +19,6 @@ class ComplexMessage(BaseModel):
 
 class DataVerificationPublisher:
     """Publisher that sends messages with verifiable data"""
-    def __init__(self):
-        self._logger = get_ether_logger(self.__class__.__name__)
     
     @ether_pub(topic="complex_data")
     def send_complex_data(self) -> ComplexMessage:
@@ -54,16 +52,14 @@ class ReceivedData(BaseModel):
 class DataVerificationSubscriber:
     """Subscriber that verifies received message data"""
     def __init__(self):
-        self._logger = get_ether_logger(self.__class__.__name__)
         self.received_data = ReceivedData()
         self.liaison = EtherInstanceLiaison()
 
     def _update_received_data(self):
         self.liaison.update_instance_data(
-            self.id, 
+            f"{self.name}-{self.id}", 
             {"received_data": self.received_data.model_dump()}
         )
-        self._logger.info(f"Updated received data for {self.id}")
     
     @ether_sub(topic="complex_data")
     def receive_complex(self, text: str, numbers: List[int], 
@@ -81,14 +77,12 @@ class DataVerificationSubscriber:
 
     @ether_sub(topic="primitive_data")
     def receive_primitive(self, root: int):
-        self._logger.info(f"Received primitive: {root}")
         self.received_data.primitive_received = True
         self.received_data.primitive_value = root
         self._update_received_data()
     
     @ether_sub(topic="list_data")
     def receive_list(self, root: List[int]):
-        self._logger.info(f"Received list: {root}")
         self.received_data.list_received = True
         self.received_data.list_data = root
         self._update_received_data()
@@ -114,12 +108,12 @@ def verify_received_data(received: ReceivedData):
     assert received.list_received, "List not received"
     assert received.list_data == [1, 2, 3, 4, 5]
 
-def run_data_verification_test():
+def test_message_data():
     """Run the data verification test"""
     config = {
         "instances": {
             "data_verification_subscriber": {
-                "class_path": "tests.test_message_data.DataVerificationSubscriber",
+                "class_path": "test_message_data.DataVerificationSubscriber",
                 "autorun": True
             }
         }
@@ -128,16 +122,16 @@ def run_data_verification_test():
     try:
         # Initialize system
         ether.tap(config=config, restart=True)
-        time.sleep(1.0)  # Allow time for setup
+        time.sleep(2.0)  # Allow time for setup
         
         # Create publisher and send messages
-        publisher = DataVerificationPublisher()
-        publisher.send_complex_data()
-        publisher.send_primitive()
-        publisher.send_list()
+        publisher = DataVerificationPublisher(ether_run = True, ether_name = "data_verification_publisher")
+        publisher.send_complex_data(publish_result=True)
+        publisher.send_primitive(publish_result=True)
+        publisher.send_list(publish_result=True)
         
         # Allow time for message processing
-        time.sleep(1.0)
+        time.sleep(2.0)
         
         # Get subscriber instance and verify data
         liaison = EtherInstanceLiaison()
@@ -156,14 +150,9 @@ def run_data_verification_test():
     except Exception as e:
         print(f"Error in data verification test: {e}")
         raise
+    finally:
+        ether.shutdown()
 
-def test_message_data():
-    """Test that message data is accurately transmitted and received"""
-    ctx = multiprocessing.get_context('spawn')
-    process = ctx.Process(target=run_data_verification_test)
-    process.start()
-    process.join()
-    assert process.exitcode == 0
 
 if __name__ == "__main__":
     pytest.main([__file__]) 

@@ -149,7 +149,7 @@ def add_ether_functionality(cls):
         }
     
     # Add core attributes
-    def init_ether_vars(self, name=None, network_config: Optional[EtherNetworkConfig] = None, log_level=logging.INFO):
+    def init_ether_vars(self, name=None, log_level=logging.INFO):
         
         self.id = str(uuid.uuid4())
         self.name = name or self.id
@@ -162,8 +162,8 @@ def add_ether_functionality(cls):
             # file_level=log_level
         )
         self._logger.debug(f"Initializing {self.name}")
-        self._sub_address = f"tcp://{self.network_config.host}:{network_config.pubsub_frontend_port}"
-        self._pub_address = f"tcp://{network_config.host}:{network_config.pubsub_backend_port}"
+        self._sub_address = f"tcp://{self.network_config.host}:{self.network_config.pubsub_frontend_port}"
+        self._pub_address = f"tcp://{self.network_config.host}:{self.network_config.pubsub_backend_port}"
         
         # Socket handling
         self._zmq_context = zmq.Context()
@@ -646,14 +646,13 @@ def add_ether_functionality(cls):
                 
                 self.init_ether(
                     name=kwargs.pop('ether_name', None),
-                    network_config=network_config,
                     log_level=kwargs.pop('ether_log_level', logging.DEBUG), # TODO: use ether global log level
                 )
                 # Setup sockets after initialization
                 self.setup_sockets()
         except Exception as e:
             # self._logger.debug(f"Error initializing Ether: {e}")
-            pass # don't fail init if ether is not running
+            raise # don't fail init if ether is not running
 
         # Call original init with remaining args
         try:
@@ -780,6 +779,9 @@ def _ether_pub(func=None, *, topic: Optional[str] = None):
 
             if publish_result:
                 if not hasattr(self, '_pub_socket'):
+                    # if self.ether._initialized:
+                    #     self.setup_sockets()
+                    # if not hasattr(self, '_pub_socket'):
                     raise RuntimeError("Cannot publish: no publisher socket configured")
                 
                 if result is None:
