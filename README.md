@@ -4,24 +4,36 @@
 
 ## What is Ether?
 
-### User perspective
-Ether provides an ultra-lightweight, Python interface for scientists and engineers to integrate the components of their lab. A core goal of Ether is to be useful even during the early stages of a project when plans can change rapidly and decisions are sometimes made on the fly.
-With Ether
-- you can integrate the components of your lab without touching your source code. (Though Ether also provides a decorator-based interface if you prefer.)
-- components communicate with each other automatically, whether on the same machine or over the Internet.
-- everything that happens is logged and traceable without the need to provide any schema or information ahead of time.
+Ether is an ultra-lightweight, Python framework for scientists and engineers to integrate the components of their lab.
 
-### Developer perspective
-Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions. It achieves these goals by launching instances of Python classes in their own processes and dynamically turning decorated methods of those classses into microservices. Ether supports both Pub-Sub and Request-Reply messaging patterns.
+### User perspective 
+A lot of software meant to support science asks a lot of users up front. This is a huge blocker for several reasons. First of all, scientists are already time-constrained. Second, not all users can on board new software, and potentially new computing concepts, rapidly enough. But most importantly, the process of science or engineering, very frequently, involves changing and re-combining components, testing and debugging, and making decisions on the fly. The core goal of Ether is to be useful even under those conditions while asking the least amount possible from the users. 
 
-## Example Use Cases
+##### Features
 
+- Integrate your code without changing it, across machines or even the Internet
+- Guarantees on data saving and provenance tracing
+- Configuration complexity scales with use case complexity
+- Quickly run common scientific computing patterns (e.g. data pipelines, automation/scheduling, trial-based experiments)
+- No need to learn about computing stuff you don't care about (e.g. schema, servers, async)
+
+Ether achieves this all this via two core design choices: 
+1. Ether looks at your code for answers. The result is that Ether can dynamically structure logs and metadata when you run experiments!
+2. Ether abstracts all of the complicated stuff behind a simple interface that uses semantics close to the user - not the developer.
+
+That said, the best way for a user to understand Ether is to look at use cases. Several use case demos are in the works, but for now here are examples of how you might use it.
+#### Example Use Cases
 - A computational biologist has code that operates lab equipment and runs analysis, and wants to integrate it into an automated data acquisition pipeline
 - An AI engineer wants to combine multiple machine learning models into a real-time processing pipeline
 - An operations engineer needs to add remote monitoring to existing industrial control systems
 - A behavioral scientist wants to turn a Gymnasium environment into an interactive game with joystick control and real-time display
 
-## Features
+### Developer perspective
+Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions. It achieves these goals by wrapping and introspecting the user's code and, in many cases, launching instances of user's classes in their own processes. When instances are run in their own processes, the result is that we've dynamically turned those classes into microservices. 
+
+At its foundation, Ether provides traceability/observability and both Pub-Sub and Request-Reply messaging patterns.
+
+##### Features
 
 - Transform existing classes into distributed system components via decorators and/or yaml configuration
 - Automatic session discovery, lifecycle management, and monitoring of processes (locally or over IP)
