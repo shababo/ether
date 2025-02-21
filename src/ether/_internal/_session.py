@@ -35,6 +35,7 @@ class EtherSession:
             "network": self.network.model_dump()  # Add network config to metadata
         }
         
+    def start(self):
         try:
             if not self._connect_to_discovery():
                 self._logger.debug(f"Process {os.getpid()}: No existing service found, attempting to start one...")
@@ -125,7 +126,7 @@ class EtherSession:
                 break
 
         self._logger.debug("Discovery service loop ended")
-        self.running = False  # Update our own record
+        self.running = False  
 
     @classmethod
     def get_current_session(cls, timeout: int = 200, network_config: Optional[EtherNetworkConfig] = None) -> Optional[Dict[str, Any]]:  # reduced timeout
@@ -238,12 +239,11 @@ def session_discovery_launcher(ether_id: str, network_config: Optional[EtherNetw
         if current_session is None:
             # print(f"Process {process_id}: No session found, attempting to create new one...")
             try:
-                session_mgr = EtherSession(
+                session = EtherSession(
                     ether_id=ether_id,
                     network_config=network_config
                 )
-                while True:
-                    time.sleep(1.0)
+                session.start()
             except zmq.ZMQError as e:
                 if e.errno == errno.EADDRINUSE:
                     # Someone else created it just before us, try to get their session
