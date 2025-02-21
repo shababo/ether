@@ -103,9 +103,9 @@ class _EtherInstanceManager:
                 args=(instance_name,),
                 name=instance_name
             )
-            process.daemon = True
+            process.daemon = False
             process.start()
-            time.sleep(1.0)
+            time.sleep(0.1)
             # confirm process is running
             if not process.is_alive():
                 self._logger.error(f"Instance {instance_name} failed to start")

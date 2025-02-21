@@ -15,11 +15,11 @@ from ether.liaison import EtherInstanceLiaison
 from ._config import EtherClassConfig, EtherNetworkConfig, EtherConfig
 from ._reqrep import (
     W_READY, W_REQUEST, W_REPLY, MDPW_WORKER, MDPC_CLIENT,
-    REQUEST_WORKER_INDEX, REQUEST_COMMAND_INDEX, REQUEST_CLIENT_ID_INDEX, REQUEST_DATA_INDEX,
-    REPLY_CLIENT_INDEX, REPLY_SERVICE_INDEX, REPLY_DATA_INDEX,
+    REQUEST_MSG_WORKER_INDEX, REQUEST_MSG_COMMAND_INDEX, REQUEST_MSG_CLIENT_ID_INDEX, REQUEST_MSG_SERVICE_INDEX, REQUEST_MSG_DATA_INDEX,
+    REPLY_MSG_CLIENT_INDEX, REPLY_MSG_SERVICE_INDEX, REPLY_MSG_DATA_INDEX,
     W_HEARTBEAT, W_DISCONNECT
 )
-
+from ._pubsub import PUSUB_MSG_TOPIC_INDEX, PUSUB_MSG_DATA_INDEX
 class EtherRegistry:
     """Registry to track and process classes with Ether methods"""
     _instance = None
@@ -101,7 +101,7 @@ class EtherRegistry:
         self._logger.debug(f"Processed classes: {self._processed_classes}")
         
         for qualname, module_name in list(self._pending_classes.items()):  # Create a copy of items to modify dict
-            if qualname in self._processed_classes:
+            if qualname in self._processed_classes: # idempotent
                 self._logger.debug(f"Class {qualname} already processed, skipping")
                 continue
                 
@@ -182,8 +182,6 @@ def add_ether_functionality(cls):
         self.subscription_time = None
         self.results_file = None
         
-        
-        
         # Add reqrep worker socket
         self._worker_socket = None
         self._request_socket = None
@@ -205,6 +203,37 @@ def add_ether_functionality(cls):
         """Set up all required sockets"""
         self._logger.debug(f"Setting up sockets for {self.name}")
         
+        self._poller = zmq.Poller()
+
+        self._setup_pubsub()
+        self._setup_reqrep()
+    
+        # Setup request socket with better connection management
+        # if self._request_socket:
+        #     self._zmq_context.destroy()
+        #     self._zmq_context = zmq.Context()
+        
+        # self._request_socket = self._zmq_context.socket(zmq.REQ)
+        # self._request_socket.linger = 0  # Don't wait for unsent messages on close
+        # self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)  # 2.5 sec timeout
+        # self._request_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_frontend_port}")
+        
+        # # Add poller for request socket
+        # self._request_poller = zmq.Poller()
+        # self._request_poller.register(self._request_socket, zmq.POLLIN)
+
+    def _setup_reqrep(self):
+        """Set up the reqrep sockets"""
+        # Setup worker socket if we have get methods
+        has_reqrep_method = any(hasattr(m, '_reqrep_metadata') 
+                           for m in self._ether_methods_info.values())
+        
+        if has_reqrep_method:
+            self._logger.debug("Setting up worker socket")
+            self._reconnect_worker_socket()
+
+    def _setup_pubsub(self):
+        """Set up the pubsub sockets"""
         has_sub_method = False
         has_pub_method = False
         for method in self._ether_methods_info.values():
@@ -220,7 +249,7 @@ def add_ether_functionality(cls):
 
         self._logger.debug(f"Final topics: {self._sub_topics}")
         self._logger.debug(f"Final metadata: {self._sub_metadata}")
-
+    
         if hasattr(self, '_sub_address') and has_sub_method:
             self._sub_socket = self._zmq_context.socket(zmq.SUB)
             if self._sub_address.startswith("tcp://*:"):
@@ -239,6 +268,8 @@ def add_ether_functionality(cls):
                     topic = method._sub_metadata.topic
                     self._sub_socket.subscribe(topic.encode())
                     self._logger.debug(f"Subscribed to topic: {topic}")
+
+            self._poller.register(self._sub_socket, zmq.POLLIN)
         
         if hasattr(self, '_pub_address') and has_pub_method:
             self._pub_socket = self._zmq_context.socket(zmq.PUB)
@@ -251,53 +282,13 @@ def add_ether_functionality(cls):
             self._pub_socket.setsockopt(zmq.LINGER, 0)
 
         time.sleep(0.1)
-        
-        # Setup worker socket if we have get methods
-        has_reqrep_method = any(hasattr(m, '_reqrep_metadata') 
-                           for m in self._ether_methods_info.values())
-        
-        if has_reqrep_method:
-            self._logger.debug("Setting up worker socket")
-            self._poller = zmq.Poller()  # Create poller as instance variable
-            self._worker_socket = self._zmq_context.socket(zmq.DEALER)
-            self._worker_socket.linger = 0
-            self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
-            self._worker_socket.setsockopt(zmq.LINGER, 0)
-            self._worker_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_backend_port}")
-            self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
-            
-            # Register all services
-            for metadata in self._worker_metadata.values():
-                service_name = metadata.service_name.encode()
-                self._logger.debug(f"Registering service: {service_name}")
-                self._worker_socket.send_multipart([
-                    b'',
-                    MDPW_WORKER,
-                    W_READY,
-                    service_name
-                ])
-                self._logger.debug(f"Service registered: {service_name}")
-    
-        # Setup request socket with better connection management
-        # if self._request_socket:
-        #     self._zmq_context.destroy()
-        #     self._zmq_context = zmq.Context()
-        
-        # self._request_socket = self._zmq_context.socket(zmq.REQ)
-        # self._request_socket.linger = 0  # Don't wait for unsent messages on close
-        # self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)  # 2.5 sec timeout
-        # self._request_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_frontend_port}")
-        
-        # # Add poller for request socket
-        # self._request_poller = zmq.Poller()
-        # self._request_poller.register(self._request_socket, zmq.POLLIN)
-    
+
     def _handle_subscriber_message(self, timeout=1000):
         """Handle a message from the subscriber socket"""
         if self._sub_socket and self._sub_socket.poll(timeout=timeout):
-            message = self._sub_socket.recv_multipart()
-            topic = message[0].decode()
-            data = json.loads(message[1].decode())
+            pubsub_msg = self._sub_socket.recv_multipart()
+            topic = pubsub_msg[PUSUB_MSG_TOPIC_INDEX].decode()
+            data = json.loads(pubsub_msg[PUSUB_MSG_DATA_INDEX].decode())
             
             self._logger.debug(f"Received message: topic={topic}, data={data}")
             
@@ -357,17 +348,17 @@ def add_ether_functionality(cls):
             
             # Handle incoming messages
             if self._worker_socket.poll(timeout=timeout):
-                msg = self._worker_socket.recv_multipart()
-                self._logger.debug(f"Received worker message: {msg}")
+                req_msg = self._worker_socket.recv_multipart()
+                self._logger.debug(f"Received worker message: {req_msg}")
                 
-                if msg[REQUEST_WORKER_INDEX] == MDPW_WORKER:
-                    command = msg[REQUEST_COMMAND_INDEX]
+                if req_msg[REQUEST_MSG_WORKER_INDEX] == MDPW_WORKER:
+                    command = req_msg[REQUEST_MSG_COMMAND_INDEX]
                     
                     if command == W_REQUEST:
                         # Store client address
-                        client_id = msg[REQUEST_CLIENT_ID_INDEX]
-                        service_name = msg[4].decode()
-                        request = json.loads(msg[5].decode())
+                        client_id = req_msg[REQUEST_MSG_CLIENT_ID_INDEX]
+                        service_name = req_msg[REQUEST_MSG_SERVICE_INDEX].decode()
+                        request = json.loads(req_msg[REQUEST_MSG_DATA_INDEX].decode())
                         
                         metadata = self._worker_metadata.get(service_name)
                         if metadata:
@@ -432,7 +423,7 @@ def add_ether_functionality(cls):
                             ])
 
                     elif command == W_HEARTBEAT:
-                        self._logger.debug(f"Received heartbeat msg: {msg}")
+                        self._logger.debug(f"Received heartbeat msg: {req_msg}")
                         # Heartbeat is for all services from this worker
                         for metadata in self._worker_metadata.values():
                             if metadata.heartbeat:
@@ -464,28 +455,31 @@ def add_ether_functionality(cls):
         self._logger.debug("Reconnecting worker socket")
         
         if self._worker_socket:
-            self._poller.unregister(self._worker_socket)  # Use instance poller
+            if self._poller:
+                self._poller.unregister(self._worker_socket)  # Use instance poller
             self._worker_socket.close()
         
         self._worker_socket = self._zmq_context.socket(zmq.DEALER)
-        self._worker_socket.linger = 0  # Don't wait on close
+        self._worker_socket.linger = 0
         self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
+        self._worker_socket.setsockopt(zmq.LINGER, 0)
         self._worker_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_backend_port}")
         self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
         
-        # Re-register all services
+        # Register all services
         for metadata in self._worker_metadata.values():
             service_name = metadata.service_name.encode()
-            self._logger.debug(f"Re-registering service: {service_name}")
+            self._logger.debug(f"Registering service: {service_name}")
             self._worker_socket.send_multipart([
                 b'',
                 MDPW_WORKER,
                 W_READY,
                 service_name
             ])
-            if metadata.heartbeat:
-                metadata.heartbeat_liveness = 3
-                metadata.last_heartbeat = time.time()
+            self._logger.debug(f"Service registered: {service_name}")
+        if metadata.heartbeat:
+            metadata.heartbeat_liveness = 3
+            metadata.last_heartbeat = time.time()
     
     # def _reconnect_request_socket(self):
     #     """Reconnect the request socket to the broker"""
@@ -562,15 +556,9 @@ def add_ether_functionality(cls):
                     self._instance_liaison.refresh_instance(f"{self.name}-{self.id}")
                     last_refresh = now
                 
-                # Create a poller to handle both sub and worker sockets
-                poller = zmq.Poller()
-                if self._sub_socket:
-                    poller.register(self._sub_socket, zmq.POLLIN)
-                if self._worker_socket:
-                    poller.register(self._worker_socket, zmq.POLLIN)
                 
                 # Poll for messages with timeout
-                sockets = dict(poller.poll(timeout=1000))
+                sockets = dict(self._poller.poll(timeout=1000))
                 
                 # Handle messages based on socket type
                 if self._sub_socket in sockets:
@@ -581,10 +569,7 @@ def add_ether_functionality(cls):
             except Exception as e:
                 self._logger.error(f"Error in run loop: {e}", exc_info=True)
                 break
-        
-        self.save_results()
-        self.cleanup()
-    
+
     # Add cleanup
     def cleanup(self):
         self._logger.debug(f"Cleaning up instance {self.name}-{self.id}")
@@ -618,6 +603,8 @@ def add_ether_functionality(cls):
     cls.init_ether = init_ether_vars
     cls.get_metadata = get_metadata
     cls.setup_sockets = setup_sockets
+    cls._setup_pubsub = _setup_pubsub
+    cls._setup_reqrep = _setup_reqrep
     cls._handle_subscriber_message = _handle_subscriber_message
     cls._handle_worker_message = _handle_worker_message
     cls._reconnect_worker_socket = _reconnect_worker_socket

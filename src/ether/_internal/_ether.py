@@ -24,9 +24,9 @@ from ._reqrep import (
     W_DISCONNECT,
     EtherReqRepBroker,
     MDPC_CLIENT,
-    REPLY_CLIENT_INDEX,
-    REPLY_SERVICE_INDEX,
-    REPLY_DATA_INDEX,
+    REPLY_MSG_CLIENT_INDEX,
+    REPLY_MSG_SERVICE_INDEX,
+    REPLY_MSG_DATA_INDEX,
 )
 
 
@@ -210,16 +210,11 @@ class _Ether:
                 )
                 self._ether_session_process.start()
                 self._logger.info("Session discovery process started")
-                time.sleep(5.0)
             except Exception as e:
                 self._logger.error(f"Failed to start session discovery process: {e}", exc_info=True)
                 raise
         
-        if ether_run:
-            retries = 5
-        else:
-            retries = 1
-            
+        retries = 10
         connected_to_session = False
         while retries > 0 and not connected_to_session:
             try:
@@ -227,79 +222,78 @@ class _Ether:
                 self._logger.debug(f"Existing session metadata: {session_metadata}")
                 
                 assert session_metadata
-                if session_metadata:
-                    if session_metadata.get("ether_id") == ether_id:
-                        self._logger.info(f"Starting Ether session: session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}...")
-                        self._is_main_session = True
+                if session_metadata.get("ether_id") == ether_id:
+                    self._logger.info(f"Starting Ether session: session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}...")
+                    self._is_main_session = True
 
-                        # TODO: review restart logic below, not sure we need it, and if we do if it's in the right place
-                        if self._started:
-                            # if restart:
-                            #     self._logger.info("Restarting Ether session...")
-                            #     self.shutdown()
-                            # else:
-                            self._logger.debug("Ether session already started, skipping start")
-                            return
-                        
-                        # Start Redis
-                        self._logger.debug("Starting Redis server...")
-                        try:
-                            if not self._ensure_redis_running():
-                                raise RuntimeError("Redis server failed to start")
-                        except Exception as e:
-                            self._logger.error(f"Redis startup failed: {e}", exc_info=True)
-                            raise
-                        
-                        # Clean up any existing ZMQ contexts
-                        # zmq.Context.instance().term()
+                    # TODO: review restart logic below, not sure we need it, and if we do if it's in the right place
+                    if self._started:
+                        # if restart:
+                        #     self._logger.info("Restarting Ether session...")
+                        #     self.shutdown()
+                        # else:
+                        self._logger.debug("Ether session already started, skipping start")
+                        return
+                    
+                    # Start Redis
+                    self._logger.debug("Starting Redis server...")
+                    try:
+                        if not self._ensure_redis_running():
+                            raise RuntimeError("Redis server failed to start")
+                    except Exception as e:
+                        self._logger.error(f"Redis startup failed: {e}", exc_info=True)
+                        raise
+                    
+                    # Clean up any existing ZMQ contexts
+                    # zmq.Context.instance().term()
 
-                        # Start Messaging
-                        self._logger.debug("Starting PubSub proxy...")
-                        try:
-                            if not self._ensure_pubsub_running():
-                                raise RuntimeError("PubSub proxy failed to start")
-                        except Exception as e:
-                            self._logger.error(f"PubSub startup failed: {e}", exc_info=True)
-                            raise
-                        
-                        # Start ReqRep broker
-                        self._logger.debug("Starting ReqRep broker...")
-                        try:
-                            if not self._ensure_reqrep_running():
-                                raise RuntimeError("ReqRep broker failed to start")
-                        except Exception as e:
-                            self._logger.error(f"ReqRep broker startup failed: {e}", exc_info=True)
-                            raise
-                        
-                        # Start monitoring
-                        self._logger.debug("Starting instance monitor...")
-                        self._monitor_process = Process(target=_run_monitor, args=(self._config.network,))
-                        self._monitor_process.start()
-                        
-                        # Clean Redis state
-                        self._logger.debug("Cleaning Redis state...")
-                        liaison = EtherInstanceLiaison(network_config=self._config.network)
-                        liaison.deregister_all()
-                        liaison.store_registry_config({})
+                    # Start Messaging
+                    self._logger.debug("Starting PubSub proxy...")
+                    try:
+                        if not self._ensure_pubsub_running():
+                            raise RuntimeError("PubSub proxy failed to start")
+                    except Exception as e:
+                        self._logger.error(f"PubSub startup failed: {e}", exc_info=True)
+                        raise
+                    
+                    # Start ReqRep broker
+                    self._logger.debug("Starting ReqRep broker...")
+                    try:
+                        if not self._ensure_reqrep_running():
+                            raise RuntimeError("ReqRep broker failed to start")
+                    except Exception as e:
+                        self._logger.error(f"ReqRep broker startup failed: {e}", exc_info=True)
+                        raise
+                    
+                    # Start monitoring
+                    self._logger.debug("Starting instance monitor...")
+                    self._monitor_process = Process(target=_run_monitor, args=(self._config.network,))
+                    self._monitor_process.start()
+                    
+                    # Clean Redis state
+                    self._logger.debug("Cleaning Redis state...")
+                    liaison = EtherInstanceLiaison(network_config=self._config.network)
+                    liaison.deregister_all()
+                    liaison.store_registry_config({})
 
 
-                    else:
-                        self._logger.warning(f"Joining Ether session, session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}")
-                        
-                        
-                    # Store registry config in Redis if present
-                    if self._config and self._config.registry:
-                        # Convert the entire registry config to a dict
-                        registry_dict = {
-                            class_path: class_config.model_dump()
-                            for class_path, class_config in self._config.registry.items()
-                        }
-                        liaison = EtherInstanceLiaison(network_config=self._config.network)
-                        liaison.store_registry_config(registry_dict)
-                        EtherRegistry().process_registry_config(self._config.registry)
-                        
-                    # Process any pending classes
-                    EtherRegistry().process_pending_classes()
+                else:
+                    self._logger.warning(f"Joining Ether session, session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}")
+                    
+                    
+                # Store registry config in Redis if present
+                if self._config and self._config.registry:
+                    # Convert the entire registry config to a dict
+                    registry_dict = {
+                        class_path: class_config.model_dump()
+                        for class_path, class_config in self._config.registry.items()
+                    }
+                    liaison = EtherInstanceLiaison(network_config=self._config.network)
+                    liaison.store_registry_config(registry_dict)
+                    EtherRegistry().process_registry_config(self._config.registry)
+                    
+                # Process any pending classes
+                EtherRegistry().process_pending_classes()
                 
 
                 if self._config and self._config.instances:
@@ -449,7 +443,7 @@ class _Ether:
         else:
             self._instance_manager.launch_instances(self._config)
         # Wait for instances to be ready
-        time.sleep(1.0)
+        time.sleep(0.1)
 
     # def save(self):
     #     if self._pub_socket:
@@ -624,9 +618,9 @@ class _Ether:
                         raise
                     self._logger.debug(f"Request timed out, retrying ({retries} attempts left)")
             
-            assert msg[REPLY_CLIENT_INDEX] == MDPC_CLIENT
-            assert msg[REPLY_SERVICE_INDEX] == service_name
-            reply = json.loads(msg[REPLY_DATA_INDEX].decode())
+            assert msg[REPLY_MSG_CLIENT_INDEX] == MDPC_CLIENT
+            assert msg[REPLY_MSG_SERVICE_INDEX] == service_name
+            reply = json.loads(msg[REPLY_MSG_DATA_INDEX].decode())
             
             if request_type == "get":
                 if isinstance(reply, dict) and reply.get("status") == "error":
@@ -686,7 +680,7 @@ class _Ether:
             while retries > 0:
                 try:
                     msg = self._request_socket.recv_multipart()
-                    reply = json.loads(msg[REPLY_DATA_INDEX].decode())
+                    reply = json.loads(msg[REPLY_MSG_DATA_INDEX].decode())
                     self._logger.debug(f"Received disconnect reply: {reply}")
                     return reply
                 except zmq.error.Again:

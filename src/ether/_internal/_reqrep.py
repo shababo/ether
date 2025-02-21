@@ -16,16 +16,17 @@ W_REPLY = b"\x03"      # Worker reply
 W_HEARTBEAT = b"\x04"  # Worker heartbeat
 W_DISCONNECT = b"\x05" # Worker disconnect
 
+# req message frame indices
+REQUEST_MSG_WORKER_INDEX = 1
+REQUEST_MSG_COMMAND_INDEX = 2
+REQUEST_MSG_CLIENT_ID_INDEX = 3
+REQUEST_MSG_SERVICE_INDEX = 4
+REQUEST_MSG_DATA_INDEX = 5
 
-REQUEST_WORKER_INDEX = 1
-REQUEST_COMMAND_INDEX = 2
-REQUEST_CLIENT_ID_INDEX = 3
-REQUEST_SERVICE_INDEX = 4
-REQUEST_DATA_INDEX = 5
-
-REPLY_CLIENT_INDEX = 1
-REPLY_SERVICE_INDEX = 2
-REPLY_DATA_INDEX = 3
+# reply message frame indices
+REPLY_MSG_CLIENT_INDEX = 1
+REPLY_MSG_SERVICE_INDEX = 2
+REPLY_MSG_DATA_INDEX = 3
 
 class Service:
     """Represents a service and its associated workers"""

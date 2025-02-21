@@ -6,6 +6,9 @@ from ..utils import get_ether_logger
 from ._config import EtherNetworkConfig
 from ._session import EtherSession
 
+# pubsub message frame indices
+PUSUB_MSG_TOPIC_INDEX = 0
+PUSUB_MSG_DATA_INDEX = 1
 
 class _EtherPubSubProxy:
     """Proxy that uses XPUB/XSUB sockets for efficient message distribution.
