@@ -17,7 +17,7 @@ A lot of software meant to support science asks a lot of users up front. This is
 - Quickly run common scientific computing patterns (e.g. data pipelines, automation/scheduling, trial-based experiments)
 - No need to learn about computing stuff you don't care about (e.g. schema, servers, async)
 
-Ether achieves this all this via two core design choices: 
+Ether achieves all of this via two core design choices: 
 1. Ether looks at your code for answers. The result is that Ether can dynamically structure logs and metadata when you run experiments!
 2. Ether abstracts all of the complicated stuff behind a simple interface that uses semantics close to the user - not the developer.
 
