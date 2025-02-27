@@ -1,7 +1,8 @@
 from typing import List
 from ether import ether
-from ether._internal._config import EtherConfig, EtherInstanceConfig
+from ether._internal._config import _EtherInstanceConfig
 from ether import ether_save, ether_get
+from ether.config import EtherConfig
 from ether.utils import get_ether_logger
 
 class DataService:
@@ -32,7 +33,7 @@ def test_ether_save():
     
     config = EtherConfig(
         instances={
-            "data_service": EtherInstanceConfig(
+            "data_service": _EtherInstanceConfig(
                 class_path="test_ether_save.DataService",
                 kwargs={"ether_name": "data_service"}
             )

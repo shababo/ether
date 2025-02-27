@@ -9,7 +9,7 @@ import uuid
 from .decorators import ether_pub, ether_sub, ether_init, ether_save, ether_cleanup, ether_start, ether_get, ether_save_all, ether_shutdown
 from .utils import get_ether_logger
 from ._internal._ether import _ether
-from ._internal._config import EtherConfig
+from .config import EtherConfig
 
 
 def _pub(data: Union[Dict, BaseModel] = None, topic: str = None):

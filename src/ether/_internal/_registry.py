@@ -10,9 +10,11 @@ import json
 import sys
 import importlib
 
+from ..config import EtherConfig, EtherNetworkConfig
+
 from ..utils import get_ether_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT, get_ip_address
 from ether.liaison import EtherInstanceLiaison
-from ._config import EtherClassConfig, EtherNetworkConfig, EtherConfig
+from ..config import EtherClassConfig
 from ._reqrep import (
     W_READY, W_REQUEST, W_REPLY, MDPW_WORKER, MDPC_CLIENT,
     REQUEST_MSG_WORKER_INDEX, REQUEST_MSG_COMMAND_INDEX, REQUEST_MSG_CLIENT_ID_INDEX, REQUEST_MSG_SERVICE_INDEX, REQUEST_MSG_DATA_INDEX,

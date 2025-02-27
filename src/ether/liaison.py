@@ -6,7 +6,7 @@ import os
 
 from ether.utils import get_ether_logger, get_ip_address
 from ether._internal._session import EtherSession
-from ether._internal._config import EtherNetworkConfig
+from ether.config import EtherNetworkConfig
 
 
 class EtherInstanceLiaison:

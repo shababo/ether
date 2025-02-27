@@ -7,7 +7,7 @@ import random
 
 
 from ether import ether
-from ether._internal._config import EtherConfig
+from ether.config import EtherConfig
 from ether.webapp.components.core import LayoutConfig
 
 # use font-awesome for icons and boostrap for main style

@@ -1,5 +1,5 @@
 import pytest
-from ether._internal._config import EtherConfig
+from ether.config import EtherConfig
 from ether._internal._registry import EtherRegistry
 from examples.external_class_integration import DataGenerator, DataProcessor
 

@@ -3,7 +3,7 @@ import uuid
 from typing import Optional
 
 from ..utils import get_ether_logger
-from ._config import EtherNetworkConfig
+from ..config import EtherNetworkConfig
 from ._session import EtherSession
 
 # pubsub message frame indices

@@ -9,7 +9,7 @@ import errno
 from time import sleep
 
 from ether.utils import get_ether_logger, get_ip_address
-from ether._internal._config import EtherNetworkConfig
+from ether.config import EtherNetworkConfig
 
 class EtherSession: 
     DISCOVERY_PUB_PORT = 301309

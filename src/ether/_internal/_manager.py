@@ -2,7 +2,7 @@ from typing import Union
 from multiprocessing import Process
 import time
 from ..utils import get_ether_logger
-from ._config import EtherConfig
+from ..config import EtherConfig
 from ether.liaison import EtherInstanceLiaison
 
 

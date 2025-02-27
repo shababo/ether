@@ -2,7 +2,7 @@ import pytest
 import time
 import multiprocessing
 from ether import ether
-from ether._internal._config import EtherConfig
+from ether.config import EtherConfig
 from ether.liaison import EtherInstanceLiaison
     
 

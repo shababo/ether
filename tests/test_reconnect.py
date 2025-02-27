@@ -2,7 +2,8 @@ import pytest
 import time
 from typing import Optional
 from ether import ether, ether_get, ether_save, _ether
-from ether._internal._config import EtherConfig, EtherInstanceConfig
+from ether._internal._config import _EtherInstanceConfig
+from ether.config import EtherConfig
 from ether.utils import get_ether_logger
 from ether.liaison import EtherInstanceLiaison
 from ether._internal._reqrep import MDPW_WORKER, W_DISCONNECT
@@ -35,7 +36,7 @@ def test_service_reconnect():
     
     config = EtherConfig(
         instances={
-            "reconnect_service": EtherInstanceConfig(
+            "reconnect_service": _EtherInstanceConfig(
                 class_path="test_reconnect.ReconnectTestService",
                 kwargs={"name": "reconnect_service"}
             )

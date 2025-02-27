@@ -12,12 +12,14 @@ from pydantic import BaseModel
 import json
 import signal
 
+
 from ..utils import get_ether_logger, get_ip_address
 from ._session import EtherSession, session_discovery_launcher
 from ._pubsub import _EtherPubSubProxy
 from ..liaison import EtherInstanceLiaison 
 from ._manager import _EtherInstanceManager
-from ._config import EtherConfig, EtherNetworkConfig
+from ..config import EtherConfig, EtherNetworkConfig
+from ._config import _EtherConfig
 from ._registry import EtherRegistry
 from ._reqrep import (
     MDPW_WORKER,
@@ -175,13 +177,13 @@ class _Ether:
         try:
             if config:
                 if isinstance(config, (str, dict)):
-                    self._config = EtherConfig.from_yaml(config) if isinstance(config, str) else EtherConfig.model_validate(config)
+                    self._config = _EtherConfig.from_yaml(config) if isinstance(config, str) else _EtherConfig.model_validate(config)
                 elif isinstance(config, EtherConfig):
-                    self._config = config
+                    self._config = _EtherConfig(**config.model_dump())
                 else:
-                    self._config = EtherConfig()
+                    self._config = _EtherConfig()
             else:
-                self._config = EtherConfig()
+                self._config = _EtherConfig()
         except Exception as e:
             self._logger.error(f"Failed to process configuration: {e}", exc_info=True)
             raise
