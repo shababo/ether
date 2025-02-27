@@ -18,15 +18,15 @@ A lot of software meant to support science asks a lot of users up front. This is
 - No need to learn about computing stuff you don't care about (e.g. schema, servers, async)
 
 Ether achieves all of this via two core design choices: 
-1. Ether looks at your code for answers. The result is that Ether can dynamically structure logs and metadata when you run experiments!
-2. Ether abstracts all of the complicated stuff behind a simple interface that uses semantics close to the user - not the developer.
+1. As much as possible, Ether looks at your code for answers. The result is that Ether can dynamically structure logs and metadata when you run experiments! One way we like to put it is that "Ether doesn't ask what you are going to do, it tells you what you did."
+2. Ether abstracts all of the complicated stuff behind a simple interface based on semantics close to the user - not the developer.
 
 That said, the best way for a user to understand Ether is to look at use cases. Several use case demos are in the works, but for now here are examples of how you might use it.
 #### Example Use Cases
 - A computational biologist has code that operates lab equipment and runs analysis, and wants to integrate it into an automated data acquisition pipeline
 - An AI engineer wants to combine multiple machine learning models into a real-time processing pipeline
 - An operations engineer needs to add remote monitoring to existing industrial control systems
-- A behavioral scientist wants to turn a Gymnasium environment into an interactive game with joystick control and real-time display
+- A neuroscientist wants to run a Gymnasium environment in a behavioral set up while recording physiology
 
 ### Developer perspective
 Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions. It achieves these goals by wrapping and introspecting the user's code and, in many cases, launching instances of user's classes in their own processes. When instances are run in their own processes, the result is that we've dynamically turned those classes into microservices. 
