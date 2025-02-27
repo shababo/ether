@@ -164,20 +164,16 @@ class _Ether:
             json_data.encode()
         ])
         self._logger.debug(f"Published to {topic}: {json_data}")
-    
-    def start(self, ether_id: str, config = None, restart: bool = False, allow_host: bool = True, ether_run: bool = False):
-        """Start all daemon services"""
 
-        session_metadata = None
-
-        self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}, allow_host={allow_host}")
-        self._ether_id = ether_id
-
+    def _process_config(self, config: Union[str, dict, EtherConfig]):
+        """Process the configuration"""
         # Process configuration
         try:
             if config:
-                if isinstance(config, (str, dict)):
-                    self._config = _EtherConfig.from_yaml(config) if isinstance(config, str) else _EtherConfig.model_validate(config)
+                if isinstance(config, str):
+                    self._config = _EtherConfig.from_yaml(config)
+                elif isinstance(config, dict):
+                    self._config = _EtherConfig.model_validate(config)
                 elif isinstance(config, EtherConfig):
                     self._config = _EtherConfig(**config.model_dump())
                 else:
@@ -201,6 +197,17 @@ class _Ether:
             
 
         self._logger.debug(f"Processed Config: {self._config}")
+            
+    
+    def start(self, ether_id: str, config: Union[str, dict, EtherConfig] = None, restart: bool = False, allow_host: bool = True, ether_run: bool = False):
+        """Start all daemon services"""
+
+        session_metadata = None
+
+        self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}, allow_host={allow_host}")
+        self._ether_id = ether_id
+
+        self._process_config(config)
 
         # Start session with network config
         if allow_host:

@@ -2,7 +2,7 @@ import pytest
 import time
 from typing import List, Optional
 from ether import ether
-from ether._internal._config import _EtherInstanceConfig
+from ether.config import EtherInstanceConfig
 from ether import ether_get, ether_save  
 from ether.config import EtherConfig
 from ether.utils import get_ether_logger
@@ -54,7 +54,7 @@ def test_heartbeat_and_reconnect():
     
     config = EtherConfig(
         instances={
-            "heartbeat_service": _EtherInstanceConfig(
+            "heartbeat_service": EtherInstanceConfig(
                 class_path="test_ether_reqrep_advanced.HeartbeatService",
                 kwargs={"name": "heartbeat_service"}
             )

@@ -4,7 +4,7 @@ from ether import ether_get
 from ether.config import EtherConfig
 from ether.utils import get_ether_logger
 from typing import Optional, List
-from ether._internal._config import _EtherInstanceConfig
+from ether.config import EtherInstanceConfig
 
 class DataService:
     def __init__(self):
@@ -52,7 +52,7 @@ def test_ether_get_with_params():
     # Create configuration
     config = EtherConfig(
         instances={
-            "data_service": _EtherInstanceConfig(
+            "data_service": EtherInstanceConfig(
                 class_path="test_ether_get.DataService",
                 kwargs={"ether_name": "data_service"}
             )

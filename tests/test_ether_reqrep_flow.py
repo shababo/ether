@@ -2,7 +2,7 @@ import pytest
 import time
 from typing import List, Optional
 from ether import ether
-from ether._internal._config import _EtherInstanceConfig
+from ether.config import EtherInstanceConfig
 from ether import ether_get, ether_save
 from ether.config import EtherConfig
 from ether.utils import get_ether_logger
@@ -44,7 +44,7 @@ def test_message_flow_control():
     
     config = EtherConfig(
         instances={
-            "flow_service": _EtherInstanceConfig(
+            "flow_service": EtherInstanceConfig(
                 class_path="test_ether_reqrep_flow.FlowControlService",
                 kwargs={"name": "flow_service"}
             )

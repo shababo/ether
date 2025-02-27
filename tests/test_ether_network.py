@@ -2,9 +2,8 @@ import time
 from typing import List
 import socket
 from ether import ether
-from ether._internal._config import _EtherInstanceConfig
 from ether import ether_save, ether_get
-from ether.config import EtherConfig, EtherNetworkConfig
+from ether.config import EtherConfig, EtherNetworkConfig, EtherInstanceConfig
 from ether.utils import get_ether_logger
 
 def get_local_ip():
@@ -69,7 +68,7 @@ def test_ether_network_communication():
     server_config = EtherConfig(
         network=server_network,
         instances={
-            "network_test": _EtherInstanceConfig(
+            "network_test": EtherInstanceConfig(
                 class_path="test_ether_network.NetworkTestService",
                 kwargs={"ether_name": "network_test"}
             )
