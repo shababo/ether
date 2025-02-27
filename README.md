@@ -9,7 +9,7 @@ Ether is an ultra-lightweight, Python framework for scientists and engineers to 
 ### User perspective 
 A lot of software meant to support science asks a lot of users up front. This is a huge blocker for several reasons. First of all, scientists are already time-constrained. Second, not all users can on board new software, and potentially new computing concepts, rapidly enough. But most importantly, the process of science or engineering, very frequently, involves changing and re-combining components, testing and debugging, and making decisions on the fly. The core goal of Ether is to be useful even under those conditions while asking the least amount possible from the users. 
 
-##### Features
+#### Features
 
 - Integrate your code without changing it, across machines or even the Internet
 - Guarantees on data saving and provenance tracing
@@ -28,10 +28,16 @@ That said, the best way for a user to understand Ether is to look at use cases. 
 - An operations engineer needs to add remote monitoring to existing industrial control systems
 - A neuroscientist wants to run a Gymnasium environment in a behavioral set up while recording physiology
 
+#### Modularity and the Community Hub
+
+Ether's ability to intergrate your code without the need to change it (or at least make any reference to Ether itself in the code) enables two important features.
+1. It becomes extremely easy to swap out steps of a data processing pipeline or hardware components.
+2. It also becomes easy to share code across projects and organizations. If someone writes code to do some processing or control a piece of hardware, Ether allows other users to integrate that code. This works best when each users write small Python classes that take care of small parts of the system.
+
 ### Developer perspective
 Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions. It achieves these goals by wrapping and introspecting the user's code and, in many cases, launching instances of user's classes in their own processes. When instances are run in their own processes, the result is that we've dynamically turned those classes into microservices. 
 
-At its foundation, Ether provides traceability/observability and both Pub-Sub and Request-Reply messaging patterns.
+At its foundation, Ether provides traceability/observability and both Pub-Sub and Request-Reply messaging patterns. It then builds on those using several layers of abstraction, the last of which is a lightweight, user-friendly API which wraps the common function calling patterns in science like triggering data pipelines, automating acquistion hardware into runs/experiments/trials, and storing and retrieving data.
 
 ##### Features
 
@@ -41,7 +47,7 @@ At its foundation, Ether provides traceability/observability and both Pub-Sub an
 - System-wide logging of messages, errors, etc.
 - Configuration complexity scales with use case complexity
 - Session-wide security and encrypted communication (currently in development!)
-- Pydantic type validation for messages based on type hints 
+- Pydantic type validation for messages based on type hints
 
 ## Installation
 ```
