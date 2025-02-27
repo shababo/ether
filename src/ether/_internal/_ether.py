@@ -11,7 +11,7 @@ from typing import Union, Dict, Optional
 from pydantic import BaseModel
 import json
 import signal
-
+import uuid
 
 from ..utils import get_ether_logger, get_ip_address
 from ._session import EtherSession, session_discovery_launcher
@@ -116,6 +116,7 @@ class _Ether:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(_Ether, cls).__new__(cls)
+            cls._instance._ether_id = str(uuid.uuid4())
             cls._instance._logger = get_ether_logger("Ether")
             cls._instance._logger.debug("Initializing Ether instance")
             cls._instance._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
@@ -199,13 +200,12 @@ class _Ether:
         self._logger.debug(f"Processed Config: {self._config}")
             
     
-    def start(self, ether_id: str, config: Union[str, dict, EtherConfig] = None, restart: bool = False, allow_host: bool = True, ether_run: bool = False):
+    def start(self, config: Union[str, dict, EtherConfig] = None, restart: bool = False, allow_host: bool = True, ether_run: bool = False):
         """Start all daemon services"""
 
         session_metadata = None
 
-        self._logger.debug(f"Start called with ether_id={ether_id}, config={config}, restart={restart}, allow_host={allow_host}")
-        self._ether_id = ether_id
+        self._logger.debug(f"Start called with ether_id={self._ether_id}, config={config}, restart={restart}, allow_host={allow_host}")
 
         self._process_config(config)
 
@@ -231,7 +231,7 @@ class _Ether:
                 self._logger.debug(f"Existing session metadata: {session_metadata}")
                 
                 assert session_metadata
-                if session_metadata.get("ether_id") == ether_id:
+                if session_metadata.get("ether_id") == self._ether_id:
                     self._logger.info(f"Starting Ether session: session id: {session_metadata['session_id']}, session ether id: {session_metadata['ether_id']}...")
                     self._is_main_session = True
 

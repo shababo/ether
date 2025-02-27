@@ -55,7 +55,6 @@ class Ether:
     
     _initialized = False
     _instance = None
-    _ether_id = str(uuid.uuid4())
     _within_process_instances = []
     def __new__(cls):
         if cls._instance is None:
@@ -72,7 +71,7 @@ class Ether:
             
         if not self._initialized:
             # Start ether
-            _ether.start(ether_id=self._ether_id, config=config, restart=restart, allow_host=allow_host, ether_run=ether_run)
+            _ether.start(config=config, restart=restart, allow_host=allow_host, ether_run=ether_run)
         
             # Mark as initialized
             self._initialized = True
@@ -92,6 +91,10 @@ class Ether:
         time.sleep(2.0)
         _ether.shutdown()
         self._initialized = False
+
+    @property
+    def ether_id(self):
+        return _ether._ether_id
  
 
 ## Export public interface

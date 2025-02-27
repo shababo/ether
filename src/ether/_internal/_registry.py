@@ -141,7 +141,7 @@ def add_ether_functionality(cls):
             'sub_topics': [m._sub_metadata.topic for m in self._ether_methods_info.values() 
                           if hasattr(m, '_sub_metadata')],
             'id': self.id,
-            'ether_id': self.ether._ether_id,
+            'ether_id': self.ether.ether_id,
             'session_id': session_metadata['session_id'],
             'session_ip': session_metadata['public_ip'],
             'instance_public_ip': get_ip_address(),
