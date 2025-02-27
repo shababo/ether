@@ -46,47 +46,35 @@ class EtherSession:
 
         atexit.register(self.cleanup)
 
+    def _setup_sockets(self):
+        self.pub_socket = self.context.socket(zmq.PUB)
+        # Bind to all interfaces for remote connections
+        self.pub_socket.bind(f"tcp://*:{self.network.session_discovery_port}")
+        
+        self.rep_socket = self.context.socket(zmq.REP)
+        self.rep_socket.bind(f"tcp://*:{self.network.session_query_port}")
+        
     def _start_discovery_service(self):
+
+        if self.running:
+            self._logger.debug(f"Process {os.getpid()}: Discovery service already running, skipping start")
+            return
+        
         try:
-            self.pub_socket = self.context.socket(zmq.PUB)
-            # Bind to all interfaces for remote connections
-            self.pub_socket.bind(f"tcp://*:{self.network.session_discovery_port}")
-            
-            self.rep_socket = self.context.socket(zmq.REP)
-            self.rep_socket.bind(f"tcp://*:{self.network.session_query_port}")
+            self._setup_sockets()
             
             self.is_discovery_service = True
             self.running = True
             
-            # self.service_thread = threading.Thread(target=self._run_discovery_service)
-            # self.service_thread.daemon = True
-            # self.service_thread.start()
             self._run_discovery_service()
-            
-            
             
         except zmq.ZMQError as e:
             if e.errno == errno.EADDRINUSE:
                 self._logger.debug(f"Process {os.getpid()}: Another process just started the discovery service, attempting to connect...")
-                # Clean up our failed binding attempts
-                if hasattr(self, 'pub_socket'):
-                    self.pub_socket.close()
-                if hasattr(self, 'rep_socket'):
-                    self.rep_socket.close()
                 
-                # Give the other process a moment to fully initialize
-                sleep(0.1)
-                
-                # Try to connect again
-                if self._connect_to_discovery():
-                    self._logger.debug(f"Process {os.getpid()}: Successfully connected to existing service")
-                    return
-                else:
-                    raise RuntimeError("Failed to connect to existing service after bind failure")
             else:
                 self._logger.debug(f"Process {os.getpid()}: Failed to start discovery service: {e}")
-                self.cleanup()
-                raise
+            self.cleanup()
 
     def _run_discovery_service(self):
 
@@ -219,7 +207,7 @@ class EtherSession:
             self.context.term()
         self.running = False
 
-def session_discovery_launcher(ether_id: str, network_config: Optional[EtherNetworkConfig] = None, retries: int = 5):
+def session_discovery_launcher(ether_id: str, network_config: Optional[EtherNetworkConfig] = None):
     """Launch an Ether session process
     
     Args:
@@ -228,50 +216,17 @@ def session_discovery_launcher(ether_id: str, network_config: Optional[EtherNetw
     """
     try:
         # First try to find existing session
-        # print(f"Process {process_id}: Checking for existing session...")
-        while retries > 0:
-            current_session = EtherSession.get_current_session(timeout=200, network_config=network_config)
-            if current_session is not None:
-                break
-            retries -= 1
-            time.sleep(0.5)
-        
+        current_session = EtherSession.get_current_session(timeout=200, network_config=network_config)
+
         if current_session is None:
-            # print(f"Process {process_id}: No session found, attempting to create new one...")
             try:
                 session = EtherSession(
                     ether_id=ether_id,
                     network_config=network_config
                 )
                 session.start()
-            except zmq.ZMQError as e:
-                if e.errno == errno.EADDRINUSE:
-                    # Someone else created it just before us, try to get their session
-                    # print(f"Process {process_id}: Another process created session first, connecting...")
-                    current_session = EtherSession.get_current_session(timeout=200)
-                else:
-                    raise
-        else:
-            # print(f"Process {process_id}: Found existing session {current_session['session_id']}")
-            pass
+            except Exception as e: #zmq.ZMQError as e:
+                pass
             
     except Exception as e:
-        # print(f"Process {process_id}: Error: {e}")
         pass
-    finally:
-        # print(f"Process {process_id}: Shutting down")
-        pass
-
-# def main():
-#     processes = []
-#     for i in range(4):
-#         p = multiprocessing.Process(target=session_discovery_launcher, args=(i,))
-#         processes.append(p)
-#         p.start()
-#         time.sleep(0.1)  # Small delay between launches
-
-#     for p in processes:
-#         p.join()
-
-# if __name__ == "__main__":
-#     main()

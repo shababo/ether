@@ -71,7 +71,7 @@ class Ether:
             
         if not self._initialized:
             # Start ether
-            _ether.start(config=config, restart=restart, allow_host=allow_host, ether_run=ether_run)
+            _ether.start(config=config, allow_host=allow_host, ether_run=ether_run)
         
             # Mark as initialized
             self._initialized = True
