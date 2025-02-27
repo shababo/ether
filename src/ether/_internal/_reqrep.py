@@ -87,9 +87,18 @@ class EtherReqRepBroker:
         assert msg[0] == MDPC_CLIENT  # Verify client protocol
         service_name = msg[1].decode()  # Service name comes after protocol
         request = msg[2]  # Request data is third frame
+
         
         self._logger.debug(f"Processing client message: protocol={msg[0]}, service={service_name}, request={request}")
         
+        if "ping" in service_name:
+            self._logger.debug(f"Received ping request, sending pong")
+            self.frontend.send_multipart([
+                MDPC_CLIENT,
+                "pong".encode(),
+                "pong".encode()
+            ])
+            return
         # Handle disconnect command
         if W_DISCONNECT in request:
             self._logger.info(f"Processing disconnect request for service: {service_name}")
@@ -297,15 +306,13 @@ class EtherReqRepBroker:
                 events = dict(self.poller.poll(self.HEARTBEAT_INTERVAL))
                 
                 if self.frontend in events:
-                    self._logger.debug(f"Frontend in events: {self.frontend}")
                     msg = self.frontend.recv_multipart()
-                    self._logger.debug(f"Frontend resply msg: {msg}")
+                    self._logger.debug(f"Request msg received: {msg}")
                     self._process_client(msg)
                     
                 if self.backend in events:
-                    self._logger.debug(f"Backend in events: {self.backend}")
                     msg = self.backend.recv_multipart()
-                    self._logger.debug(f"Backend reply msg: {msg}")
+                    self._logger.debug(f"Reply msg received: {msg}")
                     self._process_worker(msg[0], msg[1], msg[2:])
                 
                 self._purge_workers()

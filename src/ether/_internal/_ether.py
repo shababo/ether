@@ -247,9 +247,6 @@ class _Ether:
             self._logger.error(f"Redis startup failed: {e}", exc_info=True)
             raise
         
-        # Clean up any existing ZMQ contexts
-        # zmq.Context.instance().term()
-
         # Start Messaging
         self._logger.debug("Starting PubSub proxy...")
         try:
@@ -343,26 +340,12 @@ class _Ether:
         except Exception as e:
             self._logger.error(f"Error starting Ether system: {e}")
             self.shutdown()
-            
-
-
-    @property
-    def session_metadata(self):
-        return self._session_metadata
     
     def get_session_metadata(self):
         return self._session_metadata
     
     def _ensure_redis_running(self) -> bool:
         """Ensure Redis server is running, start if not"""
-        if self._redis_pidfile.exists():
-            with open(self._redis_pidfile) as f:
-                pid = int(f.read().strip())
-            try:
-                os.kill(pid, 0)
-                return self._test_redis_connection()
-            except (OSError, redis.ConnectionError):
-                self._redis_pidfile.unlink()
         
         self._start_redis_server()
         return self._test_redis_connection()
@@ -393,34 +376,65 @@ class _Ether:
 
     def _test_reqrep_connection(self) -> bool:
         """Test ReqRep broker connection"""
-        # TODO: Implement actual connection test
-        return True
+        context = zmq.Context()
+        socket = context.socket(zmq.REQ)
+        max_attempts = 10
+        for _ in range(max_attempts):
+            try:
+                socket.connect(f"tcp://{self._config.network.host}:{self._config.network.reqrep_frontend_port}")
+                socket.send_multipart([
+                    MDPC_CLIENT,
+                    "ping".encode(),
+                    "ping".encode(),
+                ])
+                socket.RCVTIMEO = 1000  # 1 second timeout
+                response = socket.recv_multipart()
+                if response[2].decode() == "pong":
+                    return True
+            except zmq.error.ZMQError:
+                self._logger.debug(f"ReqRep broker not ready, waiting")
+                time.sleep(0.1)
+            finally:
+                socket.close()
+                context.term()
+        return False
     
     def _test_redis_connection(self) -> bool:
         """Test Redis connection"""
-        try:
-            r = redis.Redis(port=self._config.network.redis_port)
-            r.ping()
-            r.close()
-            return True
-        except redis.ConnectionError:
-            return False
+        max_attempts = 10
+        for _ in range(max_attempts):
+            try:
+                r = redis.Redis(port=self._config.network.redis_port)
+                r.ping()
+                r.close()
+                return True
+            except Exception as e:
+                time.sleep(0.1)
+
+        return False
+                
         
     def _test_pubsub_connection(self) -> bool:
         context = zmq.Context()
         socket = context.socket(zmq.SUB)
-        for _ in range(10):  # Try for 5 seconds
+        max_attempts = 10
+        for _ in range(max_attempts):  
             try:
                 socket.connect(f"tcp://{self._config.network.host}:{self._config.network.pubsub_frontend_port}")
-                socket.close()
-                context.term()
                 return True
             except zmq.error.ZMQError:
-                time.sleep(0.5)
+                time.sleep(0.1)
+            finally:
+                socket.close()
+                context.term()
         return False
     
     def _start_redis_server(self):
         """Start Redis server process"""
+        if self._redis_process is not None:
+            self._logger.debug("Redis server already running, skipping start")
+            return
+        
         self._logger.debug("Starting Redis server")
         self._redis_process = subprocess.Popen(
             [
@@ -433,26 +447,6 @@ class _Ether:
                 '--protected-mode', 'no'
             ],
         )
-        # Save PID
-        with open(self._redis_pidfile, 'w') as f:
-            f.write(str(self._redis_process.pid))
-        
-        # Wait for Redis to be ready
-        time.sleep(0.5)
-        max_attempts = 10
-        for _ in range(max_attempts):
-            try:
-                if self._test_redis_connection():
-                    self._logger.debug("Redis server ready")
-                    break
-                else:
-                    self._logger.debug("Redis server not ready, waiting")
-                    time.sleep(0.5)
-            except:
-                self._logger.debug("Redis server not ready, waiting")
-                time.sleep(0.5)
-        else:
-            raise RuntimeError("Redis server failed to start")
     
     def _start_instances(self):
         """Start instances from configuration"""
