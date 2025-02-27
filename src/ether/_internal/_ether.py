@@ -443,7 +443,7 @@ class _Ether:
         else:
             self._instance_manager.launch_instances(self._config)
         # Wait for instances to be ready
-        time.sleep(0.1)
+        time.sleep(2.0)
 
     # def save(self):
     #     if self._pub_socket:
