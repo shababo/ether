@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 import importlib
 
 # from ._registry import EtherRegistry
-from ether.config import EtherNetworkConfig, EtherConfig
+from ether.config import EtherSessionConfig, EtherConfig
 from ether.utils import get_ether_logger
 
 
@@ -13,7 +13,7 @@ class _EtherInstanceConfig(BaseModel):
     args: list[Any] = Field(default_factory=list)
     kwargs: dict[str, Any] = Field(default_factory=dict)
     autorun: bool = True  # Whether to automatically launch this instance
-    network_config: Optional[EtherNetworkConfig] = None
+    session_config: Optional[EtherSessionConfig] = None
     
     def get_class(self):
         """Get the class from its path"""
@@ -22,9 +22,13 @@ class _EtherInstanceConfig(BaseModel):
         cls = getattr(module, class_name)
         
         # Check Redis for registry configuration
-        from ether.liaison import EtherInstanceLiaison
-        liaison = EtherInstanceLiaison(network_config=self.network_config)
-        registry_config = liaison.get_registry_config()
+        # from ether.liaison import EtherInstanceLiaison
+        # liaison = EtherInstanceLiaison(session_config=self.session_config)
+        from ._ether import _ether
+        if _ether._instance_manager:
+            registry_config = _ether._instance_manager.get_registry_config()
+        else:
+            registry_config = {}
         
         # If this class has registry configuration, process it
         if self.class_path in registry_config:
@@ -49,7 +53,7 @@ class _EtherInstanceConfig(BaseModel):
             # Override name if not explicitly set in kwargs
             if 'ether_name' not in kwargs:
                 kwargs['ether_name'] = instance_name
-            kwargs['ether_network_config'] = self.network_config
+            kwargs['ether_session_config'] = self.session_config
             kwargs['ether_run'] = True
             instance = cls(*self.args, **kwargs)
             instance.run()

@@ -38,24 +38,11 @@ def _request(service_class: str, method_name: str, params=None, request_type="ge
 
 # Public singleton instance of Ether API
 class Ether:
-
-    # ether public API
-    # just some sugar to make the UX better and to codify common actions into topics
-    pub = staticmethod(_pub)
-    request = staticmethod(_request)
-    get = staticmethod(functools.partial(_request, request_type="get"))
-    save = staticmethod(functools.partial(_request, request_type="save"))
-    save_all = staticmethod(functools.partial(_pub, {}, topic="Ether.save_all"))
-    start = staticmethod(functools.partial(_pub, {}, topic="Ether.start"))
-    cleanup = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
-    shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
-    pause = staticmethod(functools.partial(_pub, {}, topic="Ether.pause"))
-    resume = staticmethod(functools.partial(_pub, {}, topic="Ether.resume"))
-    get_session_metadata = _ether.get_session_metadata
-    
     _initialized = False
     _instance = None
     _within_process_instances = []
+    _ether = _ether # TODO: this temporary until we come back to revise public Ether API
+    
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Ether, cls).__new__(cls)
@@ -81,6 +68,31 @@ class Ether:
 
         time.sleep(1.1)
 
+    # ether public API
+    # just some sugar to make the UX better and to codify common actions into topics
+    pub = staticmethod(_pub)
+    request = staticmethod(_request)
+    get = staticmethod(functools.partial(_request, request_type="get"))
+    save = staticmethod(functools.partial(_request, request_type="save"))
+    save_all = staticmethod(functools.partial(_pub, {}, topic="Ether.save_all"))
+    start = staticmethod(functools.partial(_pub, {}, topic="Ether.start"))
+    cleanup = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
+    shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
+    pause = staticmethod(functools.partial(_pub, {}, topic="Ether.pause"))
+    resume = staticmethod(functools.partial(_pub, {}, topic="Ether.resume"))
+    
+    @property
+    def session_info(self):
+        return _ether.session_info
+    
+    def launch_instances(self, instances: dict):
+        """Launch an instance from a config dictionary"""
+        _ether._launch_instances(instances)
+
+    def get_active_instances(self):
+        """Get all currently active instances"""
+        return _ether._instance_manager.get_active_instances()
+    
     def shutdown(self):
         self.cleanup()
         for instance in self._within_process_instances:

@@ -3,7 +3,7 @@ from typing import List
 import socket
 from ether import ether
 from ether import ether_save, ether_get
-from ether.config import EtherConfig, EtherNetworkConfig, EtherInstanceConfig
+from ether.config import EtherConfig, EtherSessionConfig, EtherInstanceConfig
 from ether.utils import get_ether_logger
 
 def get_local_ip():
@@ -46,7 +46,7 @@ def test_ether_network_communication():
     logger.info(f"Local IP address: {local_ip}")
     
     # Create network configs for "server" and "client"
-    server_network = EtherNetworkConfig(
+    server_network = EtherSessionConfig(
         host=local_ip,  # Use actual IP for server
         # pubsub_frontend_port=13311,
         # pubsub_backend_port=13312,
@@ -55,7 +55,7 @@ def test_ether_network_communication():
         # redis_port=13315
     )
     
-    client_network = EtherNetworkConfig(
+    client_network = EtherSessionConfig(
         host=local_ip,  # Connect to server IP
         # pubsub_frontend_port=13311,
         # pubsub_backend_port=13312,
@@ -66,7 +66,7 @@ def test_ether_network_communication():
     
     # Create server config
     server_config = EtherConfig(
-        network=server_network,
+        session=server_network,
         instances={
             "network_test": EtherInstanceConfig(
                 class_path="test_ether_network.NetworkTestService",
@@ -77,7 +77,7 @@ def test_ether_network_communication():
     
     # Create client config (no instances, just network config)
     client_config = EtherConfig(
-        network=client_network
+        session=client_network
     )
     
     # Start server Ether instance

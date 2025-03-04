@@ -5,7 +5,6 @@ from ether import ether, ether_get, ether_save, _ether
 from ether._internal._config import _EtherInstanceConfig
 from ether.config import EtherConfig
 from ether.utils import get_ether_logger
-from ether.liaison import EtherInstanceLiaison
 from ether._internal._reqrep import MDPW_WORKER, W_DISCONNECT
 
 class ReconnectTestService:

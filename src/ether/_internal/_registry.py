@@ -10,10 +10,10 @@ import json
 import sys
 import importlib
 
-from ..config import EtherConfig, EtherNetworkConfig
+from ..config import EtherConfig, EtherSessionConfig
 
 from ..utils import get_ether_logger, _ETHER_SUB_PORT, _ETHER_PUB_PORT, get_ip_address
-from ether.liaison import EtherInstanceLiaison
+# from ether.liaison import EtherInstanceLiaison
 from ..config import EtherClassConfig
 from ._reqrep import (
     W_READY, W_REQUEST, W_REPLY, MDPW_WORKER, MDPC_CLIENT,
@@ -131,7 +131,7 @@ def add_ether_functionality(cls):
 
     def get_metadata(self):
 
-        session_metadata = self.ether.get_session_metadata()
+        session_metadata = self.ether.session_info
         return {
             'name': self.name,
             'process_name': self.name or self.id,  # Use ID if no name provided
@@ -164,8 +164,8 @@ def add_ether_functionality(cls):
             # file_level=log_level
         )
         self._logger.debug(f"Initializing {self.name}")
-        self._sub_address = f"tcp://{self.network_config.host}:{self.network_config.pubsub_frontend_port}"
-        self._pub_address = f"tcp://{self.network_config.host}:{self.network_config.pubsub_backend_port}"
+        self._sub_address = f"tcp://{self.session_config.host}:{self.session_config.pubsub_frontend_port}"
+        self._pub_address = f"tcp://{self.session_config.host}:{self.session_config.pubsub_backend_port}"
         
         # Socket handling
         self._zmq_context = zmq.Context()
@@ -195,9 +195,8 @@ def add_ether_functionality(cls):
                 metadata = method._reqrep_metadata
                 self._worker_metadata[metadata.service_name] = metadata
 
-        # Register with instance tracker
-        self._instance_liaison = EtherInstanceLiaison(network_config=self.network_config)
-        self._instance_liaison.register_instance(f"{self.name}-{self.id}", self.get_metadata())
+        # Register instance 
+        self.ether._ether._instance_manager.register_instance(f"{self.name}-{self.id}", self.get_metadata())
 
     
     
@@ -218,7 +217,7 @@ def add_ether_functionality(cls):
         # self._request_socket = self._zmq_context.socket(zmq.REQ)
         # self._request_socket.linger = 0  # Don't wait for unsent messages on close
         # self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)  # 2.5 sec timeout
-        # self._request_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_frontend_port}")
+        # self._request_socket.connect(f"tcp://{self.session_config.host}:{self.session_config.reqrep_frontend_port}")
         
         # # Add poller for request socket
         # self._request_poller = zmq.Poller()
@@ -465,7 +464,7 @@ def add_ether_functionality(cls):
         self._worker_socket.linger = 0
         self._worker_socket.setsockopt(zmq.RCVTIMEO, 1000)
         self._worker_socket.setsockopt(zmq.LINGER, 0)
-        self._worker_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_backend_port}")
+        self._worker_socket.connect(f"tcp://{self.session_config.host}:{self.session_config.reqrep_backend_port}")
         self._poller.register(self._worker_socket, zmq.POLLIN)  # Use instance poller
         
         # Register all services
@@ -493,7 +492,7 @@ def add_ether_functionality(cls):
     #     self._request_socket = self._zmq_context.socket(zmq.REQ)
     #     self._request_socket.linger = 0
     #     self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)
-    #     self._request_socket.connect(f"tcp://{self.network_config.host}:{self.network_config.reqrep_frontend_port}")
+    #     self._request_socket.connect(f"tcp://{self.session_config.host}:{self.session_config.reqrep_frontend_port}")
     #     self._request_poller.register(self._request_socket, zmq.POLLIN)
 
     # Add message tracking
@@ -554,8 +553,8 @@ def add_ether_functionality(cls):
             try:
                 # Refresh TTL periodically
                 now = time.time()
-                if now - last_refresh >= (self._instance_liaison.ttl / 2):
-                    self._instance_liaison.refresh_instance(f"{self.name}-{self.id}")
+                if now - last_refresh >= (self.ether._ether._instance_manager.ttl / 2):
+                    self.ether._ether._instance_manager.refresh_instance(f"{self.name}-{self.id}")
                     last_refresh = now
                 
                 
@@ -576,13 +575,13 @@ def add_ether_functionality(cls):
     def cleanup(self):
         self._logger.debug(f"Cleaning up instance {self.name}-{self.id}")
         try:
-            if hasattr(self, '_instance_liaison'):
+            # if hasattr(self, 'ether._ether._instance_manager'):
                 # if instance is not run in its own process this can happen after redis is shutdown
                 # and for now the instance manager doesn't access this type of instance
-                try:
-                    self._instance_liaison.deregister_instance(f"{self.name}-{self.id}")
-                except Exception as e:
-                    pass
+            try:
+                self.ether._ether._instance_manager.deregister_instance(f"{self.name}-{self.id}")
+            except Exception as e:
+                pass
             if hasattr(self, '_sub_socket') and self._sub_socket:
                 self._sub_socket.close()
                 self._sub_socket = None
@@ -625,11 +624,11 @@ def add_ether_functionality(cls):
             self.ether = ether
 
             ether_run = kwargs.pop('ether_run', False)
-            network_config = kwargs.pop('ether_network_config', None)
-            self.network_config = EtherNetworkConfig() if network_config is None else EtherNetworkConfig.model_validate(network_config)
+            session_config = kwargs.pop('ether_session_config', None)
+            self.session_config = EtherSessionConfig() if session_config is None else EtherSessionConfig.model_validate(session_config)
         
             if ether_run:
-                self.ether.tap(config=EtherConfig(network=self.network_config), allow_host=False, ether_run = ether_run)
+                self.ether.tap(config=EtherConfig(session=self.session_config), allow_host=False, ether_run = ether_run)
             
             if self.ether._initialized:
                 

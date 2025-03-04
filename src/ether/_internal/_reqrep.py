@@ -332,3 +332,14 @@ class EtherReqRepBroker:
             self.backend.close()
         if hasattr(self, 'context'):
             self.context.term() 
+
+
+def _run_reqrep_broker(frontend_port: int = 13313, backend_port: int = 13314):
+    """Run the request-reply broker in a separate process"""
+    broker = EtherReqRepBroker(frontend_port=frontend_port, backend_port=backend_port)
+    try:
+        broker.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        broker.cleanup()

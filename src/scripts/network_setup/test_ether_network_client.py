@@ -2,7 +2,7 @@ import time
 
 from ether import ether, ether_start, ether_get
 from ether._internal._config import _EtherInstanceConfig
-from ether.config import EtherConfig, EtherNetworkConfig
+from ether.config import EtherConfig, EtherSessionConfig
 from ether.utils import get_ether_logger
 
 class NetworkClient:
@@ -45,7 +45,7 @@ def run_client(server_host: str):
     logger = get_ether_logger("TestNetworkClient")
     logger.info(f"Connecting to server at {server_host}")
     
-    network_config = EtherNetworkConfig(
+    session_config = EtherSessionConfig(
         host=server_host,  # Connect to server for ZMQ
     )
     
@@ -56,7 +56,7 @@ def run_client(server_host: str):
                 kwargs={"ether_name": "network_test_client"}
             )
         },
-        network=network_config)
+        session=session_config)
     
     ether.tap(config=config)
     time.sleep(2.0)

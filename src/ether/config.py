@@ -2,7 +2,6 @@ from enum import Enum
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 import yaml
-import importlib
 
 class EtherDecoratorConfig(BaseModel):
     """Configuration for a single Ether decorator"""
@@ -30,17 +29,19 @@ class EtherSecurityConfig(BaseModel):
     user_key: Optional[str] = None
 
 
-class EtherNetworkConfig(BaseModel):
+class EtherSessionConfig(BaseModel):
     """Network configuration for Ether"""
+    allow_host: bool = True
     host: str = "localhost"
+    session_discovery_port: int = 13309
+    session_query_port: int = 13310
     pubsub_frontend_port: int = 13311
     pubsub_backend_port: int = 13312
     reqrep_frontend_port: int = 13313
     reqrep_backend_port: int = 13314
     redis_host: str = "0.0.0.0"  # Add separate Redis host config
     redis_port: int = 13315
-    session_discovery_port: int = 13309
-    session_query_port: int = 13310
+    
     
 class EtherInstanceConfig(BaseModel):
     """Configuration for a single Ether instance"""
@@ -48,7 +49,7 @@ class EtherInstanceConfig(BaseModel):
     args: list[Any] = Field(default_factory=list)
     kwargs: dict[str, Any] = Field(default_factory=dict)
     autorun: bool = True  # Whether to automatically launch this instance
-    network_config: Optional[EtherNetworkConfig] = None
+    session_config: Optional[EtherSessionConfig] = None
 
 
 class EtherClassConfig(BaseModel):
@@ -60,7 +61,7 @@ class EtherConfig(BaseModel):
     """Complete Ether configuration"""
     registry: Dict[str, EtherClassConfig] = Field(default_factory=dict)
     instances: Dict[str, EtherInstanceConfig] = Field(default_factory=dict)
-    network: EtherNetworkConfig = Field(default_factory=EtherNetworkConfig)  # Add network config
+    session: EtherSessionConfig = Field(default_factory=EtherSessionConfig)  # Add network config
 
     @classmethod
     def from_yaml(cls, path: str) -> "EtherConfig":

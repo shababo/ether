@@ -1,15 +1,11 @@
-import pytest
 import time
-import multiprocessing
 from ether import ether
-from ether.config import EtherConfig
-from ether.liaison import EtherInstanceLiaison
+# from ether.liaison import EtherInstanceLiaison
     
 
 def test_mixed_autorun():
     """Test mixed autorun configuration"""
     try:
-        tracker = EtherInstanceLiaison()
         
         config = {
             "instances": {
@@ -26,21 +22,22 @@ def test_mixed_autorun():
         
         # Initialize - should only start generator
         ether.tap(config=config, restart=True)
-        time.sleep(1)
+        # input("Press Enter to continue...")
         
         # Check that only generator is running
-        instances = tracker.get_active_instances()
+        instances = ether.get_active_instances()
         assert len(instances) == 1
         instance_names = {i['name'] for i in instances.values()}
         assert "test_generator" in instance_names
         
         # launch processor
         config["instances"]["test_processor"]["autorun"] = True
-        ether.tap(config=config, restart=True)
-        time.sleep(1)
+        config["instances"].pop("test_generator")
+        ether.launch_instances(config["instances"])
+        time.sleep(5)
         
         # Check both are running
-        instances = tracker.get_active_instances()
+        instances = ether.get_active_instances()
         assert len(instances) == 2
         instance_names = {i['name'] for i in instances.values()}
         assert "test_generator" in instance_names

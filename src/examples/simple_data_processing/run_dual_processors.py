@@ -76,6 +76,7 @@ def main(config_name):
 
     ether.shutdown()
 
+    time.sleep(2.0)
     # you can still use your code normally when ether is not running
     # in other words, if your code is still used other places, it will still work
     print("Starting normal code execution at", time.strftime("%Y-%m-%d %H:%M:%S"))

@@ -2,7 +2,7 @@ from pydantic import ConfigDict, Field
 from typing import Optional, Callable
 import dash_ag_grid as dag
 import pandas as pd
-from ether.webapp.components.core import WidgetConfig
+from ether.webapp.components.base import WidgetConfig
 
 class TableWidgetConfig(WidgetConfig):
     model_config = ConfigDict(arbitrary_types_allowed=True)
