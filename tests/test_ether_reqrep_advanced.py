@@ -7,7 +7,6 @@ from ether import ether_get, ether_save
 from ether.config import EtherConfig
 from ether.utils import get_ether_logger
 import zmq
-from ether.liaison import EtherInstanceLiaison
 
 class HeartbeatService:
     def __init__(self):
@@ -126,8 +125,7 @@ def test_heartbeat_and_reconnect():
         logger.info("Testing reconnection...")
         
         # Force reconnect by closing socket
-        liaison = EtherInstanceLiaison()
-        instances = liaison.get_active_instances()
+        instances = ether.get_active_instances()
         
         # Find our service instance
         service_id = None
@@ -156,7 +154,7 @@ def test_heartbeat_and_reconnect():
         assert result == 5  # Service should still work
         
         # Verify instance is still registered
-        instances = liaison.get_active_instances()
+        instances = ether.get_active_instances()
         assert service_id in instances, "Service instance lost after reconnect"
         assert instances[service_id]['class'] == 'HeartbeatService'
         

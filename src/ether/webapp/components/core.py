@@ -1,11 +1,10 @@
 from functools import partial
 
-from ether.liaison import EtherInstanceLiaison
+from ether import ether
 from ether.webapp.components.data import TableWidgetConfig
 
-_liaison = EtherInstanceLiaison()
 def clean_instance_records():
-    return [v for k,v in _liaison.get_active_instances().items()]
+    return [v for k,v in ether.get_active_instances().items()]
 
 active_instance_records_component = TableWidgetConfig(
             id="apparatus-table-button",

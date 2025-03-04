@@ -144,7 +144,7 @@ class _Ether:
                 for class_path, class_config in self._config.registry.items()
             }
             self._instance_manager.store_registry_config(registry_dict)
-            # EtherRegistry().process_registry_config(self._config.registry)
+            EtherRegistry().process_registry_config(self._config.registry)
             
         # Process any pending classes
         EtherRegistry().process_pending_classes()

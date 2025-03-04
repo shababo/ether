@@ -3,9 +3,7 @@ import pytest
 import time
 import json
 import zmq
-from pathlib import Path
 from ether import ether
-from ether.liaison import EtherInstanceLiaison
 
 def test_external_integration():
     """Test that external classes work with Ether via configuration"""
@@ -59,12 +57,8 @@ def test_external_integration():
         # Initialize Ether with test configuration
         ether.tap(config=config_dict)
         
-        # Give time for instances to start
-        time.sleep(0.1)
-        
         # Check that instances are registered
-        liaison = EtherInstanceLiaison()
-        active_instances = liaison.get_active_instances()
+        active_instances = ether.get_active_instances()
         
         # Verify all expected instances are running
         expected_instances = {"generator1", "processor1", "collector1"}
@@ -80,14 +74,14 @@ def test_external_integration():
         # Trigger data generation
         ether.pub(topic="generate_data", data={"data": 42})
 
-        time.sleep(1.0)
+        time.sleep(3.0)
 
         # Wait for and verify the processed message
         socket.RCVTIMEO = 5000  # 5 second timeout
         try:
-            topic = socket.recv_string()
-            message = socket.recv_string()
-            data = json.loads(message)
+            msg = socket.recv_multipart()
+            topic = msg[0].decode("utf-8")
+            data = json.loads(msg[1].decode("utf-8"))
             
             assert topic == "test_processed", f"Unexpected topic: {topic}"
             assert data["result_name"] == "generator_1_2x", f"Unexpected result name: {data['result_name']}"

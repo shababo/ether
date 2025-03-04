@@ -116,6 +116,8 @@ class _EtherInstanceManager:
         """Set TTL and update all existing instances"""
         self._ttl = value
         # Update TTL for all existing instances
+        for key in self.redis.keys(f"{self.instance_key_prefix}*"):
+            self.redis.expire(key, value)
 
     def stop_instance(self, instance_id: str, force: bool = False):
         self._logger.debug(f"Stopping instance {instance_id} (force={force})")

@@ -623,12 +623,12 @@ def add_ether_functionality(cls):
             from ether import ether
             self.ether = ether
 
-            ether_run = kwargs.pop('ether_run', False)
+            # ether_run = kwargs.pop('ether_run', False)
             session_config = kwargs.pop('ether_session_config', None)
             self.session_config = EtherSessionConfig() if session_config is None else EtherSessionConfig.model_validate(session_config)
         
-            if ether_run:
-                self.ether.tap(config=EtherConfig(session=self.session_config), allow_host=False, ether_run = ether_run)
+            # if ether_run:
+            #     self.ether.tap(config=EtherConfig(session=self.session_config), allow_host=False, ether_run = ether_run)
             
             if self.ether._initialized:
                 
