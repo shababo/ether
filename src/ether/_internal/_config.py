@@ -29,11 +29,8 @@ class _EtherInstanceConfig(BaseModel):
             registry_config = _ether._instance_manager.get_registry_config()
         else:
             registry_config = {}
-
-        print(f"Registry config: {registry_config}")
         
         # If this class has registry configuration, process it
-        print(f"Class path: {self.class_path}")
         if self.class_path in registry_config:
             from ._registry import EtherRegistry
             from ..config import EtherClassConfig
