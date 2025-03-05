@@ -1,9 +1,10 @@
 import pytest
 from ether import ether
 from ether import ether_get
+from ether.config import EtherConfig
 from ether.utils import get_ether_logger
 from typing import Optional, List
-from ether._internal._config import EtherConfig, EtherInstanceConfig
+from ether.config import EtherInstanceConfig
 
 class DataService:
     def __init__(self):

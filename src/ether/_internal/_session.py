@@ -1,144 +1,381 @@
+from pathlib import Path
 import zmq
-import uuid
 import time
-import threading
-import os
+import subprocess
+import redis
 from typing import Optional, Dict, Any
-import atexit
-import errno
 from time import sleep
+from multiprocessing import Process
+import tempfile
 
 from ether.utils import get_ether_logger, get_ip_address
-from ether._internal._config import EtherNetworkConfig
+from ether.config import EtherSessionConfig
+from ether._internal._discovery import _EtherDiscovery, session_discovery_launcher
+from ether._internal._pubsub import _run_pubsub
+from ether._internal._reqrep import MDPC_CLIENT, _run_reqrep_broker
+
+# DISCOVERY_PUB_PORT = 301309
+# QUERY_PORT = 301310
 
 class EtherSession: 
-    DISCOVERY_PUB_PORT = 301309
-    QUERY_PORT = 301310
+    _ether_id = None
+    _logger = None
+    _config = None
+    _redis_pidfile = None
+    _redis_process = None
+    _pubsub_process = None
+    _monitor_process = None
+    _ether_discovery_process = None
+    _session_metadata = None
+    _started = False
+    _is_host = False
+    # _request_socket = None
+    _zmq_context = None
+    _reqrep_broker_process = None
 
-    def __init__(self, ether_id: str = "default", network_config: Optional[EtherNetworkConfig] = None):
-        self.session_id = str(uuid.uuid4())
-        self.ether_id = ether_id
+    def __init__(self, ether_id: str = "default", config: Optional[EtherSessionConfig] = None):
+        self._ether_id = ether_id
         self.context = zmq.Context()
-        self.is_discovery_service = False
+        self.is_host = False
         self.running = False
         self._logger = get_ether_logger(process_name="EtherSession")
         
-        # Use provided network config or defaults
-        self.network = network_config or EtherNetworkConfig()
+        # Use provided config or defaults
+        self._config = config or EtherSessionConfig()
         
-        self.metadata = {
-            "session_id": self.session_id,
-            "ether_id": ether_id,
-            "start_time": time.time(),
-            "pid": os.getpid(),
-            "public_ip": get_ip_address(),
-            "network": self.network.model_dump()  # Add network config to metadata
-        }
+        self._session_discovery()
+
+        self._started = True
         
-        try:
-            if not self._connect_to_discovery():
-                self._logger.debug(f"Process {os.getpid()}: No existing service found, attempting to start one...")
-                self._start_discovery_service()
-        except Exception as e:
-            self.cleanup()
-            raise e
 
-        atexit.register(self.cleanup)
+    def _setup_sockets(self):
+        self.pub_socket = self.context.socket(zmq.PUB)
+        # Bind to all interfaces for remote connections
+        self.pub_socket.bind(f"tcp://*:{self._config.discovery_port}")
+        
+        self.rep_socket = self.context.socket(zmq.REP)
+        self.rep_socket.bind(f"tcp://*:{self._config.query_port}")
 
-    def _start_discovery_service(self):
-        try:
-            self.pub_socket = self.context.socket(zmq.PUB)
-            # Bind to all interfaces for remote connections
-            self.pub_socket.bind(f"tcp://*:{self.network.session_discovery_port}")
-            
-            self.rep_socket = self.context.socket(zmq.REP)
-            self.rep_socket.bind(f"tcp://*:{self.network.session_query_port}")
-            
-            self.is_discovery_service = True
-            self.running = True
-            
-            # self.service_thread = threading.Thread(target=self._run_discovery_service)
-            # self.service_thread.daemon = True
-            # self.service_thread.start()
-            self._run_discovery_service()
-            
-            
-            
-        except zmq.ZMQError as e:
-            if e.errno == errno.EADDRINUSE:
-                self._logger.debug(f"Process {os.getpid()}: Another process just started the discovery service, attempting to connect...")
-                # Clean up our failed binding attempts
-                if hasattr(self, 'pub_socket'):
-                    self.pub_socket.close()
-                if hasattr(self, 'rep_socket'):
-                    self.rep_socket.close()
-                
-                # Give the other process a moment to fully initialize
-                sleep(0.1)
-                
-                # Try to connect again
-                if self._connect_to_discovery():
-                    self._logger.debug(f"Process {os.getpid()}: Successfully connected to existing service")
-                    return
-                else:
-                    raise RuntimeError("Failed to connect to existing service after bind failure")
-            else:
-                self._logger.debug(f"Process {os.getpid()}: Failed to start discovery service: {e}")
-                self.cleanup()
-                raise
+    def _session_discovery(self):
 
-    def _run_discovery_service(self):
-
-        self._logger.debug(f"Started discovery service on ports {self.network.session_discovery_port}, {self.network.session_query_port}")
-
-        poller = zmq.Poller()
-        poller.register(self.rep_socket, zmq.POLLIN)
-
-        self._logger.debug(f"Running discovery service, ether_id: {self.ether_id}, metadata: {self.metadata}")
-        while self.running:
+        # Attempt to host session
+        if self._config.allow_host:
+            self._logger.debug("Starting session discovery process...")
             try:
-                # Announce metadata
-                self._logger.debug(f"Broadcasting session announcement with metadata: {self.metadata}")
-                self.pub_socket.send_json({
-                    "type": "announcement",
-                    "data": self.metadata
-                })
+                self._ether_discovery_process = Process(
+                    target=session_discovery_launcher, 
+                    kwargs={"ether_id": self._ether_id, "session_config": self._config}
+                )
+                self._ether_discovery_process.start()
+                self._logger.info("Session discovery process started")
+                time.sleep(1.0)
+            except Exception as e:
+                self._logger.error(f"Failed to start session discovery process: {e}", exc_info=True)
+                raise
+        
+        # If not allow_host, we still want to retry if first discovery fails
+        # If we are host, confirm that discvoery is running
+        session_metadata = None
+        retries = 5 
+        while retries > 0 and not session_metadata:
+            try:
+                session_metadata = self.get_current_session(session_config=self._config)
+                assert session_metadata
 
-                # Handle queries
-                events = dict(poller.poll(1000))
-                if self.rep_socket in events:
-                    self._logger.debug("Received query request")
-                    msg = self.rep_socket.recv_json()
-                    if msg.get("type") == "query":
-                        self._logger.debug(f"Sending response with metadata: {self.metadata}")
-                        self.rep_socket.send_json({
-                            "type": "response",
-                            "data": self.metadata
-                        })
-                    else:
-                        self._logger.warning(f"Received unknown message type: {msg}")
-                else:
-                    self._logger.debug("No query requests received in this cycle")
+                self._logger.debug(f"Existing session metadata: {session_metadata}")
 
             except Exception as e:
-                self._logger.error(f"Error in discovery service: {e}", exc_info=True)
-                break
+                
+                retries -= 1
+                if retries > 0:
+                    time.sleep(1.0)
+                    continue
+                else:
+                    self._logger.error(f"Failed to connect to session discovery process: {e}", exc_info=True)
+                    raise e
+                
+        if session_metadata['ether_id'] == self._ether_id:
+            self._is_host = True
+            self._launch_ether_host_services()
 
-        self._logger.debug("Discovery service loop ended")
-        self.running = False  # Update our own record
+    def _launch_ether_host_services(self):
+        # Start Redis
+        self._logger.debug("Starting Redis server...")
+        try:
+            if not self._ensure_redis_running():
+                raise RuntimeError("Redis server failed to start")
+        except Exception as e:
+            self._logger.error(f"Redis startup failed: {e}", exc_info=True)
+            raise
+        
+        # Start Messaging
+        self._logger.debug("Starting PubSub proxy...")
+        try:
+            if not self._ensure_pubsub_running():
+                raise RuntimeError("PubSub proxy failed to start")
+        except Exception as e:
+            self._logger.error(f"PubSub startup failed: {e}", exc_info=True)
+            raise
+        
+        # Start ReqRep broker
+        self._logger.debug("Starting ReqRep broker...")
+        try:
+            if not self._ensure_reqrep_running():
+                raise RuntimeError("ReqRep broker failed to start")
+        except Exception as e:
+            self._logger.error(f"ReqRep broker startup failed: {e}", exc_info=True)
+            raise
+
+    def _ensure_redis_running(self) -> bool:
+        """Ensure Redis server is running, start if not"""
+        
+        self._start_redis_server()
+        return self._test_redis_connection()
+    
+    def _ensure_pubsub_running(self) -> bool:
+        """Ensure PubSub proxy is running"""
+        
+        if self._pubsub_process is None:
+            self._pubsub_process = Process(
+                target=_run_pubsub,
+                args=(self._config.pubsub_frontend_port, self._config.pubsub_backend_port)
+            )
+            self._pubsub_process.daemon = True
+            self._pubsub_process.start()
+
+        return self._test_pubsub_connection()
+    
+    def _ensure_reqrep_running(self) -> bool:
+        """Ensure ReqRep broker is running"""
+        if self._reqrep_broker_process is None:
+            self._reqrep_broker_process = Process(
+                target=_run_reqrep_broker,
+                args=(self._config.reqrep_frontend_port, self._config.reqrep_backend_port)
+            )
+            self._reqrep_broker_process.daemon = True
+            self._reqrep_broker_process.start()
+        return self._test_reqrep_connection()
+
+    def _test_reqrep_connection(self) -> bool:
+        """Test ReqRep broker connection"""
+        context = zmq.Context()
+        socket = context.socket(zmq.REQ)
+        max_attempts = 10
+        for _ in range(max_attempts):
+            try:
+                socket.connect(f"tcp://{self._config.host}:{self._config.reqrep_frontend_port}")
+                socket.send_multipart([
+                    MDPC_CLIENT,
+                    "ping".encode(),
+                    "ping".encode(),
+                ])
+                socket.RCVTIMEO = 1000  # 1 second timeout
+                response = socket.recv_multipart()
+                if response[2].decode() == "pong":
+                    return True
+            except zmq.error.ZMQError:
+                self._logger.debug(f"ReqRep broker not ready, waiting")
+                time.sleep(0.1)
+            finally:
+                socket.close()
+                context.term()
+        return False
+    
+    def _test_redis_connection(self) -> bool:
+        """Test Redis connection"""
+        max_attempts = 10
+        for _ in range(max_attempts):
+            try:
+                r = redis.Redis(port=self._config.redis_port)
+                r.ping()
+                r.close()
+                return True
+            except Exception as e:
+                time.sleep(0.1)
+
+        return False
+                
+        
+    def _test_pubsub_connection(self) -> bool:
+        context = zmq.Context()
+        socket = context.socket(zmq.SUB)
+        max_attempts = 10
+        for _ in range(max_attempts):  
+            try:
+                socket.connect(f"tcp://{self._config.host}:{self._config.pubsub_frontend_port}")
+                return True
+            except zmq.error.ZMQError:
+                time.sleep(0.1)
+            finally:
+                socket.close()
+                context.term()
+        return False
+    
+    def _start_redis_server(self):
+        """Start Redis server process"""
+        if self._redis_process is not None:
+            self._logger.debug("Redis server already running, skipping start")
+            return
+        
+        self._logger.debug("Starting Redis server")
+        self._redis_pidfile = Path(tempfile.gettempdir()) / 'ether_redis.pid'
+        self._redis_process = subprocess.Popen(
+            [
+                'redis-server',
+                '--port', str(self._config.redis_port),
+                '--bind', self._config.redis_host,
+                '--dir', tempfile.gettempdir(),  # Use temp dir for dump.rdb
+                '--save', "", 
+                '--appendonly', 'no',
+                '--protected-mode', 'no'
+            ],
+        )
+
+    def shutdown(self):
+        if not self._is_host:
+            self._logger.debug(f"Session is not host, skipping shutdown")
+        elif self._started:
+            self._logger.debug(f"Shutting down Ether Session host")
+            
+            try:
+
+                # stop session discovery process
+                if self._ether_discovery_process:
+                    self._logger.debug("Stopping session discovery process...")
+                    self._ether_discovery_process.terminate()
+                    self._ether_discovery_process.join(timeout=2)
+                    self._ether_discovery_process = None
+
+                
+
+                # Terminate pubsub proxy process
+                if self._pubsub_process:
+                    self._logger.debug("Shutting down PubSub proxy")
+                    self._pubsub_process.terminate()  # This will trigger SIGTERM
+                    self._pubsub_process.join(timeout=2)
+                    if self._pubsub_process.is_alive():
+                        self._logger.warning("PubSub proxy didn't stop gracefully, killing")
+                        self._pubsub_process.kill()
+                        self._pubsub_process.join(timeout=1)
+                    self._pubsub_process = None
+                    
+                # Terminate ReqRep broker process
+                if self._reqrep_broker_process:
+                    self._logger.debug("Shutting down ReqRep broker")
+                    self._reqrep_broker_process.terminate()
+                    self._reqrep_broker_process.join(timeout=2)
+                    if self._reqrep_broker_process.is_alive():
+                        self._logger.warning("ReqRep broker didn't stop gracefully, killing")
+                        self._reqrep_broker_process.kill()
+                        self._reqrep_broker_process.join(timeout=1)
+                    self._reqrep_broker_process = None
+                    
+                # Terminate instance monitoring process
+                if self._monitor_process:
+                    self._logger.debug("Shutting down monitor")
+                    self._monitor_process.terminate()
+                    self._monitor_process.join(timeout=2)
+                    if self._monitor_process.is_alive():
+                        self._monitor_process.kill()
+                        self._monitor_process.join(timeout=1)
+                    self._monitor_process = None
+                    
+                # Terminate Redis server
+                try:
+                    if self._redis_process:
+                        self._logger.debug("Shutting down Redis server")
+                        try:
+                            if self._redis_process.poll() is None:
+
+                                self._redis_process.terminate()
+                                self._redis_process.wait(timeout=5)
+                                if self._redis_process.poll() is None:
+                                    self._redis_process.kill()
+                                    self._redis_process.wait(timeout=1)
+                        except Exception as e:
+                            self._logger.warning(f"Error terminating Redis process: {e}")
+                        finally:
+                            self._redis_process = None
+                            
+                        if hasattr(self, '_redis_pidfile') and self._redis_pidfile.exists():
+                            self._redis_pidfile.unlink()
+                except Exception as e:
+                    self._logger.error(f"Error cleaning up Redis: {e}")
+                    
+                # self._ether_session_process.terminate()
+                self._started = False
+                self._logger.info("Ether Session shutdown complete")
+            
+            except Exception as e:
+                self._logger.error(f"Error during shutdown: {e}")
+
+    # def _disconnect_req_service(self, service_name: str) -> dict:
+    #     """Disconnect a request-reply service using MDP protocol"""
+    #     self._logger.debug(f"Disconnecting service: {service_name}")
+        
+    #     if not self._started:
+    #         self._logger.warning("Cannot disconnect: Ether system not started")
+    #         return {"status": "error", "error": "Ether system not started"}
+        
+    #     if self._request_socket is None:
+    #         self._logger.warning("Cannot disconnect: No request socket")
+    #         return {"status": "error", "error": "No request socket"}
+        
+    #     # Set shorter timeout for disconnect
+    #     original_timeout = self._request_socket.getsockopt(zmq.RCVTIMEO)
+    #     self._request_socket.setsockopt(zmq.RCVTIMEO, 1000)  # 1 second timeout
+        
+    #     try:
+    #         # Send disconnect command through client protocol
+    #         self._request_socket.send_multipart([
+    #             MDPC_CLIENT,
+    #             service_name.encode(),
+    #             W_DISCONNECT  # Use command directly as request data
+    #         ])
+    #         self._logger.debug("Disconnect command sent")
+            
+    #         # Wait for acknowledgment with retries
+    #         retries = 3
+    #         while retries > 0:
+    #             try:
+    #                 msg = self._request_socket.recv_multipart()
+    #                 reply = json.loads(msg[REPLY_MSG_DATA_INDEX].decode())
+    #                 self._logger.debug(f"Received disconnect reply: {reply}")
+    #                 return reply
+    #             except zmq.error.Again:
+    #                 retries -= 1
+    #                 if retries > 0:
+    #                     self._logger.debug(f"Retrying disconnect response, {retries} attempts left")
+    #                     time.sleep(0.1)
+    #                 else:
+    #                     return {
+    #                         "status": "success",
+    #                         "result": {"status": "disconnected", "note": "No acknowledgment received"}
+    #                     }
+    #     except Exception as e:
+    #         self._logger.error(f"Error disconnecting service: {e}")
+    #         return {
+    #             "status": "error",
+    #             "error": f"Disconnect failed: {str(e)}"
+    #         }
+    #     finally:
+    #         # Restore original timeout
+    #         self._request_socket.setsockopt(zmq.RCVTIMEO, original_timeout)
+        
+        
 
     @classmethod
-    def get_current_session(cls, timeout: int = 200, network_config: Optional[EtherNetworkConfig] = None) -> Optional[Dict[str, Any]]:  # reduced timeout
+    def get_current_session(cls, timeout: int = 200, session_config: Optional[EtherSessionConfig] = None) -> Optional[Dict[str, Any]]:  # reduced timeout
         # print(f"Process {os.getpid()}: Attempting to get current session...")
         context = zmq.Context()
         req_socket = context.socket(zmq.REQ)
 
-        # Use provided network config or defaults
-        network = network_config or EtherNetworkConfig()
+        # Use provided session config or defaults
+        session_config = session_config or EtherSessionConfig()
         
         try:
             req_socket.setsockopt(zmq.LINGER, 0)  # Don't wait on close
-            req_socket.connect(f"tcp://{network.host}:{network.session_query_port}")
+            req_socket.connect(f"tcp://{session_config.host}:{session_config.session_query_port}")
             # print(f"Process {os.getpid()}: Connected to query port")
             
             req_socket.send_json({"type": "query"})
@@ -164,114 +401,3 @@ class EtherSession:
             req_socket.close()
             context.term()
 
-    def _connect_to_discovery(self) -> bool:
-        """Connect to an existing discovery service"""
-        try:
-            # Create subscriber socket
-            self.sub_socket = self.context.socket(zmq.SUB)
-            # Should use network.host here
-            self.sub_socket.connect(f"tcp://{self.network.host}:{self.network.session_discovery_port}")
-            self.sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
-            
-            # Create request socket
-            self.req_socket = self.context.socket(zmq.REQ)
-            # And here
-            self.req_socket.connect(f"tcp://{self.network.host}:{self.network.session_query_port}")
-            
-            poller = zmq.Poller()
-            poller.register(self.sub_socket, zmq.POLLIN)
-            
-            # print(f"Process {os.getpid()}: Checking for announcements...")
-            events = dict(poller.poll(200))  # reduced timeout
-            if self.sub_socket in events:
-                # print(f"Process {os.getpid()}: Found existing service via SUB")
-                return True
-
-            # print(f"Process {os.getpid()}: Trying direct query...")
-            self.req_socket.send_json({"type": "query"})
-            poller = zmq.Poller()
-            poller.register(self.req_socket, zmq.POLLIN)
-            events = dict(poller.poll(200))  # reduced timeout
-            if self.req_socket in events:
-                # print(f"Process {os.getpid()}: Found existing service via REQ")
-                return True
-
-            self._logger.debug(f"Process {os.getpid()}: No existing service found")
-            return False
-
-        except Exception as e:
-            # print(f"Process {os.getpid()}: Error in connect_to_discovery: {e}")
-            return False
-        finally:
-            self.sub_socket.close()
-            self.req_socket.close()
-
-    def cleanup(self):
-        
-        # if hasattr(self, 'service_thread') and self.service_thread.is_alive():
-        #     self.service_thread.join(timeout=1.0)
-        if hasattr(self, 'pub_socket'):
-            self.pub_socket.close()
-        if hasattr(self, 'rep_socket'):
-            self.rep_socket.close()
-        if hasattr(self, 'context'):
-            self.context.term()
-        self.running = False
-
-def session_discovery_launcher(ether_id: str, network_config: Optional[EtherNetworkConfig] = None, retries: int = 5):
-    """Launch an Ether session process
-    
-    Args:
-        process_id: ID for the process/session
-        network_config: Optional network configuration
-    """
-    try:
-        # First try to find existing session
-        # print(f"Process {process_id}: Checking for existing session...")
-        while retries > 0:
-            current_session = EtherSession.get_current_session(timeout=200, network_config=network_config)
-            if current_session is not None:
-                break
-            retries -= 1
-            time.sleep(0.5)
-        
-        if current_session is None:
-            # print(f"Process {process_id}: No session found, attempting to create new one...")
-            try:
-                session_mgr = EtherSession(
-                    ether_id=ether_id,
-                    network_config=network_config
-                )
-                while True:
-                    time.sleep(1.0)
-            except zmq.ZMQError as e:
-                if e.errno == errno.EADDRINUSE:
-                    # Someone else created it just before us, try to get their session
-                    # print(f"Process {process_id}: Another process created session first, connecting...")
-                    current_session = EtherSession.get_current_session(timeout=200)
-                else:
-                    raise
-        else:
-            # print(f"Process {process_id}: Found existing session {current_session['session_id']}")
-            pass
-            
-    except Exception as e:
-        # print(f"Process {process_id}: Error: {e}")
-        pass
-    finally:
-        # print(f"Process {process_id}: Shutting down")
-        pass
-
-# def main():
-#     processes = []
-#     for i in range(4):
-#         p = multiprocessing.Process(target=session_discovery_launcher, args=(i,))
-#         processes.append(p)
-#         p.start()
-#         time.sleep(0.1)  # Small delay between launches
-
-#     for p in processes:
-#         p.join()
-
-# if __name__ == "__main__":
-#     main()

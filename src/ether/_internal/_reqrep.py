@@ -16,16 +16,17 @@ W_REPLY = b"\x03"      # Worker reply
 W_HEARTBEAT = b"\x04"  # Worker heartbeat
 W_DISCONNECT = b"\x05" # Worker disconnect
 
+# req message frame indices
+REQUEST_MSG_WORKER_INDEX = 1
+REQUEST_MSG_COMMAND_INDEX = 2
+REQUEST_MSG_CLIENT_ID_INDEX = 3
+REQUEST_MSG_SERVICE_INDEX = 4
+REQUEST_MSG_DATA_INDEX = 5
 
-REQUEST_WORKER_INDEX = 1
-REQUEST_COMMAND_INDEX = 2
-REQUEST_CLIENT_ID_INDEX = 3
-REQUEST_SERVICE_INDEX = 4
-REQUEST_DATA_INDEX = 5
-
-REPLY_CLIENT_INDEX = 1
-REPLY_SERVICE_INDEX = 2
-REPLY_DATA_INDEX = 3
+# reply message frame indices
+REPLY_MSG_CLIENT_INDEX = 1
+REPLY_MSG_SERVICE_INDEX = 2
+REPLY_MSG_DATA_INDEX = 3
 
 class Service:
     """Represents a service and its associated workers"""
@@ -86,9 +87,18 @@ class EtherReqRepBroker:
         assert msg[0] == MDPC_CLIENT  # Verify client protocol
         service_name = msg[1].decode()  # Service name comes after protocol
         request = msg[2]  # Request data is third frame
+
         
         self._logger.debug(f"Processing client message: protocol={msg[0]}, service={service_name}, request={request}")
         
+        if "ping" in service_name:
+            self._logger.debug(f"Received ping request, sending pong")
+            self.frontend.send_multipart([
+                MDPC_CLIENT,
+                "pong".encode(),
+                "pong".encode()
+            ])
+            return
         # Handle disconnect command
         if W_DISCONNECT in request:
             self._logger.info(f"Processing disconnect request for service: {service_name}")
@@ -296,15 +306,13 @@ class EtherReqRepBroker:
                 events = dict(self.poller.poll(self.HEARTBEAT_INTERVAL))
                 
                 if self.frontend in events:
-                    self._logger.debug(f"Frontend in events: {self.frontend}")
                     msg = self.frontend.recv_multipart()
-                    self._logger.debug(f"Frontend resply msg: {msg}")
+                    self._logger.debug(f"Request msg received: {msg}")
                     self._process_client(msg)
                     
                 if self.backend in events:
-                    self._logger.debug(f"Backend in events: {self.backend}")
                     msg = self.backend.recv_multipart()
-                    self._logger.debug(f"Backend reply msg: {msg}")
+                    self._logger.debug(f"Reply msg received: {msg}")
                     self._process_worker(msg[0], msg[1], msg[2:])
                 
                 self._purge_workers()
@@ -324,3 +332,14 @@ class EtherReqRepBroker:
             self.backend.close()
         if hasattr(self, 'context'):
             self.context.term() 
+
+
+def _run_reqrep_broker(frontend_port: int = 13313, backend_port: int = 13314):
+    """Run the request-reply broker in a separate process"""
+    broker = EtherReqRepBroker(frontend_port=frontend_port, backend_port=backend_port)
+    try:
+        broker.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        broker.cleanup()

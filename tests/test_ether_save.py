@@ -1,7 +1,8 @@
 from typing import List
 from ether import ether
-from ether._internal._config import EtherConfig, EtherInstanceConfig
+from ether.config import EtherInstanceConfig
 from ether import ether_save, ether_get
+from ether.config import EtherConfig
 from ether.utils import get_ether_logger
 
 class DataService:

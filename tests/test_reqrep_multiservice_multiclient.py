@@ -10,13 +10,13 @@ from ether._internal._reqrep import (
     W_READY,
     W_REQUEST, 
     W_REPLY,
-    REQUEST_WORKER_INDEX,
-    REQUEST_COMMAND_INDEX,
-    REQUEST_CLIENT_ID_INDEX,
-    REQUEST_DATA_INDEX,
-    REPLY_CLIENT_INDEX,
-    REPLY_SERVICE_INDEX,
-    REPLY_DATA_INDEX,
+    REQUEST_MSG_WORKER_INDEX,
+    REQUEST_MSG_COMMAND_INDEX,
+    REQUEST_MSG_CLIENT_ID_INDEX,
+    REQUEST_MSG_DATA_INDEX,
+    REPLY_MSG_CLIENT_INDEX,
+    REPLY_MSG_SERVICE_INDEX,
+    REPLY_MSG_DATA_INDEX,
     W_HEARTBEAT
 )
 from ether.utils import get_ether_logger
@@ -46,12 +46,12 @@ def run_worker(service_name):
                 msg = socket.recv_multipart()
                 logger.debug(f"Received request: {msg}")
                 
-                assert msg[REQUEST_WORKER_INDEX] == MDPW_WORKER
-                command = msg[REQUEST_COMMAND_INDEX]
+                assert msg[REQUEST_MSG_WORKER_INDEX] == MDPW_WORKER
+                command = msg[REQUEST_MSG_COMMAND_INDEX]
                 
                 if command == W_REQUEST:
-                    client_id = msg[REQUEST_CLIENT_ID_INDEX]
-                    request = json.loads(msg[REQUEST_DATA_INDEX].decode())
+                    client_id = msg[REQUEST_MSG_CLIENT_ID_INDEX]
+                    request = json.loads(msg[REQUEST_MSG_DATA_INDEX].decode())
                     logger.debug(f"Decoded request: {request}")
                     
                     # Send reply with request details and service name
@@ -120,9 +120,9 @@ def run_client(client_id, services):
                     msg = socket.recv_multipart()
                     logger.debug(f"Received reply: {msg}")
                     
-                    assert msg[REPLY_CLIENT_INDEX] == MDPC_CLIENT
-                    assert msg[REPLY_SERVICE_INDEX] == service_name
-                    reply = json.loads(msg[REPLY_DATA_INDEX].decode())
+                    assert msg[REPLY_MSG_CLIENT_INDEX] == MDPC_CLIENT
+                    assert msg[REPLY_MSG_SERVICE_INDEX] == service_name
+                    reply = json.loads(msg[REPLY_MSG_DATA_INDEX].decode())
                     
                     # Verify reply matches our request
                     assert reply["result"] == "success"

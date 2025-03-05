@@ -6,7 +6,6 @@ from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 from pydantic import BaseModel
 from ether import ether, ether_pub, ether_sub, ether_save
-from ether.liaison import EtherInstanceLiaison
 from ether.utils import get_ether_logger
 from pprint import pprint
 
@@ -53,10 +52,9 @@ class DataVerificationSubscriber:
     """Subscriber that verifies received message data"""
     def __init__(self):
         self.received_data = ReceivedData()
-        self.liaison = EtherInstanceLiaison()
 
     def _update_received_data(self):
-        self.liaison.update_instance_data(
+        ether._ether._instance_manager.update_instance_data(
             f"{self.name}-{self.id}", 
             {"received_data": self.received_data.model_dump()}
         )
@@ -134,8 +132,7 @@ def test_message_data():
         time.sleep(2.0)
         
         # Get subscriber instance and verify data
-        liaison = EtherInstanceLiaison()
-        instances = liaison.get_active_instances()
+        instances = ether.get_active_instances()
 
         subscriber_found = False
         for instance_info in instances.values():

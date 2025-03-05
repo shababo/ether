@@ -2,10 +2,10 @@ import pytest
 import time
 from typing import List, Optional
 from ether import ether
-from ether._internal._config import EtherConfig, EtherInstanceConfig
+from ether.config import EtherInstanceConfig
 from ether import ether_get, ether_save
+from ether.config import EtherConfig
 from ether.utils import get_ether_logger
-from ether.liaison import EtherInstanceLiaison
 
 class FlowControlService:
     def __init__(self):

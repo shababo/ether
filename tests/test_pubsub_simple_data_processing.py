@@ -3,7 +3,6 @@ import gc
 
 from ether import ether
 from examples.simple_data_processing import DataGenerator, DataProcessor, DataCollector
-from ether.liaison import EtherInstanceLiaison
 
 def test_instance_tracking():
     """Run instance tracking test in a separate process"""
@@ -19,8 +18,7 @@ def test_instance_tracking():
         collector = DataCollector()
         
         # Check that instances are registered
-        tracker = EtherInstanceLiaison()
-        instances = tracker.get_active_instances()
+        instances = ether.get_active_instances()
         assert len(instances) == 3
         
         # Verify instance metadata
@@ -54,7 +52,7 @@ def test_instance_tracking():
         time.sleep(1.0)  # Allow time for cleanup
         
         # Verify instances are deregistered
-        instances = tracker.get_active_instances()
+        instances = ether.get_active_instances()
         assert len(instances) == 0
     finally:
         ether.shutdown()
@@ -68,16 +66,15 @@ def test_instance_ttl():
     generator = DataGenerator(process_id=1)
     
     # Verify registration
-    tracker = EtherInstanceLiaison()
-    instances = tracker.get_active_instances()
+    instances = ether.get_active_instances()
     assert len(instances) == 1
     
     # Wait for TTL to expire (use short TTL for testing)
-    tracker.ttl = 2  # Set short TTL for testing
+    ether._ether._instance_manager.ttl = 2  # Set short TTL for testing
     time.sleep(3)  # Wait longer than TTL
     
     # Verify instance is expired
-    instances = tracker.get_active_instances()
+    instances = ether.get_active_instances()
     assert len(instances) == 0
 
 

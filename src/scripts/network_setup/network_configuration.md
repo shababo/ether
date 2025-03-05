@@ -20,7 +20,7 @@ Ether requires the following TCP ports for communication. Default ports are:
 
 For example, you could use different ports:
 ```python
-network_config = EtherNetworkConfig(
+session_config = EtherNetworkConfig(
     host="your.server.ip",
     pubsub_frontend_port=6555,  # Custom port
     pubsub_backend_port=6556,   # Custom port
@@ -33,8 +33,8 @@ network_config = EtherNetworkConfig(
 Just ensure that both server and clients use the same configuration:
 ```python
 # Server and all clients must use matching configuration
-server_config = EtherConfig(network=network_config)
-client_config = EtherConfig(network=network_config)
+server_config = EtherConfig(network=session_config)
+client_config = EtherConfig(network=session_config)
 
 ## Local Development
 For local development, no special configuration is needed. Ether will automatically use localhost (127.0.0.1) for all connections.
@@ -62,7 +62,7 @@ To allow remote connections to an Ether server:
    from ether._internal._config import EtherConfig, EtherNetworkConfig
 
    # Configure server with public IP
-   network_config = EtherNetworkConfig(
+   session_config = EtherNetworkConfig(
        host="your.public.ip",  # Server's public IP
       #  pubsub_frontend_port=13311,
       #  pubsub_backend_port=13312,
@@ -71,14 +71,14 @@ To allow remote connections to an Ether server:
       #  redis_port=13315
    )
 
-   config = EtherConfig(network=network_config)
+   config = EtherConfig(network=session_config)
    ether.tap(config=config)
    ```
 
 4. **Client Configuration**
    ```python
    # Configure client to connect to server
-   network_config = EtherNetworkConfig(
+   session_config = EtherNetworkConfig(
        host="server.public.ip",  # Server's public IP
        # ... same port configuration as server
    )

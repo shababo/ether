@@ -1,6 +1,7 @@
 from ether import ether
-from ether._internal._config import EtherConfig, EtherInstanceConfig, EtherNetworkConfig
+from ether._internal._config import _EtherInstanceConfig
 from ether import ether_save, ether_get, ether_start
+from ether.config import EtherConfig, EtherSessionConfig
 from ether.utils import get_ether_logger, get_ip_address
 import socket
 import requests
@@ -43,14 +44,14 @@ def run_server(host: str = None):
     ip = get_ip_address(use_public=True)
     logger.info(f"Server IP address: {ip}")
     
-    network_config = EtherNetworkConfig(
+    session_config = EtherSessionConfig(
         host=ip,  # Use public/local IP
     )
     
     config = EtherConfig(
-        network=network_config,
+        session=session_config,
         instances={
-            "network_test": EtherInstanceConfig(
+            "network_test": _EtherInstanceConfig(
                 class_path="tests.test_ether_network_server.NetworkTestService",
                 kwargs={"ether_name": "network_test_data_service"}
             )

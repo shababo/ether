@@ -1,4 +1,4 @@
-from ether._internal._config import EtherConfig
+from ether.config import EtherConfig
 
 def test_registry_config_parsing():
     """Test parsing of registry configuration"""

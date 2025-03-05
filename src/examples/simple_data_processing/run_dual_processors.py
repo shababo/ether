@@ -57,7 +57,6 @@ def main(config_name):
         # use ether's start method to publish to the "start" topic
         # this will call any method decorated with @ether_start
     ether.start()
-    time.sleep(1.0)
 
     # ether.shutdown()
 
@@ -75,11 +74,9 @@ def main(config_name):
     collector.collect_result(**processed4x_result)
     collector.summarize()
 
-    time.sleep(1.0)
-
     ether.shutdown()
 
-    time.sleep(1.0)
+    time.sleep(2.0)
     # you can still use your code normally when ether is not running
     # in other words, if your code is still used other places, it will still work
     print("Starting normal code execution at", time.strftime("%Y-%m-%d %H:%M:%S"))

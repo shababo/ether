@@ -9,7 +9,7 @@ import uuid
 from .decorators import ether_pub, ether_sub, ether_init, ether_save, ether_cleanup, ether_start, ether_get, ether_save_all, ether_shutdown
 from .utils import get_ether_logger
 from ._internal._ether import _ether
-from ._internal._config import EtherConfig
+from .config import EtherConfig
 
 
 def _pub(data: Union[Dict, BaseModel] = None, topic: str = None):
@@ -38,25 +38,11 @@ def _request(service_class: str, method_name: str, params=None, request_type="ge
 
 # Public singleton instance of Ether API
 class Ether:
-
-    # ether public API
-    # just some sugar to make the UX better and to codify common actions into topics
-    pub = staticmethod(_pub)
-    request = staticmethod(_request)
-    get = staticmethod(functools.partial(_request, request_type="get"))
-    save = staticmethod(functools.partial(_request, request_type="save"))
-    save_all = staticmethod(functools.partial(_pub, {}, topic="Ether.save_all"))
-    start = staticmethod(functools.partial(_pub, {}, topic="Ether.start"))
-    cleanup = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
-    shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
-    pause = staticmethod(functools.partial(_pub, {}, topic="Ether.pause"))
-    resume = staticmethod(functools.partial(_pub, {}, topic="Ether.resume"))
-    get_session_metadata = _ether.get_session_metadata
-    
     _initialized = False
     _instance = None
-    _ether_id = str(uuid.uuid4())
     _within_process_instances = []
+    _ether = _ether # TODO: this temporary until we come back to revise public Ether API
+    
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Ether, cls).__new__(cls)
@@ -72,7 +58,7 @@ class Ether:
             
         if not self._initialized:
             # Start ether
-            _ether.start(ether_id=self._ether_id, config=config, restart=restart, allow_host=allow_host, ether_run=ether_run)
+            _ether.start(config=config, allow_host=allow_host, ether_run=ether_run)
         
             # Mark as initialized
             self._initialized = True
@@ -82,6 +68,31 @@ class Ether:
 
         time.sleep(1.1)
 
+    # ether public API
+    # just some sugar to make the UX better and to codify common actions into topics
+    pub = staticmethod(_pub)
+    request = staticmethod(_request)
+    get = staticmethod(functools.partial(_request, request_type="get"))
+    save = staticmethod(functools.partial(_request, request_type="save"))
+    save_all = staticmethod(functools.partial(_pub, {}, topic="Ether.save_all"))
+    start = staticmethod(functools.partial(_pub, {}, topic="Ether.start"))
+    cleanup = staticmethod(functools.partial(_pub, {}, topic="Ether.cleanup"))
+    shutdown = staticmethod(functools.partial(_pub, {}, topic="Ether.shutdown"))
+    pause = staticmethod(functools.partial(_pub, {}, topic="Ether.pause"))
+    resume = staticmethod(functools.partial(_pub, {}, topic="Ether.resume"))
+    
+    @property
+    def session_info(self):
+        return _ether.session_info
+    
+    def launch_instances(self, instances: dict):
+        """Launch an instance from a config dictionary"""
+        _ether._launch_instances(instances)
+
+    def get_active_instances(self):
+        """Get all currently active instances"""
+        return _ether._instance_manager.get_active_instances()
+    
     def shutdown(self):
         self.cleanup()
         for instance in self._within_process_instances:
@@ -92,6 +103,10 @@ class Ether:
         time.sleep(2.0)
         _ether.shutdown()
         self._initialized = False
+
+    @property
+    def ether_id(self):
+        return _ether._ether_id
  
 
 ## Export public interface
