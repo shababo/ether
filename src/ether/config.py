@@ -14,6 +14,9 @@ class EtherMethodConfig(BaseModel):
     """Configuration for a method's decorators"""
     ether_pub: Optional[EtherDecoratorConfig] = None
     ether_sub: Optional[EtherDecoratorConfig] = None
+    ether_save: Optional[EtherDecoratorConfig] = None
+    ether_get: Optional[EtherDecoratorConfig] = None
+    ether_start: Optional[EtherDecoratorConfig] = None
 
 
 class EtherSecurityLevel(Enum):

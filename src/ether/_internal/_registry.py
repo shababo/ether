@@ -88,6 +88,27 @@ class EtherRegistry:
                         kwargs['topic'] = method_config.ether_sub.topic
                     decorated_method = ether_sub(**kwargs)(decorated_method)
                 
+                if method_config.ether_save:
+                    from ..decorators import ether_save
+                    kwargs = {}
+                    if method_config.ether_save.topic:
+                        kwargs['topic'] = method_config.ether_save.topic
+                    decorated_method = ether_save(**kwargs)(decorated_method)
+
+                if method_config.ether_get:
+                    from ..decorators import ether_get
+                    kwargs = {}
+                    if method_config.ether_get.topic:
+                        kwargs['topic'] = method_config.ether_get.topic
+                    decorated_method = ether_get(**kwargs)(decorated_method)
+
+                if method_config.ether_start:
+                    from ..decorators import ether_start
+                    kwargs = {}
+                    if method_config.ether_start.topic:
+                        kwargs['topic'] = method_config.ether_start.topic
+                    decorated_method = ether_start(**kwargs)(decorated_method)
+
                 
                 
                 # Replace the original method with the decorated version
@@ -140,6 +161,8 @@ def add_ether_functionality(cls):
                           if hasattr(m, '_pub_metadata')],
             'sub_topics': [m._sub_metadata.topic for m in self._ether_methods_info.values() 
                           if hasattr(m, '_sub_metadata')],
+            'reqrep_services': [m._reqrep_metadata.service_name for m in self._ether_methods_info.values() 
+                          if hasattr(m, '_reqrep_metadata')],
             'id': self.id,
             'ether_id': self.ether.ether_id,
             'session_id': session_metadata['session_id'],
@@ -189,7 +212,7 @@ def add_ether_functionality(cls):
         self._request_socket = None
         self._worker_metadata = {}
         
-        # Register get methods
+        # Register reqrep methods
         for method in self._ether_methods_info.values():
             if hasattr(method, '_reqrep_metadata'):
                 metadata = method._reqrep_metadata
@@ -208,20 +231,6 @@ def add_ether_functionality(cls):
 
         self._setup_pubsub()
         self._setup_reqrep()
-    
-        # Setup request socket with better connection management
-        # if self._request_socket:
-        #     self._zmq_context.destroy()
-        #     self._zmq_context = zmq.Context()
-        
-        # self._request_socket = self._zmq_context.socket(zmq.REQ)
-        # self._request_socket.linger = 0  # Don't wait for unsent messages on close
-        # self._request_socket.setsockopt(zmq.RCVTIMEO, 2500)  # 2.5 sec timeout
-        # self._request_socket.connect(f"tcp://{self.session_config.host}:{self.session_config.reqrep_frontend_port}")
-        
-        # # Add poller for request socket
-        # self._request_poller = zmq.Poller()
-        # self._request_poller.register(self._request_socket, zmq.POLLIN)
 
     def _setup_reqrep(self):
         """Set up the reqrep sockets"""
