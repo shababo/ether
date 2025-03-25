@@ -7,7 +7,9 @@
 Ether is an ultra-lightweight, Python framework for scientists and engineers to integrate the components of their lab.
 
 ### User perspective 
-A lot of software meant to support science asks a lot of users up front. This is a huge blocker for several reasons. First of all, scientists are already time-constrained. Second, not all users can on board new software, and potentially new computing concepts, rapidly enough. But most importantly, the process of science or engineering, very frequently, involves changing and re-combining components, testing and debugging, and making decisions on the fly. The core goal of Ether is to be useful even under those conditions while asking the least amount possible from the users. 
+It's not uncommon for scientific software to ask a lot of you up front - for example, to define "metadata" or learn new programming concepts. But maybe it'll sound familiar, that this ultimately becomes blocker and limits your long-term adoption of that software. And maybe you'll agree that part of the problem is that scientists are already time-constrained. And that not all scientists can onboard new computing concepts rapidly enough. But most importantly, you might agree that the process of science or engineering very frequently involves changing and re-combining components, testing and debugging, and making decisions on the fly. And that a realistic view of science is that it can be more exploration than recipe following. 
+
+The core goal of Ether is to be useful even when you don't know what exactly what you're going to do beforehand and to require the least amount of information and effort to integrate into your scientific processes. 
 
 #### Features
 
