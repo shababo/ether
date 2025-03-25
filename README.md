@@ -15,7 +15,7 @@ A lot of software meant to support science asks a lot of users up front. This is
 - Guarantees on data saving and provenance tracing
 - Configuration complexity scales with use case complexity
 - Quickly run common scientific computing patterns (e.g. data pipelines, automation/scheduling, trial-based experiments)
-- No need to learn about computing stuff you don't care about (e.g. schema, servers, async)
+- No need to learn about computing stuff you don't care about (e.g. schema, servers, async, inheritance)
 
 Ether achieves all of this via two core design choices: 
 1. As much as possible, Ether looks at your code for answers. The result is that Ether can dynamically structure logs and metadata when you run experiments! One way we like to put it is that "Ether doesn't ask what you are going to do, it tells you what you did."
