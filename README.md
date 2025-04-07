@@ -11,7 +11,7 @@ It's not uncommon for scientific software to ask a lot of users up front. For ex
 
 Part of the problem is that most scientists are already time-constrained and can't necessarily onboard new computing concepts rapidly. 
 
-But more importantly, these prescriptive approaches to organizing scientific processes don't match how science actually gets done. The process of science or engineering very frequently involves changing and re-combining components, testing and debugging, and making decisions on the fly. And that a realistic view of science is that it can be more exploration than recipe following. 
+But more importantly, these prescriptive approaches to organizing scientific processes don't match how science actually gets done. The process of science or engineering very frequently involves changing and re-combining components, testing and debugging, and making decisions on the fly.
 
 The core goal of Ether is to be useful even when you don't know what exactly what you're going to do beforehand and to require the least amount of information and effort to integrate into your scientific processes. 
 
