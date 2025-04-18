@@ -43,7 +43,7 @@ Ether's ability to intergrate your code without the need to change it (or at lea
 ### Developer perspective
 Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions. It achieves these goals by wrapping and introspecting the user's code and, in many cases, launching instances of user's classes in their own processes. When instances are run in their own processes, the result is that we've dynamically turned those classes into microservices. 
 
-At its foundation, Ether provides traceability/observability and both Pub-Sub and Request-Reply messaging patterns. It then builds on those using several layers of abstraction, the last of which is a lightweight, user-friendly API which wraps the common function calling patterns in science like triggering data pipelines, automating acquistion hardware into runs/experiments/trials, and storing and retrieving data.
+At its foundation, Ether provides traceability/observability and both Pub-Sub and Request-Reply messaging patterns. It then builds on those using several layers of abstraction, the last of which is a lightweight, user-friendly API which wraps the common scientific patterns like triggering data pipelines, automating acquistion hardware into runs/experiments/trials, and storing or retrieving data.
 
 ##### Features
 
