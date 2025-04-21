@@ -4,7 +4,7 @@
 
 ## What is Ether?
 
-Ether is a user-friendly Python framework for scientists and engineers to rapidly integrate the components of their lab.
+Ether is a user-friendly data acquisition and analysis framework for rapidly integrating and orchestrating hardware and computational processes.
 
 ### User perspective 
 It's not uncommon for scientific software to ask a lot of users up front. For example, to define "metadata" or "schema" or to learn new programming concepts. But these asks ultimately become blockers and limit the long-term adoption of these software packages. 
