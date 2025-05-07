@@ -311,7 +311,7 @@ ether.sync('prepare_trial')
 run_trial()
 ```
 
-### Using Ether with External Classes
+### Using Ether with External Classes (or without touching your code)
 
 You may want to use Ether with classes that you can't or don't want to modify directly. Ether provides a way to apply decorators through configuration instead of modifying source code.
 
