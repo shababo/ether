@@ -6,11 +6,8 @@
 
 Ether is a user-friendly and low overhead framework for integrating and orchestrating your Python processes. It is specificaly designed to support research and development, where systems are small to medium scale and users are frequently changing and re-combining components, testing and debugging, and making decisions on the fly.
 
-The core goals of Ether are to be useful even when you don't know what exactly what you're going to do beforehand and to . 
-
-The best way for a user to understand Ether is to look at use cases. Several use case demos are in the works, but for now here are examples of how you might use it.
-
 ### Example Use Cases
+Several demos are in the works, but for now here are some example use cases:
 - A computational biologist has code that operates lab equipment and runs analysis, and wants to integrate it into an automated data acquisition pipeline
 - An AI engineer wants to combine multiple machine learning models into a real-time processing pipeline
 - An operations engineer needs to add remote monitoring to existing industrial control systems
@@ -30,7 +27,7 @@ The best way for a user to understand Ether is to look at use cases. Several use
 
 Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions. It achieves these goals by wrapping and introspecting the user's code and, in many cases, launching instances of user's classes in their own processes. When instances are run in their own processes, the result is that we've dynamically turned the tagged methods of those classes into microservices. 
 
-At its foundation, Ether provides traceability/observability and both Pub-Sub and Request-Reply messaging patterns. It then builds on those using several layers of abstraction, the last of which is a lightweight, user-friendly API which wraps the common scientific patterns like triggering data pipelines, automating acquistion hardware into runs/experiments/trials, and storing or retrieving data.
+At its foundation, Ether provides traceability/observability and both Pub-Sub and Request-Reply messaging patterns. It then builds on those using several layers of abstraction, the last of which is a lightweight, user-friendly API which allows users to implement common scientific patterns like triggering data pipelines, automating acquistion hardware into runs/experiments/trials, and storing or retrieving data.
 
 #### Features
 
