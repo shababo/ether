@@ -194,7 +194,7 @@ DataCollector[PID 51475]: Summarizing results - mean: 12726.0, max: 16968, min: 
 
 ### Get and Save
 
-The pub/sub decorators used in the example above don't send messages back from subscribers to publishers. If we a message requires a reply, we can use Ether's get and save interface. Below is an example using get and save to implement a simpmle data service.
+The pub/sub decorators used in the example above don't send messages back from subscribers to publishers. If we require a reply, e.g. we want some data, we can use Ether's get and save functionality. Below is an example using get and save to implement a simple data service.
 
 ```python
 from typing import List
