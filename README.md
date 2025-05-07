@@ -59,13 +59,13 @@ This example shows how you can easily setup a simple data processing pipeline to
 
 ### Adding decorators
 
-The `ether.sub` decorator listens on a topic (defualt is `{class_name}.{method_name}`) and maps the incoming message to the method's arguments. The `ether.pub` decorator publishes the method's result to the given topic. We also use `ether.start` here which is just short for `ether.sub(topic="start")`.
+The `@ether_sub` decorator listens on a topic (defualt is `{class_name}.{method_name}`) and maps the incoming message to the method's arguments. The `@ether_pub` decorator publishes the method's result to the given topic. We also use `@ether_start()` here which is just short for `@ether_sub(topic="start")`. We can publish to the `start` topic using the call `ether.start()`.
 
 In `data_generator.py`:
 ```python
 class DataGenerator:
-    @ether_start() # run this method when ether.start() message is published
-    @ether_pub(topic="data") # publish the result to the data topic
+    @ether_start() 
+    @ether_pub(topic="data")
     def generate_data(self, data: int = 42) -> dict:
         print(f"DataGenerator[PID {os.getpid()}]: Generating data - {data}")
         return {"data": data}
