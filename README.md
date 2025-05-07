@@ -4,49 +4,41 @@
 
 ## What is Ether?
 
-Ether is a user-friendly data acquisition and analysis framework for rapidly integrating and orchestrating hardware and computational processes.
+Ether is a user-friendly and low overhead framework for integrating and orchestrating your Python processes. It is specificaly designed to support research and development, where systems are small to medium scale and users are frequently changing and re-combining components, testing and debugging, and making decisions on the fly.
 
-### User perspective 
-It's not uncommon for scientific software to ask a lot of users up front. For example, to define "metadata" or "schema" or to learn new programming concepts. But these asks ultimately become blockers and limit the long-term adoption of these software packages. 
+The core goals of Ether are to be useful even when you don't know what exactly what you're going to do beforehand and to . 
 
-Part of the problem is that most scientists are already time-constrained and can't necessarily onboard new software concepts rapidly. 
+The best way for a user to understand Ether is to look at use cases. Several use case demos are in the works, but for now here are examples of how you might use it.
 
-But more importantly, these prescriptive approaches to organizing scientific processes don't match how science actually gets done. The process of science or engineering very frequently involves changing and re-combining components, testing and debugging, and making decisions on the fly.
-
-The core goal of Ether is to be useful even when you don't know what exactly what you're going to do beforehand and to require the least amount of information and effort to integrate into your scientific processes. 
-
-#### Features
-
-- Integrate your code without changing it, across machines or even the Internet
-- Guarantees on data saving
-- Automatic logging and traceability
-- Configuration complexity scales with use case complexity
-- Quickly run common scientific computing patterns (e.g. data pipelines, automation/scheduling, trial-based experiments)
-- No need to learn about computing stuff you don't care about (e.g. schema, servers, async, inheritance)
-
-Ether achieves all of this via two core design choices: 
-1. As much as possible, Ether looks at your code for answers. The result is that Ether can dynamically structure logs and metadata when you run experiments! One way we like to put it is that "Ether doesn't ask what you are going to do, it tells you what you did."
-2. Ether abstracts all of the complicated stuff behind a simple interface based on semantics close to the user - not the developer.
-
-That said, the best way for a user to understand Ether is to look at use cases. Several use case demos are in the works, but for now here are examples of how you might use it.
-#### Example Use Cases
+### Example Use Cases
 - A computational biologist has code that operates lab equipment and runs analysis, and wants to integrate it into an automated data acquisition pipeline
 - An AI engineer wants to combine multiple machine learning models into a real-time processing pipeline
 - An operations engineer needs to add remote monitoring to existing industrial control systems
 - A neuroscientist wants to run a Gymnasium environment in a behavioral set up while recording physiology
 
-#### Modularity and the Community Hub
+### Features
 
-Ether's ability to intergrate your code without the need to change it (or at least make any reference to Ether itself in the code) enables two important features.
-1. It becomes extremely easy to swap out steps of a data processing pipeline or hardware components.
-2. It also becomes easy to share code across projects and organizations. If someone writes code to do some processing or control a piece of hardware, Ether allows other users to integrate that code. This works best when each users write small Python classes that take care of small parts of the system.
+- Integrate your code with minimal or no changes to your code itself
+- Automatic session discovery across machines or the Internet
+- Guarantees on data saving and provenance
+- Automatic logging and traceability
+- Configuration complexity scales with use case complexity
+- Quickly run common scientific computing patterns (e.g. data pipelines, automation/scheduling, trial-based experiments)
+- No need to learn about computing stuff you don't care about (e.g. schema, servers, async, inheritance)
 
-### Developer perspective
-Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions. It achieves these goals by wrapping and introspecting the user's code and, in many cases, launching instances of user's classes in their own processes. When instances are run in their own processes, the result is that we've dynamically turned those classes into microservices. 
+### Modularity and the Community Hub
+
+Ether's ability to intergrate your code without the need to change it enables two important features.
+1. It becomes extremely easy to swap out system components (e.g. steps of a data processing pipeline or hardware).
+2. It becomes easy to share code across projects and organizations. If someone writes code to do some processing or control a piece of hardware, Ether allows other users to quickly integrate that code into their own systems. This works best when each users write small Python classes that take care of small parts of the system (i.e. Separation of Concerns).
+
+## Alternative description for developers
+
+Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions. It achieves these goals by wrapping and introspecting the user's code and, in many cases, launching instances of user's classes in their own processes. When instances are run in their own processes, the result is that we've dynamically turned the tagged methods of those classes into microservices. 
 
 At its foundation, Ether provides traceability/observability and both Pub-Sub and Request-Reply messaging patterns. It then builds on those using several layers of abstraction, the last of which is a lightweight, user-friendly API which wraps the common scientific patterns like triggering data pipelines, automating acquistion hardware into runs/experiments/trials, and storing or retrieving data.
 
-##### Features
+#### Features
 
 - Transform existing classes into distributed system components via decorators and/or yaml configuration
 - Automatic session discovery, lifecycle management, and monitoring of processes (locally or over IP)
@@ -60,30 +52,26 @@ At its foundation, Ether provides traceability/observability and both Pub-Sub an
 ```
 pip install ether-medium
 ```
-CircuitPython distribution (Coming soon!)
-```
-circup install ether-lite 
-```
 
 ## Quick Start
 
-This example shows how you can easily setup your existing code to work with Ether. This particular example is based on a simple data processing pipeline. 
+This example shows how you can easily setup a simple data processing pipeline to work with Ether's pub/sub decorators.
 
-### Decorating Your Existing Code
+### Adding decorators
+
+The `ether.sub` decorator listens on a topic (defualt is `{class_name}.{method_name}`) and maps the incoming message to the method's arguments. The `ether.pub` decorator publishes the method's result to the given topic. We also use `ether.start` here which is just short for `ether.sub(topic="start")`.
 
 In `data_generator.py`:
 ```python
-# Data Generator - produces initial data
 class DataGenerator:
-    @ether_start()
-    @ether_pub(topic="data")
+    @ether_start() # run this method when ether.start() message is published
+    @ether_pub(topic="data") # publish the result to the data topic
     def generate_data(self, data: int = 42) -> dict:
         print(f"DataGenerator[PID {os.getpid()}]: Generating data - {data}")
         return {"data": data}
 ```
 In `data_processor.py`:
 ```python
-# Data Processor - can run in multiple instances with different multipliers
 class DataProcessor:
     def __init__(self, multiplier: int = 2):
         self.multiplier = multiplier
@@ -99,7 +87,6 @@ class DataProcessor:
 
 In `data_collector.py`:
 ```python
-# Data Collector - collects and summarizes results
 class DataCollector:
     results = []
     
@@ -121,11 +108,9 @@ class DataCollector:
 
 The example below demonstrates two key features of Ether:
 
-1. **Distributed Execution**: Using a configuration file, Ether can automatically launch and coordinate multiple processes, each running different instances of your components. The components communicate through Ether's messaging system, allowing for parallel processing and distributed workloads.
+1. **Distributed Execution**: Using a configuration file, Ether can automatically launch and coordinate instances of your components. The components run in parallel and communicate through Ether's messaging system.
 
-2. **Transparent Fallback**: After Ether shuts down, your classes retain their original behavior and can still be used directly - just as if they were normal Python classes. This means your code remains functional even without Ether running and that any non-Ether usage of your code will retain its expected functionality.
-
-Here's how to run the example in both modes:
+2. **Transparent Fallback**: After Ether shuts down, your classes retain their original behavior and can still be used directly - just as if they were normal Python classes. This means your code remains functional even without Ether running and that any non-Ether usage of your code will retain its expected functionality. An important consequence of this is that the process on integrating or removing Ether from a codebase is more robust.
 
 #### Distributed Ether Configuration
 
@@ -164,13 +149,13 @@ ether.tap(config=config_path)
 
 # Start the distributed system
 ether.start()
-time.sleep(1.002)  # Let the system run for a bit
+time.sleep(1.0)  # Let the system run for a bit
 
 # Shut down the distributed system
 ether.shutdown()
 ```
 
-Then immediately after we can use the same imported classes to run the pipeline without Ether in the main process:
+After Ether shuts down, we can still use the imported classes to run the pipeline without Ether:
 ```python
 # After shutdown, you can still use components normally in a single process
 generator = DataGenerator()
@@ -187,7 +172,7 @@ collector.collect_result(**processed4x_result)
 collector.summarize()
 ```
 
-Expected output (note that the Ether log PID and the manuage usage PIDs are all the same):
+Expected output (note that the Ether log PID and the manuage usage PIDs are all the same, i.e. the main process):
 ```
 2025-01-16 11:28:42.765 - Ether:51475 - INFO - Starting Ether session: 52a3af6a-3ca2-4b88-811d-256612abc6c3...
 2025-01-16 11:28:44.331 - Ether:51475 - INFO - Ether system started successfully
@@ -216,7 +201,7 @@ DataCollector[PID 51475]: Summarizing results - mean: 12726.0, max: 16968, min: 
 
 ## Using Ether with External Classes
 
-Sometimes you may want to use Ether with classes that you can't or don't want to modify directly. Ether provides a way to apply pub/sub decorators through configuration instead of modifying source code.
+You may want to use Ether with classes that you can't or don't want to modify directly. Ether provides a way to apply decorators through configuration instead of modifying source code.
 
 ### Registry Configuration
 
