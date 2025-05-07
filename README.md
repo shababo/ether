@@ -26,12 +26,6 @@ The best way for a user to understand Ether is to look at use cases. Several use
 - Quickly run common scientific computing patterns (e.g. data pipelines, automation/scheduling, trial-based experiments)
 - No need to learn about computing stuff you don't care about (e.g. schema, servers, async, inheritance)
 
-### Modularity and the Community Hub
-
-Ether's ability to intergrate your code without the need to change it enables two important features.
-1. It becomes extremely easy to swap out system components (e.g. steps of a data processing pipeline or hardware).
-2. It becomes easy to share code across projects and organizations. If someone writes code to do some processing or control a piece of hardware, Ether allows other users to quickly integrate that code into their own systems. This works best when each users write small Python classes that take care of small parts of the system (i.e. Separation of Concerns).
-
 ## Alternative description for developers
 
 Ether dynamically facilitates direct, local, and remote function calling between Python instances and processes as well as data management and logging. It is designed to minimize user overhead and coding skill requirements by relying on an interface based on decorators, yaml configurations, and a small number of direct calls to Ether functions. It achieves these goals by wrapping and introspecting the user's code and, in many cases, launching instances of user's classes in their own processes. When instances are run in their own processes, the result is that we've dynamically turned the tagged methods of those classes into microservices. 
@@ -199,11 +193,132 @@ DataCollector[PID 51475]: Collected result - 16968
 DataCollector[PID 51475]: Summarizing results - mean: 12726.0, max: 16968, min: 8484
 ```
 
-## Using Ether with External Classes
+## Other Ether functionality
+
+### Get and Save
+
+The pub/sub decorators used in the example above don't send messages back from subscribers to publishers. If we a message requires a reply, we can use Ether's get and save interface. Below is an example using get and save to implement a simpmle data service.
+
+```python
+from typing import List
+from ether import ether
+from ether.config import EtherConfig, EtherInstanceConfig
+from ether import ether_save, ether_get
+from ether.utils import get_ether_logger
+
+class DataService:
+    def __init__(self):
+        self.data = {}
+    
+    @ether_save()
+    def save_item(self, id: int, name: str, tags: List[str]) -> dict:
+        """Save an item to the data store"""
+        if id in self.data:
+            raise ValueError(f"Item {id} already exists")
+            
+        self.data[id] = {
+            "name": name,
+            "tags": tags
+        }
+        return self.data[id]  # Return saved item
+
+    @ether_get
+    def get_item(self, id: int) -> dict:
+        """Get a single item by ID"""
+        if id not in self.data:
+            raise KeyError(f"Item {id} not found")
+        return self.data[id]
+
+if __name__ == "__main__":
+    logger = get_ether_logger("EtherDataServiceMain")
+    
+    config = EtherConfig(
+        instances={
+            "data_service": EtherInstanceConfig(
+                class_path="test_ether_save.DataService",
+                kwargs={"ether_name": "data_service"}
+            )
+        }
+    )
+    
+    ether.tap(config=config)
+    
+    try:
+        
+        # Test saving new item
+        reply = ether.save(
+            "DataService", 
+            "save_item", 
+            params={
+                "id": 1,
+                "name": "Test Item",
+                "tags": ["test", "new"]
+            },
+        )
+        logger.info(f"Save reply: {reply}")
+        assert reply["status"] == "success"
+        result = reply["result"]
+        assert result["name"] == "Test Item"
+        
+        # Verify item was saved
+        item = ether.get("DataService", "get_item", params={"id": 1})
+        logger.info(f"Get item: {item}")
+        assert item["name"] == "Test Item"
+        assert item["tags"] == ["test", "new"]
+        
+        # Test saving duplicate item
+
+        reply = ether.save(
+            "DataService", 
+            "save_item", 
+            params={
+                "id": 1,
+                "name": "Duplicate",
+                "tags": []
+            },
+        )
+        logger.info(f"Duplicate save reply: {reply}")
+        assert reply["status"] == "error"
+        assert "already exists" in str(reply["error"])
+        
+    finally:
+        ether.shutdown()
+```
+#### Getting results later
+We can also collect the result later (WIP).
+
+```python
+req_id = ether.get_later('my_service',...)
+
+response = ether.collect(req_id)
+```
+
+### Synchronizing components
+Let's say you need a bunch of hardware to initialize or enter a state before running a trial or automation pipeline. In this case you can do coordinate components using `ether.sync`. 
+```python
+class HardwareComponentA:
+
+    @ether.sync(topic='prepare_trial)
+    def set_state(config):
+        ...
+
+class HardwareComponentB:
+
+    @ether.sync(topic='prepare_trial')
+    def set_state(config):
+        ...
+
+# this call will wait until all subscribers to the sync topic have finished
+ether.sync('prepare_trial')
+
+run_trial()
+```
+
+### Using Ether with External Classes
 
 You may want to use Ether with classes that you can't or don't want to modify directly. Ether provides a way to apply decorators through configuration instead of modifying source code.
 
-### Registry Configuration
+#### Registry Configuration
 
 The registry configuration allows you to specify which methods should be decorated with `ether_pub` and `ether_sub`. Here's an example:
 ```yaml
@@ -239,12 +354,12 @@ instances:
     class_path: third_party_module.DataCollector
 ```
 
-### Benefits
+#### Benefits
 
 - No modification of source code required
 - Works with third-party classes
 
-## Real-World Example: Automated Lab Equipment
+## Another Example: Automated Lab Monitoring
 
 Here's how you might use Ether to automate a lab experiment:
 
