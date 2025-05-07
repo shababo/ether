@@ -290,7 +290,7 @@ req_id = ether.get_later('my_service',...)
 response = ether.collect(req_id)
 ```
 
-### Synchronizing components
+### Synchronizing components (WIP)
 Let's say you need a bunch of hardware to initialize or enter a state before running a trial or automation pipeline. In this case you can do coordinate components using `ether.sync`. 
 ```python
 class HardwareComponentA:
