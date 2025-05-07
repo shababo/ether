@@ -18,7 +18,8 @@ The core goal of Ether is to be useful even when you don't know what exactly wha
 #### Features
 
 - Integrate your code without changing it, across machines or even the Internet
-- Guarantees on data saving and provenance tracing
+- Guarantees on data saving
+- Automatic logging and traceability
 - Configuration complexity scales with use case complexity
 - Quickly run common scientific computing patterns (e.g. data pipelines, automation/scheduling, trial-based experiments)
 - No need to learn about computing stuff you don't care about (e.g. schema, servers, async, inheritance)
