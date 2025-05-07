@@ -315,9 +315,9 @@ run_trial()
 
 You may want to use Ether with classes that you can't or don't want to modify directly. Ether provides a way to apply decorators through configuration instead of modifying source code.
 
-#### Registry Configuration
+#### Class Registry Configuration
 
-The registry configuration allows you to specify which methods should be decorated with `ether_pub` and `ether_sub`. Here's an example:
+The registry configuration allows you to specify which methods should be decorated. Here's an example applying `ether_pub` and `ether_sub`:
 ```yaml
 registry:
   examples.external_class_integration.DataGenerator:
