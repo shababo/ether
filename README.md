@@ -9,7 +9,7 @@ Ether is a user-friendly data acquisition and analysis framework for rapidly int
 ### User perspective 
 It's not uncommon for scientific software to ask a lot of users up front. For example, to define "metadata" or "schema" or to learn new programming concepts. But these asks ultimately become blockers and limit the long-term adoption of these software packages. 
 
-Part of the problem is that most scientists are already time-constrained and can't necessarily onboard new computing concepts rapidly. 
+Part of the problem is that most scientists are already time-constrained and can't necessarily onboard new software concepts rapidly. 
 
 But more importantly, these prescriptive approaches to organizing scientific processes don't match how science actually gets done. The process of science or engineering very frequently involves changing and re-combining components, testing and debugging, and making decisions on the fly.
 
