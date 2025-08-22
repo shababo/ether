@@ -295,7 +295,7 @@ Let's say you need a bunch of hardware to initialize or enter a state before run
 ```python
 class HardwareComponentA:
 
-    @ether.sync(topic='prepare_trial)
+    @ether.sync(topic='prepare_trial')
     def set_state(config):
         ...
 
