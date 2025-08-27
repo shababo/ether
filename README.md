@@ -4,7 +4,7 @@
 
 ## What is Ether?
 
-Ether is a user-friendly and low overhead framework for integrating and orchestrating your Python processes. It is specificaly designed to support research and development, where systems are small to medium scale and users are frequently changing and re-combining components, testing and debugging, and making decisions on the fly.
+Ether is a user-friendly and low overhead framework for integrating and orchestrating your Python processes. It is specificaly designed to support early and middle stage R&D for scientists and engineers - when systems are small to medium scale and users are frequently changing and re-combining components, testing and debugging, and making decisions on the fly.
 
 ### Example Use Cases
 Several demos are in the works, but for now here are some example use cases:
